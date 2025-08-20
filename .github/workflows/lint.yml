@@ -1,0 +1,22 @@
+name: Lint
+
+on:
+  push
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v4
+
+      - name: Install pre-commit hook
+        run: |
+          pip install pre-commit
+          pre-commit install
+
+      - name: Linting
+        run: pre-commit run --all-files --show-diff-on-failure
