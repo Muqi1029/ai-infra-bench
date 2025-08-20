@@ -1,0 +1,29 @@
+name: Release PyPI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ai_infra_bench/version.py"
+
+jobs:
+  publsh:
+    if: github.repository == 'Muqi1029/ai_infra_bench'
+    runs-on: ubuntu-latest  
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload to PyPI
+        run: |
+          pip install build twine
+          python -m build
+          python -m twine upload dist/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+
+
