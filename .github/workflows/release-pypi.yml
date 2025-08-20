@@ -8,7 +8,7 @@ on:
       - "ai_infra_bench/version.py"
 
 jobs:
-  publsh:
+  publish:
     if: github.repository == 'Muqi1029/ai_infra_bench'
     runs-on: ubuntu-latest  
     steps:
