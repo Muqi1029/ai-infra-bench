@@ -10,7 +10,7 @@ on:
 jobs:
   publish:
     if: github.repository == 'Muqi1029/ai_infra_bench'
-    runs-on: ubuntu-latest  
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -25,5 +25,3 @@ jobs:
           pip install build twine
           python -m build
           python -m twine upload dist/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
-
-

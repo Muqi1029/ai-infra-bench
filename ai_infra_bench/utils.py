@@ -14,6 +14,7 @@ import requests
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 graph_per_row = 3
 
+
 def warmup(cmd: str, output_dir: str):
     cmd += f" --output-file {output_dir}/.warmup.json"
     run_cmd(cmd, is_block=True)
@@ -52,6 +53,7 @@ def check_server_client_cmds(server_cmds, client_cmds, *, labels):
         labels
     ), f"The length of server_cmds and labels should be equal, but found {len(server_cmds)=}, {len(labels)=}"
     # TODO: check metrics, check_slo
+
 
 def wait_for_server(base_url: str, timeout=None):
     start_time = time.perf_counter()

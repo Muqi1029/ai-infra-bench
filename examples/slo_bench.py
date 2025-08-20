@@ -14,7 +14,7 @@ tp_size = 2
 
 
 server_template = """
-python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size} 
+python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
 --host {host} --port {port} --kv-cache-dtype fp8_e4m3
 """
 

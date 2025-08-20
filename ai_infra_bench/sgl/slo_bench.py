@@ -1,20 +1,20 @@
 import os
 from typing import Callable, Dict, List, Tuple
 
-from tqdm import tqdm
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from tqdm import tqdm
 
 from ai_infra_bench.utils import (
     check_server_client_cmds,
+    colors,
     dummy_get_filename,
+    graph_per_row,
     kill_process_tree,
     read_jsonl,
     run_cmd,
     wait_for_server,
     warmup,
-    graph_per_row,
-    colors,
 )
 
 
