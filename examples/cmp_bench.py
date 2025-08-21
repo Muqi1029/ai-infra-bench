@@ -3,27 +3,40 @@ from typing import List
 
 from ai_infra_bench.sgl import cmp_bench
 
+# Args for server_cmds, client_cmds
 input_len = 1200
 output_len = 800
 host = "127.0.0.1"
 port = "8888"
 tp_size = 1
+model_path = os.environ["QWEN332BFP8"]
 
 
+####################################
+# Constructing server_cmds & labels
+####################################
 server_template = """
-python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
---host {host} --port {port}
+python -m sglang.launch_server
+    --model-path {model_path}
+    --tp-size {tp_size}
+    --host {host}
+    --port {port}
+    --disable-radix-cache
+    --kv-cache-dtype fp8_e4m3
 """
 
 launch_sgl_server_cmds: List[str] = [
     server_template.format(
-        model_path=os.environ["QWEN306B"], tp_size=tp_size, host=host, port=port
+        model_path=model_path, tp_size=tp_size, host=host, port=port
     ),
-    server_template.format(
-        model_path=os.environ["QWEN38B"], tp_size=tp_size, host=host, port=port
-    ),
+    server_template.format(model_path=model_path, tp_size=tp_size, host=host, port=port)
+    + " --disable-cuda-graph",
 ]
+labels = ["Qwen3-32B-FP8-With-CUDAGRAPH", "QWEN3-32B-FP8-Without-CUDAGRAPH"]
 
+##########################
+# Constructing client_cmds
+##########################
 client_template = """
 python -m sglang.bench_serving --host {host} --port {port}
 		--backend sglang-oai
@@ -36,7 +49,6 @@ python -m sglang.bench_serving --host {host} --port {port}
 		--num-prompt {num_prompt}
 		--max-concurrency {request_rate}
 """
-labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]
 
 launch_sgl_client_cmds: List[str] = [
     client_template.format(
@@ -47,9 +59,10 @@ launch_sgl_client_cmds: List[str] = [
         request_rate=rate,
         num_prompt=rate * 10,
     )
-    for rate in range(4, 13, 4)
+    for rate in range(12, 36 + 1, 4)
 ]
 
+#####################
 input_features = [
     "request_rate",
 ]
@@ -58,7 +71,7 @@ metrics = [
     "p99_tpot_ms",
     "p99_itl_ms",
     "output_throughput",
-]  # used to plot, make table
+]
 
 if __name__ == "__main__":
     cmp_bench(
@@ -69,5 +82,5 @@ if __name__ == "__main__":
         labels=labels,
         host=host,
         port=port,
-        output_dir="cmp_qwen3_0.6b_vs_8b",
+        output_dir="cmp_bench_output",
     )
