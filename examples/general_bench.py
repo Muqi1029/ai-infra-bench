@@ -8,6 +8,9 @@ input_len = 1200
 output_len = 800
 host = "127.0.0.1"
 port = "8888"
+qwen3_0_6b_model_path = os.environ["QWEN306B"]
+qwen3_8b_model_path = os.environ["QWEN38B"]
+dataset_path = os.environ["S_GPT_DATASET"]
 
 
 ####################################
@@ -20,10 +23,10 @@ python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
 
 server_cmds: List[str] = [
     server_template.format(
-        model_path=os.environ["QWEN306B"], tp_size=1, host=host, port=port
+        model_path=qwen3_0_6b_model_path, tp_size=1, host=host, port=port
     ),
     server_template.format(
-        model_path=os.environ["QWEN38B"], tp_size=1, host=host, port=port
+        model_path=qwen3_8b_model_path, tp_size=1, host=host, port=port
     ),
 ]
 labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]
@@ -34,7 +37,7 @@ labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]
 client_template = """
 python -m sglang.bench_serving --host {host} --port {port}
 		--backend sglang-oai
-		--dataset-path /root/muqi/dataset/ShareGPT_V3_unfiltered_cleaned_split.json
+		--dataset-path {dataset_path}
 		--dataset-name random
 		--random-range-ratio 1
 		--random-input-len {input_len}
@@ -51,10 +54,11 @@ client_cmds: List[List[str]] = [
             port=port,
             input_len=input_len,
             output_len=output_len,
+            dataset_path=dataset_path,
             request_rate=rate,
             num_prompt=rate * 10,
         )
-        for rate in range(4, 12, 2)
+        for rate in range(10, 32, 4)
     ],
     [
         client_template.format(
@@ -62,10 +66,11 @@ client_cmds: List[List[str]] = [
             port=port,
             input_len=input_len,
             output_len=output_len,
+            dataset_path=dataset_path,
             request_rate=rate,
             num_prompt=rate * 10,
         )
-        for rate in range(10, 13, 2)
+        for rate in range(4, 17, 4)
     ],
 ]
 
@@ -90,5 +95,5 @@ if __name__ == "__main__":
         labels=labels,
         host=host,
         port=port,
-        output_dir="general_output",
+        output_dir="general_bench_output",
     )
