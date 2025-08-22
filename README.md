@@ -15,10 +15,29 @@ This project aims to free AI infrastructure engineers from repetitive benchmarki
 There are totally 3 modes when benchmarking from the viewpoint of ai infra workers
 
 1. **General**: Evaluate the performance of a single deployment across various workloads.
-2. **Compare**: Compare the performance of multiple deployment options in the same workload.
+2. **Cmp**: Compare the performance of multiple deployment options in the same workload.
 3. **SLO**: Identify the most demanding workload that still meets the required service-level objectives given a deployment option.
 
-This project automatically generates benchmarking results as clean Markdown tables and interactive Plotly graphs for clear visualization. Below are some example outputs.
+This project automatically generates benchmarking results as clean Markdown tables and interactive HTML graphs for clear visualization. Below are some example outputs.
+
+## General Bench
+
+### Table
+
+Title: **Qwen3-8B-TP1**
+| request_rate |     | p99_ttft_ms | p99_tpot_ms | p99_itl_ms | output_throughput |
+| ------------ | --- | ----------- | ----------- | ---------- | ----------------- |
+| 4.00         |     | 77.49       | 24.41       | 24.86      | 163.37            |
+| 8.00         |     | 1145.30     | 27.41       | 26.60      | 298.41            |
+| 12.00        |     | 2290.93     | 29.66       | 28.42      | 399.15            |
+| 16.00        |     | 3100.51     | 32.12       | 30.06      | 492.53            |
+
+### Plot
+
+![General Bench](./assets/gen_bench.png)
+
+## Cmp Bench
+
 
 # Install
 
