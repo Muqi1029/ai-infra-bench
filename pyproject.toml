@@ -4,10 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-infra-bench"
-version = "0.1.0.post1"
+version = "0.1.0.post2"
 description = "AI Infra bench"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-"plotly", "pandas"
+  "plotly", "pandas"
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_infra_bench*"]
