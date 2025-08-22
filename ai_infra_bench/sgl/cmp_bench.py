@@ -125,7 +125,7 @@ def cmp_bench(
 ):
     try:
         check_server_client_cmds(server_cmds, client_cmds, labels=labels)
-        # os.makedirs(output_dir, exist_ok=False)
+        os.makedirs(output_dir, exist_ok=False)
 
         data: List[List[Dict]] = []
         pbar = tqdm(enumerate(server_cmds))
