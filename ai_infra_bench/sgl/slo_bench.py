@@ -120,7 +120,7 @@ def slo_plot(
             fig.update_layout(title_text=label)
             fig.write_html(os.path.join(output_dir, f"{label}_{input_feature}.html"))
 
-    print("Ploting graphs DONE")
+    print("Plotting graphs DONE")
 
 
 def slo_bench(
@@ -133,7 +133,7 @@ def slo_bench(
     labels: List[str],
     host,
     port,
-    check_slo: Callable,
+    check_slo: Callable[[Dict], bool],
     output_dir: str = "output",
 ):
     try:
