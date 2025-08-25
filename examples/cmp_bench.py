@@ -25,7 +25,7 @@ python -m sglang.launch_server
     --kv-cache-dtype fp8_e4m3
 """
 
-launch_sgl_server_cmds: List[str] = [
+server_cmds: List[str] = [
     server_template.format(
         model_path=model_path, tp_size=tp_size, host=host, port=port
     ),
@@ -50,7 +50,7 @@ python -m sglang.bench_serving --host {host} --port {port}
 		--max-concurrency {request_rate}
 """
 
-launch_sgl_client_cmds: List[str] = [
+client_cmds: List[str] = [
     client_template.format(
         host=host,
         port=port,
@@ -75,8 +75,8 @@ metrics = [
 
 if __name__ == "__main__":
     cmp_bench(
-        server_cmds=launch_sgl_server_cmds,
-        client_cmds=launch_sgl_client_cmds,
+        server_cmds=server_cmds,
+        client_cmds=client_cmds,
         input_features=input_features,
         metrics=metrics,
         labels=labels,

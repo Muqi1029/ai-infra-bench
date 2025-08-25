@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from ai_infra_bench.sgl import slo_bench
 
@@ -8,19 +8,27 @@ output_len = 800
 host = "127.0.0.1"
 port = "8888"
 tp_size = 2
+qwen3_30b_a3b_fp8_model_path = os.environ["QWEN330BA3BFP8"]
 
 
+####################################
+# Constructing server_cmds & labels
+####################################
 server_template = """
 python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
 --host {host} --port {port} --kv-cache-dtype fp8_e4m3
 """
 
-launch_sgl_server_cmds: List[str] = [
+server_cmds: List[str] = [
     server_template.format(
-        model_path=os.environ["QWEN330BA3BFP8"], tp_size=tp_size, host=host, port=port
+        model_path=qwen3_30b_a3b_fp8_model_path, tp_size=tp_size, host=host, port=port
     ),
 ]
+labels = ["QWEN3-30B-A3B-FP8-TP2"]
 
+##########################
+# Constructing client_cmds
+##########################
 client_template = """
 python -m sglang.bench_serving --host {host} --port {port}
 		--backend sglang-oai
@@ -30,9 +38,8 @@ python -m sglang.bench_serving --host {host} --port {port}
 		--random-input-len {input_len}
 		--random-output-len {output_len}
 """
-labels = ["QWEN330BA3BFP8-TP2"]
 
-launch_sgl_client_cmds: List[str] = [
+client_cmds: List[str] = [
     client_template.format(
         host=host,
         port=port,
@@ -40,6 +47,8 @@ launch_sgl_client_cmds: List[str] = [
         output_len=output_len,
     )  # cannot set request_rate
 ]
+
+#####################
 request_rates: List[Tuple[int, int]] = [
     (10, 80),
 ]
@@ -55,7 +64,7 @@ metrics = [
 ]  # used to plot, make table
 
 
-def check_slo(item):
+def check_slo(item: Dict) -> bool:
     return (
         item["p99_ttft_ms"] < 3000
         and item["p99_tpot_ms"] < 100
@@ -65,14 +74,14 @@ def check_slo(item):
 
 if __name__ == "__main__":
     slo_bench(
-        launch_sgl_server_cmds,
-        launch_sgl_client_cmds,
+        server_cmds=server_cmds,
+        client_cmds=client_cmds,
         request_rates=request_rates,
         input_features=input_features,
         metrics=metrics,
         labels=labels,
         host=host,
         port=port,
-        output_dir=f"slo_output_{labels[0]}",
+        output_dir="slo_bench_output",
         check_slo=check_slo,
     )
