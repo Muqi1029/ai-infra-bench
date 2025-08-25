@@ -1,4 +1,10 @@
+
 ![ai_infra_bench](assets/main.png)
+<div align="center">
+  <img src="https://img.shields.io/badge/license-Apache_2.0-orange.svg">
+  <img src="https://img.shields.io/badge/python-3.10+-blue">
+  <img src="https://img.shields.io/pypi/v/ai-infra-bench?color=green">
+</div>
 
 # Motivation
 
