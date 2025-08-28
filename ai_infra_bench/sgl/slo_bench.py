@@ -60,6 +60,7 @@ def slo_export_tables(
             + " | ".join(str(metric) for metric in metrics)
             + " |\n"
         )
+        md_tables_str += "| --- " * (len(input_features) + len(metrics) + 1) + "|\n"
         for item in server_data:
             for input_feature in input_features:
                 md_tables_str += "| " + f"{item[input_feature]:.2f}" + " "
