@@ -1,9 +1,8 @@
 
-![ai_infra_bench](assets/main.png)
 <div align="center">
-  [![LICENSE](https://img.shields.io/badge/license-Apache_2.0-orange.svg)](https://github.com/Muqi1029/ai_infra_bench/blob/main/LICENSE)
-  [![PYTHON VERSION](https://img.shields.io/badge/python-3.10+-blue)](https://img.shields.io/badge/python-3.10+-blue)
-  [![PYPI PROJECT](https://img.shields.io/pypi/v/ai-infra-bench?color=green)]( https://pypi.org/project/ai-infra-bench/)
+
+![ai_infra_bench](assets/main.png)
+  [![LICENSE](https://img.shields.io/badge/license-Apache_2.0-orange.svg)](https://github.com/Muqi1029/ai_infra_bench/blob/main/LICENSE) [![PYTHON VERSION](https://img.shields.io/badge/python-3.10+-blue)](https://img.shields.io/badge/python-3.10+-blue) [![PYPI PROJECT](https://img.shields.io/pypi/v/ai-infra-bench?color=green)]( https://pypi.org/project/ai-infra-bench/)
 </div>
 
 # Motivation
@@ -110,13 +109,14 @@ Metric: **output_throughput**
 ### Table
 Title: **QWEN3-30B-A3B-FP8-TP1**
 | request_rate |     | p99_ttft_ms | p99_tpot_ms | p99_itl_ms | output_throughput |
-| 27.00 |     | 1813.80 | 41.61 | 42.12 | 652.56 |
-| 36.00 |     | 2482.11 | 46.24 | 46.36 | 789.62 |
-| 40.00 |     | 2958.86 | 46.18 | 46.33 | 874.70 |
-| 42.00 |     | 2876.21 | 48.62 | 48.16 | 871.91 |
-| **43.00** |     | 2889.78 | 48.59 | 48.16 | 895.68 |
-| 44.00 |     | 3080.99 | 48.36 | 48.07 | 912.25 |
-| 45.00 |     | 3146.45 | 48.54 | 47.99 | 935.28 |
+| ------------ | --- | ----------- | ----------- | ---------- | ----------------- |
+| 27.00        |     | 1813.80     | 41.61       | 42.12      | 652.56            |
+| 36.00        |     | 2482.11     | 46.24       | 46.36      | 789.62            |
+| 40.00        |     | 2958.86     | 46.18       | 46.33      | 874.70            |
+| 42.00        |     | 2876.21     | 48.62       | 48.16      | 871.91            |
+| 43.00        |     | 2889.78     | 48.59       | 48.16      | 895.68            |
+| 44.00        |     | 3080.99     | 48.36       | 48.07      | 912.25            |
+| 45.00        |     | 3146.45     | 48.54       | 47.99      | 935.28            |
 
 ### Plot
 ![slo bench](assets/slo_bench.png)
