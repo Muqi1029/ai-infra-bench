@@ -7,8 +7,9 @@ input_len = 1200
 output_len = 800
 host = "127.0.0.1"
 port = "8888"
-tp_size = 2
+tp_size = 1
 qwen3_30b_a3b_fp8_model_path = os.environ["QWEN330BA3BFP8"]
+dataset_path = os.environ["S_GPT_DATASET"]
 
 
 ####################################
@@ -24,7 +25,7 @@ server_cmds: List[str] = [
         model_path=qwen3_30b_a3b_fp8_model_path, tp_size=tp_size, host=host, port=port
     ),
 ]
-labels = ["QWEN3-30B-A3B-FP8-TP2"]
+labels = ["QWEN3-30B-A3B-FP8-TP1"]
 
 ##########################
 # Constructing client_cmds
@@ -32,7 +33,7 @@ labels = ["QWEN3-30B-A3B-FP8-TP2"]
 client_template = """
 python -m sglang.bench_serving --host {host} --port {port}
 		--backend sglang-oai
-		--dataset-path /root/muqi/dataset/ShareGPT_V3_unfiltered_cleaned_split.json
+		--dataset-path {dataset_path}
 		--dataset-name random
 		--random-range-ratio 1
 		--random-input-len {input_len}
@@ -45,7 +46,8 @@ client_cmds: List[str] = [
         port=port,
         input_len=input_len,
         output_len=output_len,
-    )  # cannot set request_rate
+        dataset_path=dataset_path,
+    )  # NOTE: cannot set request_rate and max-concurrency
 ]
 
 #####################
