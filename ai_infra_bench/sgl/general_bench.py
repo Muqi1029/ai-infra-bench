@@ -20,7 +20,7 @@ from ai_infra_bench.utils import (
 
 
 def general_export_table(data, input_features, metrics, labels, output_dir):
-    print(f"Writing table to {os.path.join(output_dir, "table.md")}")
+    print(f"Writing table to {os.path.join(output_dir, 'table.md')}")
     md_tables_str = ""
     for label_idx, label in enumerate(labels):
 

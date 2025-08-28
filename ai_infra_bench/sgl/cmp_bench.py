@@ -77,7 +77,7 @@ def cmp_plot(data, input_features, metrics, labels, output_dir):
 
 
 def cmp_export_table(data, input_features, metrics, labels, output_dir):
-    print(f"Writing table to {os.path.join(output_dir, "table.md")}")
+    print(f'Writing table to {os.path.join(output_dir, "table.md")}')
     md_tables_str = ""
     common_title = (
         "| "
