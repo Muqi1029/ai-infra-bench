@@ -58,10 +58,8 @@ def check_server_client_cmds(server_cmds, client_cmds, *, labels):
 def wait_for_server(base_url: str, timeout=None):
     start_time = time.perf_counter()
 
-    i = 0
     while True:
         try:
-            print(f"Wait for server: {i}-th try")
             response = requests.get(
                 f"{base_url}/v1/models", headers={"Authorization": "Muqi1029"}
             )
@@ -74,7 +72,6 @@ def wait_for_server(base_url: str, timeout=None):
                 )
         except requests.exceptions.RequestException:
             time.sleep(1)
-            i += 1
 
 
 def run_cmd(cmd: str, is_block=True):
