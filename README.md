@@ -102,7 +102,7 @@ Metric: **output_throughput**
 
 
 ### Plot
-![Cmp Bench](assets/gen_bench.png)
+![Cmp Bench](assets/cmp_bench.png)
 
 ## Slo Bench
 
