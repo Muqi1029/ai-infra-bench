@@ -4,7 +4,6 @@ from typing import Dict, List, Union
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from tqdm import tqdm
 
 from ai_infra_bench.utils import (
     check_dir,
@@ -62,7 +61,7 @@ def export_table(data, input_features, metrics, label, output_dir):
             md_tables_str += "| " + f"{item[metric]:.2f}" + " "
         md_tables_str += "|\n"
 
-    with open(table_path) as f:
+    with open(table_path, "w", encoding="utf-8") as f:
         f.write(md_tables_str)
     print("Writing table DONE")
 
@@ -126,7 +125,8 @@ def run_client(
         warmup(client_cmds[0], output_dir)
 
         data: List[Dict] = []
-        for i, cmd in tqdm(enumerate(client_cmds), desc="Running client cmds"):
+        for i, cmd in enumerate(client_cmds):
+            print(f"\nRunning {i}-th client\n")
             output_file = f"client_{i:02d}.jsonl"
             output_file = os.path.join(output_dir, full_data_json_path, output_file)
             cmd += f" --output-file {output_file}"
@@ -149,5 +149,6 @@ def run_client(
         )
         export_csv(data, output_dir)
 
-    except Exception:
+    except Exception as e:
+        print(e)
         kill_process_tree(os.getpid(), include_parent=False)
