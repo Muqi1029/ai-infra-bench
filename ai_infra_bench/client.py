@@ -7,8 +7,9 @@ from plotly.subplots import make_subplots
 from tqdm import tqdm
 
 from ai_infra_bench.utils import (
+    check_dir,
+    check_input_features_metrics,
     colors,
-    dummy_get_filename,
     graph_per_row,
     kill_process_tree,
     read_jsonl,
@@ -19,6 +20,8 @@ from ai_infra_bench.utils import (
 
 def export_csv(data: List[Dict], output_dir):
     csv_path = os.path.join(output_dir, "full_data.csv")
+
+    print(f"Writing full csv file to {csv_path}")
 
     title = data[0].keys()
     title_len = len(title)
@@ -34,10 +37,13 @@ def export_csv(data: List[Dict], output_dir):
                 if i != title_len - 1:
                     f.write(",")
             f.write("\n")
+    print(f"Writing full csv file to {csv_path} DONE")
 
 
 def export_table(data, input_features, metrics, label, output_dir):
-    print(f"Writing table to {os.path.join(output_dir, 'table.md')}")
+    table_path = os.path.join(output_dir, "table.md")
+
+    print(f"Writing table to {table_path}")
     md_tables_str = f"Title: **{label}**\n"
     md_tables_str += (
         "| "
@@ -56,7 +62,7 @@ def export_table(data, input_features, metrics, label, output_dir):
             md_tables_str += "| " + f"{item[metric]:.2f}" + " "
         md_tables_str += "|\n"
 
-    with open(os.path.join(output_dir, "table.md"), mode="w", encoding="utf-8") as f:
+    with open(table_path) as f:
         f.write(md_tables_str)
     print("Writing table DONE")
 
@@ -108,17 +114,21 @@ def run_client(
     label=None,
     output_dir="output",
 ):
+    check_input_features_metrics(input_features, metrics)
+
     if not label:
-        label = datetime.strftime(datetime.now(), "%m%d") + "exp"
-    os.makedirs(os.path.join(output_dir, "full_data_json"), exist_ok=False)
+        label = datetime.now.strftime("%m%d") + "_exp"
+    full_data_json_path = "full_data_json"
+    check_dir(output_dir, full_data_json_path)
+
     try:
         # warmup
         warmup(client_cmds[0], output_dir)
 
         data: List[Dict] = []
         for i, cmd in tqdm(enumerate(client_cmds), desc="Running client cmds"):
-            output_file = f"client_{i}.jsonl"
-            output_file = os.path.join(output_dir, "full_data_json", output_file)
+            output_file = f"client_{i:02d}.jsonl"
+            output_file = os.path.join(output_dir, full_data_json_path, output_file)
             cmd += f" --output-file {output_file}"
             run_cmd(cmd, is_block=True)
             data.append(read_jsonl(output_file)[-1])
