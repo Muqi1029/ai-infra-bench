@@ -9,7 +9,7 @@ description = "AI Infra bench"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "plotly", "pandas"
+  "plotly", "pandas", "numpy"
 ]
 
 [tool.setuptools.packages.find]
