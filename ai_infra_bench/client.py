@@ -41,7 +41,7 @@ def export_csv(data: List[Dict], output_dir):
         for item_list in data:
             # traverse each line
             for i, name in enumerate(title):
-                f.write(avg_std_strf(name, item_list, sep="|"))
+                f.write(avg_std_strf(name, item_list, sep="|", precision=4))
                 if i != title_len - 1:
                     f.write(",")
             f.write("\n")
