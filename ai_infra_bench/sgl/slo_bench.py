@@ -5,8 +5,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
+from ai_infra_bench.check import slo_check_params
 from ai_infra_bench.utils import (
-    check_server_client_cmds,
+    add_request_rate,
     colors,
     dummy_get_filename,
     graph_per_row,
@@ -16,27 +17,6 @@ from ai_infra_bench.utils import (
     wait_for_server,
     warmup,
 )
-
-
-def slo_check_params(server_cmds, client_cmds, labels):
-    check_server_client_cmds(server_cmds, client_cmds, labels=labels)
-    assert len(server_cmds) == len(
-        client_cmds
-    ), f"The length os server_cmds and client_cmds should be equal, but found {len(server_cmds)=}, {len(client_cmds)=}"
-
-    assert all(
-        "request-rate" not in cmd for cmd in client_cmds
-    ), "request-rate should not be set in the client_cmds"
-    assert all(
-        "max-concurrency" not in cmd for cmd in client_cmds
-    ), "max-concurrency should not be set in the client_cmds"
-
-
-def add_request_rate(cmd: str, rate: int):
-    cmd += f" --max-concurrency {rate} --request-rate {rate}"
-    if "num-prompt" not in cmd:
-        cmd += f" --num-prompt {rate * 10}"
-    return cmd
 
 
 def slo_export_tables(
