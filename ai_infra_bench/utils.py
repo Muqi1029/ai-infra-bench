@@ -66,8 +66,8 @@ def avg_std_strf(
 ) -> str:
     val_list = [item[key] for item in item_list]
 
-    if isinstance(val_list[0], str):
-        return val_list[0]
+    if not val_list[0] or isinstance(val_list[0], str) or np.std(val_list, ddof=1) == 0:
+        return str(val_list[0])
 
     fmt = "" if precision is None else f".{precision}f"
 
@@ -78,7 +78,7 @@ def avg_std_strf(
     std = np.std(val_list, ddof=1)
 
     return (
-        f"{format(avg, fmt)} \u00b1 {format(std, fmt)} "
+        f"{format(avg, fmt)} \u00b1 {format(std, fmt)}"
         f"({sep.join(format(val, fmt) for val in val_list)})"
     )
 

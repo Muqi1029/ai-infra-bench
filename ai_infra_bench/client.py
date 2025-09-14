@@ -41,7 +41,7 @@ def export_csv(data: List[Dict], output_dir):
         for item_list in data:
             # traverse each line
             for i, name in enumerate(title):
-                f.write(avg_std_strf(name, item_list, sep="| "))
+                f.write(avg_std_strf(name, item_list, sep="|"))
                 if i != title_len - 1:
                     f.write(",")
             f.write("\n")
@@ -64,9 +64,7 @@ def export_table(data, input_features, metrics, label, output_dir):
     )
     for item_list in data:
         for input_feature in input_features:
-            md_tables_str += (
-                "| " + avg_std_strf(input_feature, item_list, precision=2) + " "
-            )
+            md_tables_str += "| " + f"{item_list[0][input_feature]:.2f}" + " "
         md_tables_str += "|     "
         for metric in metrics:
             md_tables_str += "| " + avg_std_strf(metric, item_list, precision=2) + " "
