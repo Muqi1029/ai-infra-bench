@@ -8,8 +8,8 @@ output_len = 800
 host = "127.0.0.1"
 port = "8888"
 tp_size = 1
-qwen3_30b_a3b_fp8_model_path = os.environ["QWEN330BA3BFP8"]
-dataset_path = os.environ["S_GPT_DATASET"]
+qwen3_30b_a3b_fp8_model_path = os.environ["QWEN3_30B_A3B_FP8"]
+dataset_path = os.environ["SHAREGPT_DATASET"]
 
 
 ####################################
