@@ -30,9 +30,9 @@ server_cmds: List[str] = [
         model_path=model_path, tp_size=tp_size, host=host, port=port
     ),
     server_template.format(model_path=model_path, tp_size=tp_size, host=host, port=port)
-    + " --disable-cuda-graph",
+    + " --tool-call-parser qwen25",
 ]
-labels = ["Qwen3-32B-FP8-With-CUDAGRAPH", "QWEN3-32B-FP8-Without-CUDAGRAPH"]
+labels = ["Qwen3-32B-FP8", "QWEN3-32B-FP8-Without-tool"]
 
 ##########################
 # Constructing client_cmds
@@ -59,7 +59,7 @@ client_cmds: List[str] = [
         request_rate=rate,
         num_prompt=rate * 10,
     )
-    for rate in range(12, 36 + 1, 4)
+    for rate in range(4, 12 + 1, 2)
 ]
 
 #####################
@@ -82,5 +82,5 @@ if __name__ == "__main__":
         labels=labels,
         host=host,
         port=port,
-        output_dir="cmp_bench_output",
+        output_dir="tool_cmp_bench_output",
     )

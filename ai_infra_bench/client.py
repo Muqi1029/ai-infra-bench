@@ -48,7 +48,7 @@ def export_csv(data: List[Dict], output_dir):
     print(f"Writing full csv file to {csv_path} DONE")
 
 
-def export_table(data, input_features, metrics, label, output_dir):
+def export_table(data, input_features, metrics, label, output_dir, highlight=None):
     table_path = os.path.join(output_dir, "table.md")
 
     print(f"Writing table to {table_path}")
@@ -126,6 +126,7 @@ def client_slo(
     labels: List[str] = None,
     n=1,
     output_dir="output",
+    disable_warmup=False,
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
@@ -149,20 +150,27 @@ def client_slo(
 
     try:
         # warmup
-        print("Using the first client request for warm up")
-        warmup(client_cmds[0], output_dir)
+        if not disable_warmup:
+            print("Using the first client request for warm up")
+            warmup(add_request_rate(client_cmds[0], request_rates[0][0]), output_dir)
 
         data: List[Dict] = []
-        for i in range(len(client_cmds)):
-            print(f"\nRunning {i}-th client\n")
-            left, right = request_rates[i]
+        answers: List[int] = []
+
+        for client_idx in range(len(client_cmds)):
+            print(f"\nRunning {client_idx}-th client\n")
+            left, right = request_rates[client_idx]
+
+            inner_client_data = []
             while left <= right:
                 mid = (left + right) // 2
-                cmd = add_request_rate(client_cmds[i], mid)
+                cmd = add_request_rate(client_cmds[client_idx], mid)
 
-                inner_data = []
-                for ii in range(n):
-                    output_file = f"{labels[i]}_client_{i:02d}_{ii:02d}.jsonl"
+                inner_data: List[Dict] = []
+                for i in range(n):
+                    output_file = (
+                        f"{labels[client_idx]}_client_{client_idx:02d}_{i:02d}.jsonl"
+                    )
                     output_file = os.path.join(
                         output_dir, FULL_DATA_JSON_PATH, output_file
                     )
@@ -172,37 +180,47 @@ def client_slo(
 
                 union_avg_item = {}
                 for key in inner_data[0].keys():
-                    if isinstance(inner_data[0][key], str):
+                    if not inner_data[0][key] or isinstance(inner_data[0][key], str):
                         union_avg_item[key] = inner_data[0][key]
                     else:
-                        union_avg_item[key] = np.mean(item[key] for item in inner_data)
+                        union_avg_item[key] = np.median(
+                            [item[key] for item in inner_data]
+                        )
                 if check_slo(union_avg_item):
                     left = mid + 1
                 else:
                     right = mid - 1
-                data.append(inner_data)
-        # sort data in request_rate
-        sorted_data = sort_data_by_key("max-concurrency", data)
+
+                inner_client_data.append(inner_data)
+
+            answers.append(right)
+            print(f"\033[92m The maximum concurrency satisfying SLO is {right} \033[0m")
+
+            sorted_inner_client_data = sort_data_by_key(
+                "max_concurrency", inner_client_data
+            )
+            data.extend(sorted_inner_client_data)
 
         export_table(
-            data=sorted_data,
+            data=data,
             input_features=input_features,
             metrics=metrics,
             label=labels,
             output_dir=output_dir,
+            highlight=answers,
         )
-        plot(
-            data=sorted_data,
-            input_features=input_features,
-            metrics=metrics,
-            label=labels,
-            output_dir=output_dir,
-        )
-        export_csv(sorted_data, output_dir)
+        # plot(
+        #     data=sorted_data,
+        #     input_features=input_features,
+        #     metrics=metrics,
+        #     label=labels,
+        #     output_dir=output_dir,
+        # )
+        export_csv(data, output_dir)
 
     except Exception as e:
-        print(e)
         kill_process_tree(os.getpid(), include_parent=False)
+        raise RuntimeError(f"Process failed with error: {e}") from e
 
 
 def client_gen(
@@ -212,12 +230,13 @@ def client_gen(
     label=None,
     n=1,
     output_dir="output",
+    disable_warmup=False,
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
 
     check_input_features_metrics(input_features, metrics)
-    check_output_file(client_cmds)
+    check_param_in_cmd("output-file", client_cmds)
 
     if not label:
         label = datetime.now.strftime("%m%d") + "_slo_exp"
@@ -230,16 +249,17 @@ def client_gen(
 
     try:
         # warmup
-        print("Using the first client request for warm up")
-        warmup(client_cmds[0], output_dir)
+        if not disable_warmup:
+            print("Using the first client request for warm up")
+            warmup(client_cmds[0], output_dir)
 
         data: List[Dict] = []
-        for i, cmd in enumerate(client_cmds):
-            print(f"\nRunning {i}-th client\n")
+        for client_idx, cmd in enumerate(client_cmds):
+            print(f"\nRunning {client_idx}-th client\n")
 
             inner_data = []
             for ii in range(n):
-                output_file = f"client_{i:02d}_{ii:02d}.jsonl"
+                output_file = f"client_{client_idx:02d}_{ii:02d}.jsonl"
                 output_file = os.path.join(output_dir, FULL_DATA_JSON_PATH, output_file)
                 cmd += f" --output-file {output_file}"
                 run_cmd(cmd, is_block=True)
@@ -255,15 +275,15 @@ def client_gen(
             output_dir=output_dir,
         )
 
-        plot(
-            data=data,
-            input_features=input_features,
-            metrics=metrics,
-            label=label,
-            output_dir=output_dir,
-        )
+        # plot(
+        #     data=data,
+        #     input_features=input_features,
+        #     metrics=metrics,
+        #     label=label,
+        #     output_dir=output_dir,
+        # )
         export_csv(data, output_dir)
 
     except Exception as e:
-        print(e)
         kill_process_tree(os.getpid(), include_parent=False)
+        raise RuntimeError(f"Process failed with error: {e}") from e

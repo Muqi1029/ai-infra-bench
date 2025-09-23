@@ -86,7 +86,7 @@ def avg_std_strf(
 def add_request_rate(cmd: str, rate: int):
     cmd += f" --max-concurrency {rate} --request-rate {rate}"
     if "num-prompt" not in cmd:
-        cmd += f" --num-prompt {rate * 10}"
+        cmd += f" --num-prompt {min(max(100, rate * 10), 250)}"
     return cmd
 
 
