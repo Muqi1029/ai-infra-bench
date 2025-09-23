@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from ai_infra_bench.sgl import general_bench
+from ai_infra_bench.sgl import gen_bench
 
 # Args for server_cmds, client_cmds
 input_len = 1200
@@ -87,7 +87,7 @@ metrics = [
 ]
 
 if __name__ == "__main__":
-    general_bench(
+    gen_bench(
         server_cmds=server_cmds,
         client_cmds=client_cmds,
         input_features=input_features,

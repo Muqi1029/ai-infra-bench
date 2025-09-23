@@ -1,10 +1,11 @@
 import os
-import time
+
 from typing import Dict, List
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from tqdm import tqdm
+from time import time
 
 from ai_infra_bench.utils import (
     check_server_client_cmds,
@@ -19,7 +20,7 @@ from ai_infra_bench.utils import (
 )
 
 
-def general_export_table(data, input_features, metrics, labels, output_dir):
+def gen_export_table(data, input_features, metrics, labels, output_dir):
     print(f"Writing table to {os.path.join(output_dir, 'table.md')}")
     md_tables_str = ""
     for label_idx, label in enumerate(labels):
@@ -54,7 +55,7 @@ def general_export_table(data, input_features, metrics, labels, output_dir):
     print("Writing table DONE")
 
 
-def general_plot(data, input_features, metrics, labels, output_dir):
+def gen_plot(data, input_features, metrics, labels, output_dir):
     print("Ploting graphs in html")
     for i, label in enumerate(labels):
         for input_feature in input_features:
@@ -99,7 +100,7 @@ def general_plot(data, input_features, metrics, labels, output_dir):
     print("Ploting graphs DONE")
 
 
-def general_bench(
+def gen_bench(
     server_cmds,
     client_cmds,
     *,
@@ -156,14 +157,14 @@ def general_bench(
 
         pbar.close()
 
-        general_export_table(
+        gen_export_table(
             data=data,
             input_features=input_features,
             metrics=metrics,
             labels=labels,
             output_dir=output_dir,
         )
-        general_plot(
+        gen_plot(
             data=data,
             input_features=input_features,
             metrics=metrics,
