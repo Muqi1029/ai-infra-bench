@@ -4,6 +4,8 @@ import shutil
 from datetime import datetime
 from typing import List, Union
 
+from ai_infra_bench.utils import is_ci
+
 logger = logging.getLogger(__name__)
 
 SGLANG_KEYS = [
@@ -50,6 +52,10 @@ def check_dir(output_dir: str, full_data_json_path):
     Checks if the specified output directory exists. If it does, it prompts the user
     for an action (delete or rename). It re-prompts on invalid input.
     """
+    if is_ci():
+        os.makedirs(os.path.join(output_dir, full_data_json_path))
+        return output_dir
+
     if os.path.exists(output_dir):
         while True:
             # Re-prompt loop
@@ -57,8 +63,9 @@ def check_dir(output_dir: str, full_data_json_path):
                 f"The directory '{output_dir}' already exists. Please choose an option:\n"
                 "  1. Delete the existing directory and create a new one.\n"
                 "  2. Append a timestamp to the directory name (e.g., 'your_dir_MMDD_HHMM').\n"
-                "  3. Quit.\n"
-                "Enter your choice (1, 2 or 3): "
+                "  3. Input a new directory name.\n"
+                "  4. Quit.\n"
+                "Enter your choice (1, 2, 3 or 4): "
             )
             option = input(prompt_text).strip()
 
@@ -74,7 +81,11 @@ def check_dir(output_dir: str, full_data_json_path):
                 os.makedirs(output_dir)
                 logger.info(f"New directory created: '{output_dir}'.")
                 break
-            if option == "3":
+            elif option == "3":
+                output_dir = input("New directory name: ").strip()
+                os.makedirs(output_dir)
+                logger.info(f"New directory created: '{output_dir}'.")
+            elif option == "4":
                 exit(0)
             else:
                 logger.warning("Invalid option. Please enter '1', '2' or '3'.")

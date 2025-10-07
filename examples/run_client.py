@@ -65,7 +65,7 @@ input_features = [
     "max_concurrency",
 ]
 
-metrics = [
+output_metrics = [
     "p99_ttft_ms",
     "p99_tpot_ms",
     "p99_itl_ms",
@@ -77,8 +77,7 @@ if __name__ == "__main__":
     client_gen(
         client_cmds=client_cmds,
         input_features=input_features,
-        metrics=metrics,
-        label="deepseek_r1",
-        n=3,
+        metrics=output_metrics,
+        labels="deepseek_r1",
         output_dir="ali_output",
     )

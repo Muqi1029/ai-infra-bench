@@ -108,13 +108,9 @@ def client_gen(
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
         labels = [labels]
-    elif isinstance(client_cmds, list) and not isinstance(client_cmds[0], str):
+    if not (isinstance(client_cmds, list) and isinstance(client_cmds[0], str)):
         raise ValueError(
-            "client_cmds must be a string or a list of strings (for multiple clients)"
-        )
-    else:
-        raise ValueError(
-            "client_cmds must be a string or a list of strings (for multiple clients)"
+            f"client_cmds must be a string or a list of strings (for multiple clients), but found {client_cmds=}"
         )
 
     labels = maybe_create_labels(labels, len(client_cmds))

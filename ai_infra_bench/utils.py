@@ -49,6 +49,13 @@ def enter_decorate(title: str, filename: str | None = None):
     return decorator
 
 
+def is_ci() -> bool:
+    return any(
+        os.getenv(var, "").lower() == "true"
+        for var in ["CI", "GITHUB_ACTIONS", "GITLAB_CI"]
+    )
+
+
 def maybe_create_labels(labels: Union[List[str], str, None], n: int) -> List[str]:
     if labels is None:
         labels = [f"client{i:02d}" for i in range(n)]
@@ -90,11 +97,16 @@ def wait_for_server(base_url: str, timeout=None):
             time.sleep(1)
 
 
-def run_cmd(cmd: str, is_block=True):
+def run_cmd(cmd: str, is_block=True) -> None:
+    if is_ci():
+        logger.info("[CI mode] Skipping real GPU execution.")
+        return
+
     cmd = cmd.replace("\\\n", " ").replace("\\", " ")
     if is_block:
-        return subprocess.run(cmd.split(), text=True, stderr=subprocess.STDOUT)
-    return subprocess.Popen(cmd.split(), text=True, stderr=subprocess.STDOUT)
+        subprocess.run(cmd.split(), text=True, stderr=subprocess.STDOUT)
+    else:
+        subprocess.Popen(cmd.split(), text=True, stderr=subprocess.STDOUT)
 
 
 def dummy_get_filename(i, label):
@@ -102,6 +114,46 @@ def dummy_get_filename(i, label):
 
 
 def read_jsonl(filepath: str):
+    if is_ci():
+        return [
+            {
+                "backend": "sglang-oai",
+                "dataset_name": "random",
+                "request_rate": 10.0,
+                "max_concurrency": 10,
+                "sharegpt_output_len": None,
+                "random_input_len": 1200,
+                "random_output_len": 800,
+                "random_range_ratio": 1.0,
+                "duration": 45.11868940386921,
+                "completed": 100,
+                "total_input_tokens": 120000,
+                "total_output_tokens": 80000,
+                "total_output_tokens_retokenized": 79998,
+                "request_throughput": 2.2163764356024127,
+                "input_throughput": 2659.6517227228956,
+                "output_throughput": 1773.1011484819303,
+                "mean_e2e_latency_ms": 4482.026166650467,
+                "median_e2e_latency_ms": 4487.435979535803,
+                "std_e2e_latency_ms": 32.15524448450066,
+                "p99_e2e_latency_ms": 4534.823208898306,
+                "mean_ttft_ms": 38.534140698611736,
+                "median_ttft_ms": 42.44273528456688,
+                "std_ttft_ms": 10.558202315257851,
+                "p99_ttft_ms": 61.15902605932206,
+                "mean_tpot_ms": 5.561316678287678,
+                "median_tpot_ms": 5.56157646876747,
+                "std_tpot_ms": 0.04168330778296244,
+                "p99_tpot_ms": 5.627061070545631,
+                "mean_itl_ms": 5.561935330397016,
+                "median_itl_ms": 5.495080258697271,
+                "std_itl_ms": 1.1977701758121588,
+                "p95_itl_ms": 6.047771545127034,
+                "p99_itl_ms": 6.62423954345286,
+                "concurrency": 9.933857179517508,
+                "accept_length": None,
+            }
+        ]
     data = []
     with open(filepath, mode="r", encoding="utf-8") as f:
         for line in f:
@@ -114,17 +166,15 @@ def avg_std_strf(
 ) -> str:
     val_list = [item[key] for item in item_list]
 
-    if not val_list[0] or isinstance(val_list[0], str) or np.std(val_list, ddof=1) == 0:
-        return str(val_list[0])
-
     fmt = "" if precision is None else f".{precision}f"
 
-    if len(val_list) == 1:
+    if not isinstance(val_list[0], (int, float)):
+        return str(val_list[0])
+
+    if len(val_list) == 1 or (std := np.std(val_list, ddof=1)):
         return format(val_list[0], fmt)
 
     avg = np.mean(val_list)
-    std = np.std(val_list, ddof=1)
-
     return (
         f"{format(avg, fmt)} \u00b1 {format(std, fmt)}"
         f"({sep.join(format(val, fmt) for val in val_list)})"
