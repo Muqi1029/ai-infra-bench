@@ -1,222 +1,84 @@
+import logging
 import os
-from datetime import datetime
-from typing import Callable, Dict, List, Tuple, Union
-
-import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from ai_infra_bench.check import (
     check_dir,
-    check_input_features_metrics,
-    check_output_file,
     check_param_in_cmd,
+    check_values_in_features_metrics,
 )
+from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
+from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
     FULL_DATA_JSON_PATH,
     add_request_rate,
-    avg_std_strf,
-    colors,
-    graph_per_row,
     kill_process_tree,
-    read_jsonl,
-    run_cmd,
-    sort_data_by_key,
-    warmup,
+    maybe_create_labels,
+    maybe_warmup,
 )
 
-
-def export_csv(data: List[Dict], output_dir):
-    csv_path = os.path.join(output_dir, "full_data.csv")
-
-    print(f"Writing full csv file to {csv_path}")
-
-    title = data[0][0].keys()
-    title_len = len(title)
-
-    with open(csv_path, "w", encoding="utf-8") as f:
-        # headers
-        f.write(",".join(title) + "\n")
-
-        for item_list in data:
-            # traverse each line
-            for i, name in enumerate(title):
-                f.write(avg_std_strf(name, item_list, sep="|", precision=4))
-                if i != title_len - 1:
-                    f.write(",")
-            f.write("\n")
-    print(f"Writing full csv file to {csv_path} DONE")
-
-
-def export_table(data, input_features, metrics, label, output_dir, highlight=None):
-    table_path = os.path.join(output_dir, "table.md")
-
-    print(f"Writing table to {table_path}")
-    md_tables_str = f"Title: **{label}**\n"
-    md_tables_str += (
-        "| "
-        + " | ".join(str(input_feature) for input_feature in input_features)
-        + " |     | "
-        + " | ".join(str(metric) for metric in metrics)
-        + " |\n"
-        + "| --- " * (len(input_features) + len(metrics) + 1)
-        + "|\n"
-    )
-    for item_list in data:
-        for input_feature in input_features:
-            md_tables_str += "| " + f"{item_list[0][input_feature]:.2f}" + " "
-        md_tables_str += "|     "
-        for metric in metrics:
-            md_tables_str += "| " + avg_std_strf(metric, item_list, precision=2) + " "
-        md_tables_str += "|\n"
-
-    with open(table_path, "w", encoding="utf-8") as f:
-        f.write(md_tables_str)
-    print("Writing table DONE")
-
-
-def plot(data, input_features, metrics, label, output_dir):
-    print("Ploting graphs in html")
-
-    for input_feature in input_features:
-        rows = (len(metrics) - 1) // graph_per_row + 1
-        fig = make_subplots(rows=rows, cols=graph_per_row)
-
-        x = [np.mean([item[input_feature] for item in item_list]) for item_list in data]
-        cur_row, cur_col = 0, 0
-
-        for metric in metrics:
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=[
-                        np.mean([item[metric] for item in item_list])
-                        for item_list in data
-                    ],
-                    name=f"{metric} (AVG)",
-                    mode="lines+markers",
-                    marker=dict(size=8),
-                    line=dict(
-                        color=colors[(cur_row * graph_per_row + cur_col) % len(colors)],
-                        width=3,
-                    ),
-                    hovertemplate=f"<br>{input_feature}: %{{x}}<br>{metric}: %{{y}}<br><extra></extra>",
-                ),
-                row=cur_row + 1,
-                col=cur_col + 1,
-            )
-            fig.update_xaxes(title_text=input_feature, row=cur_row + 1, col=cur_col + 1)
-            fig.update_yaxes(title_text=metric, row=cur_row + 1, col=cur_col + 1)
-
-            cur_col += 1
-            if cur_col == graph_per_row:
-                cur_row += 1
-                cur_col = 0
-        fig.update_layout(title_text="")
-        fig.write_html(os.path.join(output_dir, f"{label}_{input_feature}.html"))
-    print("Ploting graphs DONE")
+logger = logging.getLogger(__name__)
 
 
 def client_slo(
     client_cmds: List[str],
     input_features: List[str],
-    metrics: List[str],
+    output_metrics: List[str],
     check_slo: Callable,
     request_rates: List[Tuple[int, int]],
-    labels: List[str] = None,
+    labels: Optional[List[str]] = None,
     n=1,
     output_dir="output",
     disable_warmup=False,
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
+    if isinstance(check_slo, Callable):
+        check_slo = [check_slo] * len(client_cmds)
+    if isinstance(request_rates, tuple):
+        request_rates = [request_rates]
 
-    check_input_features_metrics(input_features, metrics)
+    check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
     check_param_in_cmd("request-rate", client_cmds)
     check_param_in_cmd("max-concurrency", client_cmds)
-    assert len(client_cmds) == len(request_rates)
+    assert (
+        len(client_cmds) == len(request_rates) == len(check_slo)
+    ), "Length of client_cmds, request_rates, and check_slo must be the same"
 
-    if not labels:
-        labels = [
-            datetime.now.strftime("%m%d") + f"_slo_exp_{i}"
-            for i in range(len(client_cmds))
-        ]
-        print(
-            f"The labels for this run is not set, it will be set {labels} by default respectively"
-        )
+    labels = maybe_create_labels(labels, len(client_cmds))
 
     output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
 
     try:
-        # warmup
-        if not disable_warmup:
-            print("Using the first client request for warm up")
-            warmup(add_request_rate(client_cmds[0], request_rates[0][0]), output_dir)
-
-        data: List[Dict] = []
-        answers: List[int] = []
-
-        for client_idx in range(len(client_cmds)):
-            print(f"\nRunning {client_idx}-th client\n")
-            left, right = request_rates[client_idx]
-
-            inner_client_data = []
-            while left <= right:
-                mid = (left + right) // 2
-                cmd = add_request_rate(client_cmds[client_idx], mid)
-
-                inner_data: List[Dict] = []
-                for i in range(n):
-                    output_file = (
-                        f"{labels[client_idx]}_client_{client_idx:02d}_{i:02d}.jsonl"
-                    )
-                    output_file = os.path.join(
-                        output_dir, FULL_DATA_JSON_PATH, output_file
-                    )
-                    cmd += f" --output-file {output_file}"
-                    run_cmd(cmd, is_block=True)
-                    inner_data.append(read_jsonl(output_file)[-1])
-
-                union_avg_item = {}
-                for key in inner_data[0].keys():
-                    if not inner_data[0][key] or isinstance(inner_data[0][key], str):
-                        union_avg_item[key] = inner_data[0][key]
-                    else:
-                        union_avg_item[key] = np.median(
-                            [item[key] for item in inner_data]
-                        )
-                if check_slo(union_avg_item):
-                    left = mid + 1
-                else:
-                    right = mid - 1
-
-                inner_client_data.append(inner_data)
-
-            answers.append(right)
-            print(f"\033[92m The maximum concurrency satisfying SLO is {right} \033[0m")
-
-            sorted_inner_client_data = sort_data_by_key(
-                "max_concurrency", inner_client_data
+        all_clients_results: List[List[Dict]] = []
+        answers = []
+        for client_cmd, request_rate, check_slo, label in zip(
+            client_cmds, request_rates, check_slo, labels
+        ):
+            maybe_warmup(
+                add_request_rate(client_cmd, request_rate[0]),
+                output_dir=output_dir,
+                disable_warmup=disable_warmup,
             )
-            data.extend(sorted_inner_client_data)
+            client_results, answer = slo_run(
+                client_cmd=client_cmd,
+                request_rate=request_rate,
+                check_slo=check_slo,
+                n=n,
+                output_dir=output_dir,
+                label=label,
+            )
+            all_clients_results.extend(client_results)
+            answers.append(answer)
 
-        export_table(
-            data=data,
+        gen_export_csv(all_clients_results=all_clients_results, output_dir=output_dir)
+        gen_export_table(
+            all_clients_results=all_clients_results,
             input_features=input_features,
-            metrics=metrics,
-            label=labels,
+            output_metrics=output_metrics,
             output_dir=output_dir,
-            highlight=answers,
         )
-        # plot(
-        #     data=sorted_data,
-        #     input_features=input_features,
-        #     metrics=metrics,
-        #     label=labels,
-        #     output_dir=output_dir,
-        # )
-        export_csv(data, output_dir)
 
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)
@@ -225,64 +87,61 @@ def client_slo(
 
 def client_gen(
     client_cmds: Union[List[str], str],
-    input_features,
-    metrics,
-    label=None,
-    n=1,
-    output_dir="output",
-    disable_warmup=False,
+    input_features: List[str],
+    output_metrics: List[str],
+    labels: Optional[Union[List[str], str]] = None,
+    n: int = 1,
+    output_dir: str = "output",
+    disable_warmup: bool = False,
+    disable_plot: bool = False,
+    disable_table: bool = False,
+    disable_csv: bool = False,
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
+        labels = [labels]
+    elif isinstance(client_cmds, list) and not isinstance(client_cmds[0], str):
+        raise ValueError(
+            "client_cmds must be a string or a list of strings (for multiple clients)"
+        )
+    else:
+        raise ValueError(
+            "client_cmds must be a string or a list of strings (for multiple clients)"
+        )
 
-    check_input_features_metrics(input_features, metrics)
+    labels = maybe_create_labels(labels, len(client_cmds))
+
+    check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
 
-    if not label:
-        label = datetime.now.strftime("%m%d") + "_slo_exp"
-        print(
-            f"The label for this server is not set, it will be set {label} by default"
-        )
-
     output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
-    print(f"{output_dir=}")
 
     try:
-        # warmup
-        if not disable_warmup:
-            print("Using the first client request for warm up")
-            warmup(client_cmds[0], output_dir)
-
-        data: List[Dict] = []
-        for client_idx, cmd in enumerate(client_cmds):
-            print(f"\nRunning {client_idx}-th client\n")
-
-            inner_data = []
-            for ii in range(n):
-                output_file = f"client_{client_idx:02d}_{ii:02d}.jsonl"
-                output_file = os.path.join(output_dir, FULL_DATA_JSON_PATH, output_file)
-                cmd += f" --output-file {output_file}"
-                run_cmd(cmd, is_block=True)
-                inner_data.append(read_jsonl(output_file)[-1])
-
-            data.append(inner_data)
-
-        export_table(
-            data=data,
-            input_features=input_features,
-            metrics=metrics,
-            label=label,
-            output_dir=output_dir,
+        maybe_warmup(
+            cmd=client_cmds[0], output_dir=output_dir, disable_warmup=disable_warmup
         )
 
-        # plot(
-        #     data=data,
-        #     input_features=input_features,
-        #     metrics=metrics,
-        #     label=label,
-        #     output_dir=output_dir,
-        # )
-        export_csv(data, output_dir)
+        all_clients_results: List[List[Dict]] = gen_run(
+            client_cmds=client_cmds, n=n, labels=labels, output_dir=output_dir
+        )
+
+        if not disable_table:
+            gen_export_table(
+                all_clients_results=all_clients_results,
+                input_features=input_features,
+                output_metrics=output_metrics,
+                output_dir=output_dir,
+            )
+
+        if not disable_plot:
+            gen_plot(
+                all_clients_results=all_clients_results,
+                input_features=input_features,
+                output_metrics=output_metrics,
+                output_dir=output_dir,
+            )
+        if not disable_csv:
+            gen_export_csv(all_clients_results, output_dir)
 
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)

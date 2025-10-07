@@ -1,24 +1,72 @@
 from __future__ import annotations
 
+import inspect
 import json
+import logging
 import os
 import signal
 import subprocess
 import sys
 import threading
 import time
-from typing import Dict, List
+from functools import wraps
+from typing import Dict, List, Union
 
 import numpy as np
 import psutil
 import requests
 
+logger = logging.getLogger(__name__)
+
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 graph_per_row = 3
 FULL_DATA_JSON_PATH = "full_data_json"  # used to store all json files
+TABLE_NAME = "table.md"
+CSV_NAME = "data.csv"
 
 
-def warmup(cmd: str, output_dir: str):
+def enter_decorate(title: str, filename: str | None = None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            logger.info(f"[{title}] Start...")
+
+            result = func(*args, **kwargs)
+
+            bound = inspect.signature(func).bind(*args, **kwargs)
+            bound.apply_defaults()
+            output_dir = bound.arguments.get("output_dir", "")
+            if output_dir:
+                logger.info(
+                    f"[{title}] SUCCESS: {filename} has been successfully generated in {output_dir}"
+                )
+            else:
+                logger.info(f"[{title}] SUCCESS.")
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def maybe_create_labels(labels: Union[List[str], str, None], n: int) -> List[str]:
+    if labels is None:
+        labels = [f"client{i:02d}" for i in range(n)]
+        logger.info(f"Auto-generated labels: {labels}")
+    elif isinstance(labels, str):
+        labels = [labels] * n
+    elif isinstance(labels, list):
+        assert len(labels) == n, "Length of labels must match number of clients"
+    else:
+        raise ValueError("labels must be a string, a list of strings, or None")
+    return labels
+
+
+def maybe_warmup(cmd: str, output_dir: str, disable_warmup: bool):
+    if disable_warmup:
+        logger.info("Warmup is disabled.")
+        return
+    logger.info("Starting warmup...")
     cmd += f" --output-file {output_dir}/.warmup.json"
     run_cmd(cmd, is_block=True)
 

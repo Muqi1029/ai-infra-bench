@@ -1,7 +1,10 @@
+import logging
 import os
 import shutil
 from datetime import datetime
 from typing import List, Union
+
+logger = logging.getLogger(__name__)
 
 SGLANG_KEYS = [
     "backend",
@@ -60,26 +63,27 @@ def check_dir(output_dir: str, full_data_json_path):
             option = input(prompt_text).strip()
 
             if option == "1":
-                print(f"Deleting '{output_dir}'...")
+                logger.info(f"Deleting '{output_dir}'...")
                 shutil.rmtree(output_dir)
                 os.makedirs(output_dir)
-                print(f"Directory '{output_dir}' created.")
+                logger.info(f"Directory '{output_dir}' created.")
                 break
             elif option == "2":
                 date_suffix = datetime.now().strftime("%m%d_%H%M")
                 output_dir = f"{output_dir}_{date_suffix}"
                 os.makedirs(output_dir)
-                print(f"New directory created: '{output_dir}'.")
+                logger.info(f"New directory created: '{output_dir}'.")
                 break
             if option == "3":
                 exit(0)
             else:
-                print("Invalid option. Please enter '1', '2' or '3'.")
+                logger.warning("Invalid option. Please enter '1', '2' or '3'.")
     else:
         # If the directory does not exist, create it directly
         os.makedirs(output_dir)
-        print(f"Directory '{output_dir}' created.")
+        logger.info(f"Directory '{output_dir}' created.")
     os.makedirs(os.path.join(output_dir, full_data_json_path))
+    logger.info(f"output_dir set to '{output_dir}'")
     return output_dir
 
 
@@ -126,14 +130,14 @@ def check_server_client_cmds(server_cmds, client_cmds, *, labels):
     # TODO: check metrics, check_slo
 
 
-def check_input_features_metrics(input_features, metrics):
+def check_values_in_features_metrics(input_features, output_metrics):
     for input_feature in input_features:
         assert (
             input_feature in SGLANG_KEYS
         ), f"{input_feature=} should be in the {SGLANG_KEYS=}"
 
-    for metric in metrics:
-        assert metric in SGLANG_KEYS, f"{metric=} should be all in the {SGLANG_KEYS=}"
+    for metric in output_metrics:
+        assert metric in SGLANG_KEYS, f"{metric=} should be in the {SGLANG_KEYS=}"
 
 
 def check_param_in_cmd(param: str, cmds: List[str]):
