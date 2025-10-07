@@ -1,11 +1,10 @@
 import os
-
+from time import time
 from typing import Dict, List
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from tqdm import tqdm
-from time import time
 
 from ai_infra_bench.utils import (
     check_server_client_cmds,
