@@ -30,6 +30,8 @@ def client_slo(
     n=1,
     output_dir="output",
     disable_warmup=False,
+    disable_table=False,
+    disable_csv=False,
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
@@ -72,13 +74,19 @@ def client_slo(
             all_clients_results.extend(client_results)
             answers.append(answer)
 
-        gen_export_csv(all_clients_results=all_clients_results, output_dir=output_dir)
-        gen_export_table(
-            all_clients_results=all_clients_results,
-            input_features=input_features,
-            output_metrics=output_metrics,
-            output_dir=output_dir,
-        )
+        if not disable_table:
+            gen_export_table(
+                all_clients_results=all_clients_results,
+                input_features=input_features,
+                output_metrics=output_metrics,
+                output_dir=output_dir,
+            )
+        if not disable_csv:
+            gen_export_csv(
+                all_clients_results=all_clients_results,
+                output_dir=output_dir,
+                labels=labels,
+            )
 
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)
@@ -141,7 +149,9 @@ def client_gen(
                 output_dir=output_dir,
             )
         if not disable_csv:
-            gen_export_csv(all_clients_results, output_dir)
+            gen_export_csv(
+                all_clients_results=all_clients_results, output_dir=output_dir
+            )
 
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)
