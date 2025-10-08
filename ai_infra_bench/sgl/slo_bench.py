@@ -18,11 +18,9 @@ from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
     FULL_DATA_JSON_PATH,
     add_request_rate,
-    dummy_get_filename,
     kill_process_tree,
     maybe_create_labels,
     maybe_warmup,
-    read_jsonl,
     run_cmd,
     wait_for_server,
 )

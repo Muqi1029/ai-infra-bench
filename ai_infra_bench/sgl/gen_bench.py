@@ -23,7 +23,7 @@ from ai_infra_bench.utils import (
 logger = logging.getLogger(__name__)
 
 
-def slo_bench(
+def gen_bench(
     server_cmds: str | List[str],
     client_cmds: str | List[str] | List[List[str]],
     *,
