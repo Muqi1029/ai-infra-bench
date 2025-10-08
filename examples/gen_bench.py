@@ -91,7 +91,7 @@ if __name__ == "__main__":
         server_cmds=server_cmds,
         client_cmds=client_cmds,
         input_features=input_features,
-        metrics=metrics,
+        output_metrics=metrics,
         labels=labels,
         host=host,
         port=port,

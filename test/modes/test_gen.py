@@ -38,6 +38,9 @@ class TestSGLGen(unittest.TestCase):
     def test_list(self):
         self.run_single_cmd([server_cmd_str], client_cmds=[client_cmd_str] * 3)
 
+    def test_n(self):
+        self.run_single_cmd([server_cmd_str], client_cmds=[client_cmd_str] * 3, n=3)
+
     @unittest.expectedFailure
     def test_length_fail(self):
         self.run_single_cmd([server_cmd_str] * 2, client_cmds=[client_cmd_str] * 3)
@@ -100,8 +103,8 @@ class TestGen(unittest.TestCase):
         with self.assertRaises(ValueError):
             client_gen(
                 client_cmds=[[client_cmd_str]],
-                input_features=self.input_features,
-                output_metrics=self.output_metrics,
+                input_features=input_features,
+                output_metrics=output_metrics,
             )
 
     def test_output_file(self):
@@ -109,16 +112,16 @@ class TestGen(unittest.TestCase):
             client_cmd = f"{client_cmd_str} --output-file output.jsonl"
             client_gen(
                 client_cmds=client_cmd,
-                input_features=self.input_features,
-                output_metrics=self.output_metrics,
+                input_features=input_features,
+                output_metrics=output_metrics,
             )
 
     def test_disable_csv(self):
         with tempfile.TemporaryDirectory() as output_dir:
             client_gen(
                 client_cmds=client_cmd_str,
-                input_features=self.input_features,
-                output_metrics=self.output_metrics,
+                input_features=input_features,
+                output_metrics=output_metrics,
                 output_dir=output_dir,
                 disable_csv=True,
             )
@@ -128,8 +131,8 @@ class TestGen(unittest.TestCase):
         with tempfile.TemporaryDirectory() as output_dir:
             client_gen(
                 client_cmds=client_cmd_str,
-                input_features=self.input_features,
-                output_metrics=self.output_metrics,
+                input_features=input_features,
+                output_metrics=output_metrics,
                 output_dir=output_dir,
                 disable_plot=True,
             )
@@ -140,8 +143,8 @@ class TestGen(unittest.TestCase):
         with tempfile.TemporaryDirectory() as output_dir:
             client_gen(
                 client_cmds=client_cmd_str,
-                input_features=self.input_features,
-                output_metrics=self.output_metrics,
+                input_features=input_features,
+                output_metrics=output_metrics,
                 output_dir=output_dir,
                 disable_table=True,
             )
