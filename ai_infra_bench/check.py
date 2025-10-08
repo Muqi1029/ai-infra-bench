@@ -98,47 +98,29 @@ def check_dir(output_dir: str, full_data_json_path):
     return output_dir
 
 
-def check_output_file(cmds: Union[List[str], str]):
-    if isinstance(cmds, str):
-        cmds = [cmds]
-
-    for cmd in cmds:
-        assert (
-            "--output-file" not in cmd
-        ), f"{cmd=} should not use --output-file, it will be generated automatically"
-
-
-def check_server_client_cmds(server_cmds, client_cmds, *, labels):
-    assert all(
-        [
-            cmd.strip().startswith("python -m sglang.launch_server")
-            for cmd in server_cmds
-        ]
-    ), "Each server_cmd must startswith 'python -m sglang.launch_server'"
-
-    if isinstance(client_cmds[0], list):
-        for client_cmd in client_cmds:
-            assert all(
-                [
-                    cmd.strip().startswith("python -m sglang.bench_serving")
-                    for cmd in client_cmd
+def check_content_server_client_cmds(
+    server_cmds: List[str], client_cmds: List[List[str]]
+) -> None:
+    for cmd in server_cmds:
+        assert any(
+            cmd.strip().startswith(
+                p
+                for p in [
+                    "python -m sglang.launch_server",
+                    "python3 -m sglang.launch_server",
                 ]
-            ), "Each client_cmd must start with 'python -m sglang.bench_serving'"
-    elif isinstance(client_cmds[0], str):
-        assert all(
-            [
-                cmd.strip().startswith("python -m sglang.bench_serving")
-                for cmd in client_cmds
-            ]
-        ), "Each client_cmd must start with 'python -m sglang.bench_serving'"
+            )
+        ), f"Each server_cmd must start with 'python -m sglang.launch_server' or 'python3 -m sglang.launch_server', but found {cmd=}"
 
-    # FIXME(muqi1029): don't let the user set output_file
-    check_output_file(client_cmds)
-
-    assert len(server_cmds) == len(
-        labels
-    ), f"The length of server_cmds and labels should be equal, but found {len(server_cmds)=}, {len(labels)=}"
-    # TODO: check metrics, check_slo
+    for client_cmd in client_cmds:
+        for cmd in client_cmd:
+            assert any(
+                cmd.strip().startswith(p)
+                for p in [
+                    "python -m sglang.bench_serving",
+                    "python3 -m sglang.bench_serving",
+                ]
+            ), f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
 
 
 def check_values_in_features_metrics(input_features, output_metrics):
@@ -154,6 +136,70 @@ def check_values_in_features_metrics(input_features, output_metrics):
 def check_param_in_cmd(param: str, cmds: List[str]):
     for cmd in cmds:
         assert param not in cmd, f"{cmd=} should not contain '{param}''"
+
+
+def check_client_labels(
+    client_labels: None | str | List[str] | List[List[str]],
+    num_clients: List[int],
+) -> List[None] | List[List[str]]:
+    if client_labels is None:
+        return [None] * len(num_clients)
+
+    if isinstance(client_labels, str):
+        client_labels = [[client_labels]]
+    elif isinstance(client_labels, list):
+        if all(isinstance(label, str) for label in client_labels):
+            # list[str]
+            assert len(client_labels) == num_clients[0]
+            client_labels = [client_labels]
+        elif all(isinstance(label, list) for label in client_labels):
+            # list[list[str]]
+            assert all(
+                isinstance(label, str)
+                for client_label_list in client_labels
+                for label in client_label_list
+            )
+        raise TypeError("client_labels list must contain only str or list[str].")
+    else:
+        raise TypeError(
+            f"client_labels must be None, str, list[str], or list[list[str]], "
+            f"but got {type(client_labels).__name__}."
+        )
+
+    assert len(client_labels) == len(num_clients)
+    for idx in range(client_labels):
+        assert len(client_labels) == num_clients[idx]
+
+
+def check_server_labels(
+    server_labels: None | str | List[str],
+    num_servers: int,
+) -> List[None] | List[str]:
+    if server_labels is None:
+        return [None] * num_servers
+
+    # Case 1: single string
+    if isinstance(server_labels, str):
+        if num_servers != 1:
+            raise ValueError(
+                f"Expected 1 server label for {num_servers} servers, got a single string."
+            )
+        return [server_labels]
+
+    # Case 2: list of strings
+    if isinstance(server_labels, list):
+        if len(server_labels) != num_servers:
+            raise ValueError(
+                f"Expected {num_servers} server labels, got {len(server_labels)}."
+            )
+        if not all(isinstance(label, str) for label in server_labels):
+            raise TypeError("All server_labels must be strings.")
+        return server_labels
+
+    # Case 3: invalid type
+    raise TypeError(
+        f"server_labels must be None, str, or list[str], got {type(server_labels).__name__}."
+    )
 
 
 def slo_check_params(server_cmds, client_cmds, labels):

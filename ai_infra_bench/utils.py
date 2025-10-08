@@ -56,16 +56,34 @@ def is_ci() -> bool:
     )
 
 
-def maybe_create_labels(labels: Union[List[str], str, None], n: int) -> List[str]:
-    if labels is None:
-        labels = [f"client{i:02d}" for i in range(n)]
-        logger.info(f"Auto-generated labels: {labels}")
-    elif isinstance(labels, str):
-        labels = [labels] * n
-    elif isinstance(labels, list):
-        assert len(labels) == n, "Length of labels must match number of clients"
-    else:
-        raise ValueError("labels must be a string, a list of strings, or None")
+def maybe_create_labels(
+    num: int,
+    server_label: None | str = None,
+    client_labels: List[str] | None = None,
+) -> List[str]:
+
+    def _validate_client_labels(labels: List[str]):
+        if not isinstance(labels, list) or not all(isinstance(l, str) for l in labels):
+            raise TypeError(f"client_labels must be a list of strings, got {labels!r}")
+        if len(labels) != num:
+            raise ValueError(f"Expected {num} client labels, got {len(labels)}")
+
+    if server_label is None:
+        if client_labels is None:
+            labels = [f"client{i:02d}" for i in range(num)]
+            logger.info(f"Auto-generated labels: {labels}")
+            return labels
+        else:
+            _validate_client_labels(client_labels)
+            return client_labels
+
+    labels = [server_label] * num
+    if client_labels is not None:
+        _validate_client_labels(client_labels)
+        labels = [
+            f"{label}_{client_label}"
+            for label, client_label in zip(labels, client_labels)
+        ]
     return labels
 
 
@@ -79,6 +97,8 @@ def maybe_warmup(cmd: str, output_dir: str, disable_warmup: bool):
 
 
 def wait_for_server(base_url: str, timeout=None):
+    if is_ci():
+        return
     start_time = time.perf_counter()
 
     while True:
@@ -97,16 +117,16 @@ def wait_for_server(base_url: str, timeout=None):
             time.sleep(1)
 
 
-def run_cmd(cmd: str, is_block=True) -> None:
+def run_cmd(cmd: str, is_block=True):
     if is_ci():
         logger.info("[CI mode] Skipping real GPU execution.")
         return
 
     cmd = cmd.replace("\\\n", " ").replace("\\", " ")
     if is_block:
-        subprocess.run(cmd.split(), text=True, stderr=subprocess.STDOUT)
+        return subprocess.run(cmd.split(), text=True, stderr=subprocess.STDOUT)
     else:
-        subprocess.Popen(cmd.split(), text=True, stderr=subprocess.STDOUT)
+        return subprocess.Popen(cmd.split(), text=True, stderr=subprocess.STDOUT)
 
 
 def dummy_get_filename(i, label):

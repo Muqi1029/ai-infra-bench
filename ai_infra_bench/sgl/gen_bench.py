@@ -1,174 +1,151 @@
+import logging
 import os
 from time import time
 from typing import Dict, List
 
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from tqdm import tqdm
-
+from ai_infra_bench.check import (
+    check_client_labels,
+    check_content_server_client_cmds,
+    check_dir,
+    check_param_in_cmd,
+    check_server_labels,
+)
+from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.utils import (
-    check_server_client_cmds,
-    colors,
-    dummy_get_filename,
-    graph_per_row,
+    FULL_DATA_JSON_PATH,
     kill_process_tree,
-    read_jsonl,
+    maybe_create_labels,
+    maybe_warmup,
     run_cmd,
     wait_for_server,
-    warmup,
 )
 
-
-def gen_export_table(data, input_features, metrics, labels, output_dir):
-    print(f"Writing table to {os.path.join(output_dir, 'table.md')}")
-    md_tables_str = ""
-    for label_idx, label in enumerate(labels):
-
-        # add title
-        md_tables_str += f"Title: **{label}**\n"
-        md_tables_str += (
-            "| "
-            + " | ".join(str(input_feature) for input_feature in input_features)
-            + " |     | "
-            + " | ".join(str(metric) for metric in metrics)
-            + " |\n"
-        )
-
-        # add delimiter
-        md_tables_str += "| --- " * (len(input_features) + len(metrics) + 1) + "|\n"
-
-        # add data
-        for item in data[label_idx]:
-
-            # FIXME(muqi1029): only support float or int features and metrics
-            for input_feature in input_features:
-                md_tables_str += "| " + f"{item[input_feature]:.2f}" + " "
-            md_tables_str += "|     "
-            for metric in metrics:
-                md_tables_str += "| " + f"{item[metric]:.2f}" + " "
-            md_tables_str += "|\n"
-
-        md_tables_str += "\n" * 5
-    with open(os.path.join(output_dir, "table.md"), mode="w", encoding="utf-8") as f:
-        f.write(md_tables_str)
-    print("Writing table DONE")
-
-
-def gen_plot(data, input_features, metrics, labels, output_dir):
-    print("Ploting graphs in html")
-    for i, label in enumerate(labels):
-        for input_feature in input_features:
-
-            rows = (len(metrics) - 1) // graph_per_row + 1
-            # fig = make_subplots(rows=rows, cols=graph_per_row, subplot_titles=metrics)
-            fig = make_subplots(rows=rows, cols=graph_per_row)
-
-            x = [item[input_feature] for item in data[i]]
-            cur_row, cur_col = 0, 0
-
-            for metric in metrics:
-                fig.add_trace(
-                    go.Scatter(
-                        x=x,
-                        y=[item[metric] for item in data[i]],
-                        name=f"{label}/{metric}",
-                        mode="lines+markers",
-                        marker=dict(size=8),
-                        line=dict(
-                            color=colors[
-                                (cur_row * graph_per_row + cur_col) % len(colors)
-                            ],
-                            width=3,
-                        ),
-                        hovertemplate=f"<br>{input_feature}: %{{x}}<br>{metric}: %{{y}}<br><extra></extra>",
-                    ),
-                    row=cur_row + 1,
-                    col=cur_col + 1,
-                )
-                fig.update_xaxes(
-                    title_text=input_feature, row=cur_row + 1, col=cur_col + 1
-                )
-                fig.update_yaxes(title_text=metric, row=cur_row + 1, col=cur_col + 1)
-
-                cur_col += 1
-                if cur_col == graph_per_row:
-                    cur_row += 1
-                    cur_col = 0
-            fig.update_layout(title_text=label)
-            fig.write_html(os.path.join(output_dir, f"{label}_{input_feature}.html"))
-    print("Ploting graphs DONE")
+logger = logging.getLogger(__name__)
 
 
 def gen_bench(
-    server_cmds,
-    client_cmds,
+    server_cmds: str | List[str],
+    client_cmds: str | List[str] | List[List[str]],
     *,
-    input_features,
-    metrics,
-    labels,
-    host,
-    port,
-    output_dir="output",
+    input_features: List[str],
+    output_metrics: List[str],
+    server_labels: None | str | List[str] = None,
+    client_labels: None | str | List[str] | List[List[str]] = None,
+    host=None,
+    port=None,
+    base_url: str = None,
+    n: int = 1,
+    output_dir: str = "output",
+    disable_warmup: bool = False,
+    disable_plot: bool = False,
+    disable_table: bool = False,
+    disable_csv: bool = False,
 ):
-    check_server_client_cmds(server_cmds, client_cmds, labels=labels)
+    # check server_cmds type
+    if isinstance(server_cmds, str):
+        server_cmds = [server_cmds]
+    elif not (
+        isinstance(server_cmds, list)
+        and all(isinstance(cmd, str) for cmd in server_cmds)
+    ):
+        raise ValueError(f"server_cmds must be str or List[str], got {server_cmds!r}")
 
-    os.makedirs(output_dir, exist_ok=False)
+    # check client_cmds type
+    if isinstance(client_cmds, str):
+        client_cmds = [[client_cmds]]
+    elif isinstance(client_cmds, list):
+        if all(isinstance(cmd, str) for cmd in client_cmds):
+            # convert from List[str] → List[List[str]]
+            client_cmds = [client_cmds]
+        elif all(
+            isinstance(cmds, list) and all(isinstance(c, str) for c in cmds)
+            for cmds in client_cmds
+        ):
+            # already List[List[str]]
+            pass
+        else:
+            raise ValueError(
+                f"client_cmds must be List[str] or List[List[str]], got {client_cmds!r}"
+            )
+    else:
+        raise ValueError(f"client_cmds must be str or List, got {type(client_cmds)}")
 
-    pbar = tqdm(enumerate(zip(server_cmds, client_cmds)))
+    # check content
+    check_content_server_client_cmds(server_cmds, client_cmds)
 
-    data: List[List[Dict]] = []
+    assert len(server_cmds) == len(client_cmds)
+
+    # check output-file
+    for client_cmd_list in client_cmds:
+        check_param_in_cmd("output-file", client_cmd_list)
+
+    # check server_labels
+    server_labels = check_server_labels(
+        server_labels=server_labels, num_servers=len(server_cmds)
+    )
+
+    # check client_labels
+    client_labels = check_client_labels(
+        client_labels=client_labels,
+        num_clients=[len(client_cmd_list) for client_cmd_list in client_cmds],
+    )
+    assert len(client_labels) == len(client_cmds)
+
+    output_dir = check_dir(
+        output_dir=output_dir, full_data_json_path=FULL_DATA_JSON_PATH
+    )
 
     try:
-        for server_idx, (server_cmd, client_cmd) in pbar:
-
-            pbar.set_description(f"======= Running {server_idx + 1}-th server =======")
-
+        all_clients_results: List[List[Dict]] = []
+        for idx, (server_cmd_str, client_cmd_list) in enumerate(
+            zip(server_cmds, client_cmds)
+        ):
             # launch server
-            server_process = run_cmd(server_cmd, is_block=False)
+            logger.info(f"RUNNING SERVER:\n{server_cmd_str}")
+            server_process = run_cmd(server_cmd_str, is_block=False)
 
-            wait_for_server(base_url=f"http://{host}:{port}", timeout=120)
+            logger.info("WAITING FOR THE SERVER TO BE LAUNCHED")
+            wait_for_server(base_url=base_url or f"http://{host}:{port}", timeout=120)
 
-            # warmup
-            print("Begin Warmup")
-            warmup(client_cmd[0], output_dir)
-            print("Warmup DONE")
+            maybe_warmup(
+                cmd=client_cmd_list[0],
+                output_dir=output_dir,
+                disable_warmup=disable_warmup,
+            )
 
-            inner_data: List[Dict] = []
+            all_clients_results.extend(
+                gen_run(
+                    client_cmds=client_cmd_list,
+                    n=n,
+                    labels=maybe_create_labels(
+                        num=len(client_cmd_list),
+                        server_labels=server_labels[idx],
+                        client_labels=client_labels[idx],
+                    ),
+                    output_dir=output_dir,
+                )
+            )
+            if server_process:
+                server_process.terminate()
 
-            # launch client
-            for client_idx, cmd in enumerate(client_cmd):
-                output_file = dummy_get_filename(client_idx, label=labels[server_idx])
-                output_file = os.path.join(output_dir, output_file)
-                cmd += f" --output-file {output_file}"
-                run_cmd(cmd, is_block=True)
-
-                inner_data.append(read_jsonl(output_file)[-1])
-
-                time.sleep(5)
-
-            data.append(inner_data)
-
-            server_process.terminate()
-
-            time.sleep(5)  # wait it to exit gracefully and completely
-
-            pbar.update(1)
-
-        pbar.close()
-
-        gen_export_table(
-            data=data,
-            input_features=input_features,
-            metrics=metrics,
-            labels=labels,
-            output_dir=output_dir,
-        )
-        gen_plot(
-            data=data,
-            input_features=input_features,
-            metrics=metrics,
-            labels=labels,
-            output_dir=output_dir,
-        )
+        if not disable_table:
+            gen_export_table(
+                all_clients_results=all_clients_results,
+                input_features=input_features,
+                output_metrics=output_metrics,
+                output_dir=output_dir,
+            )
+        if not disable_csv:
+            gen_export_csv(
+                all_clients_results=all_clients_results,
+                output_dir=output_dir,
+            )
+        if not disable_plot:
+            gen_plot(
+                all_clients_results=all_clients_results,
+                input_features=input_features,
+                output_metrics=output_metrics,
+                output_dir=output_dir,
+            )
     finally:
         kill_process_tree(os.getpid(), include_parent=False)

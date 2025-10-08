@@ -133,7 +133,7 @@ def gen_plot(
             fig.update_yaxes(title_text=metric, row=row + 1, col=col + 1)
 
         fig.update_layout(
-            title_text=f"{server_label} - {feature}",
+            title_text=f"{server_label} - {feature}" if server_label else feature,
             showlegend=True,
             height=300 * num_rows,
             width=400 * graph_per_row,
@@ -147,7 +147,7 @@ def gen_plot(
         fig.write_html(output_path)
 
 
-@enter_decorate("EXPORT_CSV", filename=f"<server_label>.{CSV_NAME}")
+@enter_decorate("EXPORT_CSV", filename=f"<server_label>_{CSV_NAME}")
 def gen_export_csv(
     all_clients_results: List[List[Dict]],
     output_dir: str,

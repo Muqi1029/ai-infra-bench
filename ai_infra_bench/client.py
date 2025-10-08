@@ -3,8 +3,10 @@ import os
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from ai_infra_bench.check import (
+    check_client_labels,
     check_dir,
     check_param_in_cmd,
+    check_server_labels,
     check_values_in_features_metrics,
 )
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
@@ -94,10 +96,12 @@ def client_slo(
 
 
 def client_gen(
-    client_cmds: Union[List[str], str],
+    client_cmds: str | List[str],
+    *,
     input_features: List[str],
     output_metrics: List[str],
-    labels: Optional[Union[List[str], str]] = None,
+    server_label: None | str = None,
+    client_labels: None | str | List[str] = None,
     n: int = 1,
     output_dir: str = "output",
     disable_warmup: bool = False,
@@ -107,16 +111,23 @@ def client_gen(
 ):
     if isinstance(client_cmds, str):
         client_cmds = [client_cmds]
-        labels = [labels]
     if not (isinstance(client_cmds, list) and isinstance(client_cmds[0], str)):
         raise ValueError(
             f"client_cmds must be a string or a list of strings (for multiple clients), but found {client_cmds=}"
         )
 
-    labels = maybe_create_labels(labels, len(client_cmds))
+    assert (
+        isinstance(client_labels, list)
+        and all(isinstance(label, str) for label in client_labels)
+        and len(client_labels) == len(client_cmds)
+    ), "client_labels should be a list of strings"
 
     check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
+    server_labels = check_server_labels(server_label, 1)
+    client_labels = check_client_labels(
+        client_labels=client_labels, num_clients=[len(client_cmds)]
+    )
 
     output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
 
@@ -126,7 +137,14 @@ def client_gen(
         )
 
         all_clients_results: List[List[Dict]] = gen_run(
-            client_cmds=client_cmds, n=n, labels=labels, output_dir=output_dir
+            client_cmds=client_cmds,
+            n=n,
+            labels=maybe_create_labels(
+                num=len(client_cmds),
+                server_label=server_labels[0],
+                client_labels=client_labels[0],
+            ),
+            output_dir=output_dir,
         )
 
         if not disable_table:
@@ -137,6 +155,11 @@ def client_gen(
                 output_dir=output_dir,
             )
 
+        if not disable_csv:
+            gen_export_csv(
+                all_clients_results=all_clients_results, output_dir=output_dir
+            )
+
         if not disable_plot:
             gen_plot(
                 all_clients_results=all_clients_results,
@@ -144,11 +167,6 @@ def client_gen(
                 output_metrics=output_metrics,
                 output_dir=output_dir,
             )
-        if not disable_csv:
-            gen_export_csv(
-                all_clients_results=all_clients_results, output_dir=output_dir
-            )
-
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)
         raise RuntimeError(f"Process failed with error: {e}") from e
