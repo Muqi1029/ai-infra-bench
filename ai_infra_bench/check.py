@@ -103,13 +103,11 @@ def check_content_server_client_cmds(
 ) -> None:
     for cmd in server_cmds:
         assert any(
-            cmd.strip().startswith(
-                p
-                for p in [
-                    "python -m sglang.launch_server",
-                    "python3 -m sglang.launch_server",
-                ]
-            )
+            cmd.strip().startswith(p)
+            for p in [
+                "python -m sglang.launch_server",
+                "python3 -m sglang.launch_server",
+            ]
         ), f"Each server_cmd must start with 'python -m sglang.launch_server' or 'python3 -m sglang.launch_server', but found {cmd=}"
 
     for client_cmd in client_cmds:
@@ -159,7 +157,8 @@ def check_client_labels(
                 for client_label_list in client_labels
                 for label in client_label_list
             )
-        raise TypeError("client_labels list must contain only str or list[str].")
+        else:
+            raise TypeError("client_labels list must contain only str or list[str].")
     else:
         raise TypeError(
             f"client_labels must be None, str, list[str], or list[list[str]], "
@@ -167,8 +166,9 @@ def check_client_labels(
         )
 
     assert len(client_labels) == len(num_clients)
-    for idx in range(client_labels):
-        assert len(client_labels) == num_clients[idx]
+    for idx in range(len(client_labels)):
+        assert len(client_labels[idx]) == num_clients[idx]
+    return client_labels
 
 
 def check_server_labels(

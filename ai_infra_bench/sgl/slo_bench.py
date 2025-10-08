@@ -12,10 +12,10 @@ from ai_infra_bench.utils import (
     dummy_get_filename,
     graph_per_row,
     kill_process_tree,
+    maybe_warmup,
     read_jsonl,
     run_cmd,
     wait_for_server,
-    warmup,
 )
 
 

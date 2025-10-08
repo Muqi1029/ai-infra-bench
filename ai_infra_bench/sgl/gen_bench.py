@@ -119,7 +119,7 @@ def gen_bench(
                     n=n,
                     labels=maybe_create_labels(
                         num=len(client_cmd_list),
-                        server_labels=server_labels[idx],
+                        server_label=server_labels[idx],
                         client_labels=client_labels[idx],
                     ),
                     output_dir=output_dir,
