@@ -116,14 +116,9 @@ def client_gen(
             f"client_cmds must be a string or a list of strings (for multiple clients), but found {client_cmds=}"
         )
 
-    assert (
-        isinstance(client_labels, list)
-        and all(isinstance(label, str) for label in client_labels)
-        and len(client_labels) == len(client_cmds)
-    ), "client_labels should be a list of strings"
-
     check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
+
     server_labels = check_server_labels(server_label, 1)
     client_labels = check_client_labels(
         client_labels=client_labels, num_clients=[len(client_cmds)]
