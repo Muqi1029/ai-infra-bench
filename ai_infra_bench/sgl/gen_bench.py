@@ -1,6 +1,5 @@
 import logging
 import os
-from time import time
 from typing import Dict, List
 
 from ai_infra_bench.check import (
@@ -9,6 +8,7 @@ from ai_infra_bench.check import (
     check_dir,
     check_param_in_cmd,
     check_server_labels,
+    check_str_list_str,
 )
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.utils import (
@@ -23,7 +23,7 @@ from ai_infra_bench.utils import (
 logger = logging.getLogger(__name__)
 
 
-def gen_bench(
+def slo_bench(
     server_cmds: str | List[str],
     client_cmds: str | List[str] | List[List[str]],
     *,
@@ -33,7 +33,7 @@ def gen_bench(
     client_labels: None | str | List[str] | List[List[str]] = None,
     host=None,
     port=None,
-    base_url: str = None,
+    base_url: None | str = None,
     n: int = 1,
     output_dir: str = "output",
     disable_warmup: bool = False,
@@ -42,13 +42,7 @@ def gen_bench(
     disable_csv: bool = False,
 ):
     # check server_cmds type
-    if isinstance(server_cmds, str):
-        server_cmds = [server_cmds]
-    elif not (
-        isinstance(server_cmds, list)
-        and all(isinstance(cmd, str) for cmd in server_cmds)
-    ):
-        raise ValueError(f"server_cmds must be str or List[str], got {server_cmds!r}")
+    server_cmds = check_str_list_str(server_cmds)
 
     # check client_cmds type
     if isinstance(client_cmds, str):
@@ -118,7 +112,7 @@ def gen_bench(
                     client_cmds=client_cmd_list,
                     n=n,
                     labels=maybe_create_labels(
-                        num=len(client_cmd_list),
+                        num_clients=len(client_cmd_list),
                         server_label=server_labels[idx],
                         client_labels=client_labels[idx],
                     ),

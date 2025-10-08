@@ -23,7 +23,7 @@ def slo_run(
     check_slo: Callable,
     n: int,
     output_dir: str,
-    label: str,
+    label: None | str,
 ):
     left, right = request_rate
 
@@ -57,5 +57,7 @@ def slo_run(
 
     logger.info(f"\033[92m The maximum concurrency satisfying SLO is {right} \033[0m")
 
-    sorted_inner_client_data = sort_data_by_key("max_concurrency", inner_client_data)
+    sorted_inner_client_data = sort_data_by_key(
+        key="max_concurrency", data=inner_client_data
+    )
     return sorted_inner_client_data, right

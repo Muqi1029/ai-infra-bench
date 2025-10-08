@@ -6,7 +6,7 @@ from glob import glob
 from utils import client_cmd_str, input_features, output_metrics, server_cmd_str
 
 from ai_infra_bench.client import client_gen
-from ai_infra_bench.sgl import gen_bench
+from ai_infra_bench.sgl import slo_bench
 from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
 
 
@@ -19,7 +19,7 @@ class TestSGLGen(unittest.TestCase):
 
     def run_single_cmd(self, server_cmds, client_cmds, **kwargs):
         with tempfile.TemporaryDirectory() as output_dir:
-            gen_bench(
+            slo_bench(
                 server_cmds=server_cmds,
                 client_cmds=client_cmds,
                 input_features=input_features,
@@ -72,7 +72,7 @@ class TestSGLGen(unittest.TestCase):
         )
 
 
-class TestGen(unittest.TestCase):
+class TestClientGen(unittest.TestCase):
 
     def run_single_cmd(self, client_cmds, **kwargs):
         with tempfile.TemporaryDirectory() as output_dir:

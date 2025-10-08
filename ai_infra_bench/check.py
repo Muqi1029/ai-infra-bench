@@ -136,6 +136,14 @@ def check_param_in_cmd(param: str, cmds: List[str]):
         assert param not in cmd, f"{cmd=} should not contain '{param}''"
 
 
+def check_str_list_str(cmds: str | List[str]):
+    if isinstance(cmds, str):
+        cmds = [cmds]
+    elif not (isinstance(cmds, list) and all(isinstance(cmd, str) for cmd in cmds)):
+        raise ValueError(f"cmds must be str or List[str], got {cmds=}")
+    return cmds
+
+
 def check_client_labels(
     client_labels: None | str | List[str] | List[List[str]],
     num_clients: List[int],
@@ -144,7 +152,7 @@ def check_client_labels(
         return [None] * len(num_clients)
 
     if isinstance(client_labels, str):
-        client_labels = [[client_labels]]
+        client_labels = [[client_labels] * n for n in num_clients]
     elif isinstance(client_labels, list):
         if all(isinstance(label, str) for label in client_labels):
             # list[str]
@@ -167,7 +175,9 @@ def check_client_labels(
 
     assert len(client_labels) == len(num_clients)
     for idx in range(len(client_labels)):
-        assert len(client_labels[idx]) == num_clients[idx]
+        assert (
+            len(client_labels[idx]) == num_clients[idx]
+        ), f"Found {len(client_labels[idx])=} {num_clients[idx]=}"
     return client_labels
 
 
@@ -180,11 +190,7 @@ def check_server_labels(
 
     # Case 1: single string
     if isinstance(server_labels, str):
-        if num_servers != 1:
-            raise ValueError(
-                f"Expected 1 server label for {num_servers} servers, got a single string."
-            )
-        return [server_labels]
+        return [server_labels] * num_servers
 
     # Case 2: list of strings
     if isinstance(server_labels, list):
@@ -200,17 +206,3 @@ def check_server_labels(
     raise TypeError(
         f"server_labels must be None, str, or list[str], got {type(server_labels).__name__}."
     )
-
-
-def slo_check_params(server_cmds, client_cmds, labels):
-    check_server_client_cmds(server_cmds, client_cmds, labels=labels)
-    assert len(server_cmds) == len(
-        client_cmds
-    ), f"The length os server_cmds and client_cmds should be equal, but found {len(server_cmds)=}, {len(client_cmds)=}"
-
-    assert all(
-        "request-rate" not in cmd for cmd in client_cmds
-    ), "request-rate should not be set in the client_cmds"
-    assert all(
-        "max-concurrency" not in cmd for cmd in client_cmds
-    ), "max-concurrency should not be set in the client_cmds"

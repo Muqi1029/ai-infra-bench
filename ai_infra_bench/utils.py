@@ -57,7 +57,7 @@ def is_ci() -> bool:
 
 
 def maybe_create_labels(
-    num: int,
+    num_clients: int,
     server_label: None | str = None,
     client_labels: List[str] | None = None,
 ) -> List[str]:
@@ -65,19 +65,19 @@ def maybe_create_labels(
     def _validate_client_labels(labels: List[str]):
         if not isinstance(labels, list) or not all(isinstance(l, str) for l in labels):
             raise TypeError(f"client_labels must be a list of strings, got {labels!r}")
-        if len(labels) != num:
-            raise ValueError(f"Expected {num} client labels, got {len(labels)}")
+        if len(labels) != num_clients:
+            raise ValueError(f"Expected {num_clients} client labels, got {len(labels)}")
 
     if server_label is None:
         if client_labels is None:
-            labels = [f"client{i:02d}" for i in range(num)]
+            labels = [f"client{i:02d}" for i in range(num_clients)]
             logger.info(f"Auto-generated labels: {labels}")
             return labels
         else:
             _validate_client_labels(client_labels)
             return client_labels
 
-    labels = [server_label] * num
+    labels = [server_label] * num_clients
     if client_labels is not None:
         _validate_client_labels(client_labels)
         labels = [
@@ -212,9 +212,9 @@ def sort_data_by_key(key: str, data: List[List[Dict]]):
     num_points = len(data)
     if num_points == 0:
         return data
-    assert isinstance(data[0][key], (int, float))
+    assert isinstance(data[0][0][key], (int, float))
     val_list = [item_list[0][key] for item_list in data]
-    sorted_indices = sorted(range(range(len(data))), key=lambda i: val_list[i])
+    sorted_indices = sorted(range(len(data)), key=lambda i: val_list[i])
     sorted_data = []
     for idx in sorted_indices:
         sorted_data.append(data[idx])
