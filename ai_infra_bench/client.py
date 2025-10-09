@@ -10,6 +10,7 @@ from ai_infra_bench.check import (
     check_str_list_str,
     check_values_in_features_metrics,
 )
+from ai_infra_bench.modes.cmp import cmp_run
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
@@ -127,14 +128,8 @@ def client_gen(
     disable_plot: bool = False,
     disable_table: bool = False,
     disable_csv: bool = False,
-):
-    if isinstance(client_cmds, str):
-        client_cmds = [client_cmds]
-    if not (isinstance(client_cmds, list) and isinstance(client_cmds[0], str)):
-        raise ValueError(
-            f"client_cmds must be a string or a list of strings (for multiple clients), but found {client_cmds=}"
-        )
-
+) -> None:
+    client_cmds = check_str_list_str(client_cmds)
     check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
 
@@ -181,6 +176,45 @@ def client_gen(
                 output_metrics=output_metrics,
                 output_dir=output_dir,
             )
+    except Exception as e:
+        kill_process_tree(os.getpid(), include_parent=False)
+        raise RuntimeError(f"Process failed with error: {e}") from e
+
+
+def client_cmp(
+    server_base_urls: List[str],
+    client_cmds: str | List[str],
+    *,
+    input_features: List[str],
+    output_metrics: List[str],
+    server_labels: None | List[str] = None,
+    client_labels: None | List[str] = None,
+    n: int = 1,
+    output_dir: str = "output",
+    disable_warmup: bool = False,
+    disable_plot: bool = False,
+    disable_table: bool = False,
+    disable_csv: bool = False,
+) -> None:
+    client_cmds = check_str_list_str(client_cmds)
+    check_values_in_features_metrics(input_features, output_metrics)
+    check_param_in_cmd("output-file", client_cmds)
+
+    server_labels = check_server_labels(
+        server_labels=server_labels, num_servers=len(server_base_urls)
+    )
+    client_labels = check_client_labels(client_labels, [len(client_cmds)])
+
+    output_dir = check_dir(
+        output_dir=output_dir, full_data_json_path=FULL_DATA_JSON_PATH
+    )
+    try:
+        for i in enumerate(len(server_base_urls)):
+            maybe_warmup(
+                cmd=client_cmds[0], output_dir=output_dir, disable_warmup=disable_warmup
+            )
+            cmp_run()
+
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)
         raise RuntimeError(f"Process failed with error: {e}") from e
