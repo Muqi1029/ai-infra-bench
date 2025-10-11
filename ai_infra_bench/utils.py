@@ -32,7 +32,7 @@ FULL_DATA_JSON_PATH = "full_data_json"  # used to store all json files
 TABLE_NAME = "table.md"
 CSV_NAME = "data.csv"
 WARMUP_FILE = ".warmup.json"
-demo_file = {
+demo_output = {
     "backend": "sglang-oai",
     "dataset_name": "random",
     "request_rate": 10.0,
@@ -157,7 +157,7 @@ def maybe_warmup(cmd: str, output_dir: str, disable_warmup: bool):
     run_cmd(cmd, is_block=True)
     if is_ci():
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(demo_file, f)
+            json.dump(demo_output, f)
 
 
 def wait_for_server(base_url: str, timeout=None):
@@ -195,7 +195,7 @@ def run_cmd(cmd: str, is_block=True):
 
 def read_jsonl(filepath: str):
     if is_ci():
-        return [demo_file]
+        return [demo_output]
     data = []
     with open(filepath, mode="r", encoding="utf-8") as f:
         for line in f:

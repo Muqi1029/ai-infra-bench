@@ -1,3 +1,7 @@
+import os
+
+from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
+
 client_cmd_str = """
 python -m sglang.bench_serving \
         --base-url http://localhost:8888
@@ -25,6 +29,7 @@ input_features = [
     "request_rate",
     "max_concurrency",
 ]
+
 output_metrics = [
     "p99_ttft_ms",
     "p99_tpot_ms",
@@ -32,10 +37,6 @@ output_metrics = [
     "output_throughput",
     "p99_e2e_latency_ms",
 ]
-
-import os
-
-from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
 
 
 def check_output_content(output_dir, expected_files=None):

@@ -1,7 +1,74 @@
 import os
 from typing import Dict, List
 
-from ai_infra_bench.utils import TABLE_NAME, avg_std_strf, enter_decorate
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from ai_infra_bench.utils import (
+    TABLE_NAME,
+    avg_std_strf,
+    colors,
+    enter_decorate,
+    graph_per_row,
+)
+
+
+@enter_decorate("PLOT TO HTML", filename="<input_feature>.html")
+def cmp_plot(data, input_features, metrics, labels, output_dir):
+    print("Ploting graphs in html")
+
+    cur_row, cur_col = 0, 0
+    num_client_settings = len(data[0])
+    num_server_settings = len(data)
+
+    # there are totally len(input_features) html files
+    for input_feature in input_features:
+        rows = (len(metrics) - 1) // graph_per_row + 1
+        cols = graph_per_row
+        fig = make_subplots(rows=rows, cols=cols)
+
+        # there totally are len(metric) subplots
+        for metric in metrics:
+
+            # each server is a line
+            for server_idx in range(num_server_settings):
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[
+                            data[server_idx][i][input_feature]
+                            for i in range(num_client_settings)
+                        ],
+                        y=[
+                            data[server_idx][i][metric]
+                            for i in range(num_client_settings)
+                        ],
+                        name=labels[server_idx],
+                        mode="lines+markers",
+                        marker=dict(size=8),
+                        line=dict(
+                            color=colors[server_idx % len(colors)],
+                            width=3,
+                        ),
+                        hovertemplate=f"<br>{input_feature}: %{{x}}<br>{metric}: %{{y}}<br><extra></extra>",
+                    ),
+                    row=cur_row + 1,
+                    col=cur_col + 1,
+                )
+            fig.update_xaxes(title_text=input_feature, row=cur_row + 1, col=cur_col + 1)
+            fig.update_yaxes(title_text=metric, row=cur_row + 1, col=cur_col + 1)
+
+            # one subplot is over
+            cur_col += 1
+            if cur_col == graph_per_row:
+                cur_col = 0
+                cur_row += 1
+
+        fig.update_layout(title_text="_vs_".join(labels) + "_in_" + input_feature)
+        html_name = f"{input_feature}_" + "_vs_".join(labels) + ".html"
+        fig.write_html(os.path.join(output_dir, html_name))
+
+    print("Ploting graphs DONE")
 
 
 @enter_decorate("CMP EXPORT TBALE", filename=TABLE_NAME)

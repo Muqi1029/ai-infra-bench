@@ -259,9 +259,11 @@ def client_cmp(
                 output_dir=output_dir,
                 server_labels=server_labels,
             )
+
         if not disable_plot:
             logger.warning("Haven't supported plot for cmp yet")
 
     except Exception as e:
-        kill_process_tree(os.getpid(), include_parent=False)
         raise RuntimeError(f"Process failed with error: {e}") from e
+    finally:
+        kill_process_tree(os.getpid(), include_parent=False)

@@ -141,5 +141,8 @@ def gen_bench(
                 output_metrics=output_metrics,
                 output_dir=output_dir,
             )
+    except Exception as e:
+        raise RuntimeError(f"Process failed with error: {e}") from e
+
     finally:
         kill_process_tree(os.getpid(), include_parent=False)
