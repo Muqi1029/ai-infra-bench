@@ -32,3 +32,13 @@ output_metrics = [
     "output_throughput",
     "p99_e2e_latency_ms",
 ]
+
+import os
+
+from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
+
+
+def check_output_content(output_dir, expected_files=None):
+    expected_files = expected_files or [FULL_DATA_JSON_PATH, TABLE_NAME, CSV_NAME]
+    for f in expected_files:
+        assert os.path.exists(os.path.join(output_dir, f)), f"Missing {f}"

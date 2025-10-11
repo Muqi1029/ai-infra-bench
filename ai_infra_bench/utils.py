@@ -9,12 +9,20 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from functools import wraps
-from typing import Dict, List, Union
+from typing import Dict, List
 
 import numpy as np
 import psutil
 import requests
+
+
+@dataclass
+class ServerAccessInfo:
+    base_url: str
+    api_key: str = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +31,57 @@ graph_per_row = 3
 FULL_DATA_JSON_PATH = "full_data_json"  # used to store all json files
 TABLE_NAME = "table.md"
 CSV_NAME = "data.csv"
+WARMUP_FILE = ".warmup.json"
+demo_file = {
+    "backend": "sglang-oai",
+    "dataset_name": "random",
+    "request_rate": 10.0,
+    "max_concurrency": 10,
+    "sharegpt_output_len": None,
+    "random_input_len": 1200,
+    "random_output_len": 800,
+    "random_range_ratio": 1.0,
+    "duration": 45.11868940386921,
+    "completed": 100,
+    "total_input_tokens": 120000,
+    "total_output_tokens": 80000,
+    "total_output_tokens_retokenized": 79998,
+    "request_throughput": 2.2163764356024127,
+    "input_throughput": 2659.6517227228956,
+    "output_throughput": 1773.1011484819303,
+    "mean_e2e_latency_ms": 4482.026166650467,
+    "median_e2e_latency_ms": 4487.435979535803,
+    "std_e2e_latency_ms": 32.15524448450066,
+    "p99_e2e_latency_ms": 4534.823208898306,
+    "mean_ttft_ms": 38.534140698611736,
+    "median_ttft_ms": 42.44273528456688,
+    "std_ttft_ms": 10.558202315257851,
+    "p99_ttft_ms": 61.15902605932206,
+    "mean_tpot_ms": 5.561316678287678,
+    "median_tpot_ms": 5.56157646876747,
+    "std_tpot_ms": 0.04168330778296244,
+    "p99_tpot_ms": 5.627061070545631,
+    "mean_itl_ms": 5.561935330397016,
+    "median_itl_ms": 5.495080258697271,
+    "std_itl_ms": 1.1977701758121588,
+    "p95_itl_ms": 6.047771545127034,
+    "p99_itl_ms": 6.62423954345286,
+    "concurrency": 9.933857179517508,
+    "accept_length": None,
+}
+
+
+def cmp_preprocess_client_cmds(
+    client_cmds: List[str], server_access_info: ServerAccessInfo
+) -> List[str]:
+    api_key = server_access_info.api_key
+    if api_key is not None:
+        if api_key.startswith("Bearer"):
+            os.environ["OPENAI_API_KEY"] = api_key
+        else:
+            os.environ["API_KEY"] = api_key
+
+    return [cmd + f" --base-url {server_access_info.base_url}" for cmd in client_cmds]
 
 
 def enter_decorate(title: str, filename: str | None = None):
@@ -92,8 +151,13 @@ def maybe_warmup(cmd: str, output_dir: str, disable_warmup: bool):
         logger.info("Warmup is disabled.")
         return
     logger.info("Starting warmup...")
-    cmd += f" --output-file {output_dir}/.warmup.json"
+
+    output_file = os.path.join(output_dir, WARMUP_FILE)
+    cmd += f" --output-file {output_file}"
     run_cmd(cmd, is_block=True)
+    if is_ci():
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(demo_file, f)
 
 
 def wait_for_server(base_url: str, timeout=None):
@@ -135,45 +199,7 @@ def dummy_get_filename(i, label):
 
 def read_jsonl(filepath: str):
     if is_ci():
-        return [
-            {
-                "backend": "sglang-oai",
-                "dataset_name": "random",
-                "request_rate": 10.0,
-                "max_concurrency": 10,
-                "sharegpt_output_len": None,
-                "random_input_len": 1200,
-                "random_output_len": 800,
-                "random_range_ratio": 1.0,
-                "duration": 45.11868940386921,
-                "completed": 100,
-                "total_input_tokens": 120000,
-                "total_output_tokens": 80000,
-                "total_output_tokens_retokenized": 79998,
-                "request_throughput": 2.2163764356024127,
-                "input_throughput": 2659.6517227228956,
-                "output_throughput": 1773.1011484819303,
-                "mean_e2e_latency_ms": 4482.026166650467,
-                "median_e2e_latency_ms": 4487.435979535803,
-                "std_e2e_latency_ms": 32.15524448450066,
-                "p99_e2e_latency_ms": 4534.823208898306,
-                "mean_ttft_ms": 38.534140698611736,
-                "median_ttft_ms": 42.44273528456688,
-                "std_ttft_ms": 10.558202315257851,
-                "p99_ttft_ms": 61.15902605932206,
-                "mean_tpot_ms": 5.561316678287678,
-                "median_tpot_ms": 5.56157646876747,
-                "std_tpot_ms": 0.04168330778296244,
-                "p99_tpot_ms": 5.627061070545631,
-                "mean_itl_ms": 5.561935330397016,
-                "median_itl_ms": 5.495080258697271,
-                "std_itl_ms": 1.1977701758121588,
-                "p95_itl_ms": 6.047771545127034,
-                "p99_itl_ms": 6.62423954345286,
-                "concurrency": 9.933857179517508,
-                "accept_length": None,
-            }
-        ]
+        return [demo_file]
     data = []
     with open(filepath, mode="r", encoding="utf-8") as f:
         for line in f:

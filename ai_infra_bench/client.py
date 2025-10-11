@@ -10,12 +10,14 @@ from ai_infra_bench.check import (
     check_str_list_str,
     check_values_in_features_metrics,
 )
-from ai_infra_bench.modes.cmp import cmp_run
+from ai_infra_bench.modes.cmp import cmp_export_table
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
     FULL_DATA_JSON_PATH,
+    ServerAccessInfo,
     add_request_rate,
+    cmp_preprocess_client_cmds,
     kill_process_tree,
     maybe_create_labels,
     maybe_warmup,
@@ -146,15 +148,16 @@ def client_gen(
         maybe_warmup(
             cmd=client_cmds[0], output_dir=output_dir, disable_warmup=disable_warmup
         )
+        labels = maybe_create_labels(
+            num_clients=len(client_cmds),
+            server_label=server_labels[0],
+            client_labels=client_labels[0],
+        )
 
         all_clients_results: List[List[Dict]] = gen_run(
             client_cmds=client_cmds,
             n=n,
-            labels=maybe_create_labels(
-                num_clients=len(client_cmds),
-                server_label=server_labels[0],
-                client_labels=client_labels[0],
-            ),
+            labels=labels,
             output_dir=output_dir,
         )
 
@@ -184,7 +187,7 @@ def client_gen(
 
 
 def client_cmp(
-    server_base_urls: List[str],
+    server_access_info: ServerAccessInfo | List[ServerAccessInfo],
     client_cmds: str | List[str],
     *,
     input_features: List[str],
@@ -198,24 +201,66 @@ def client_cmp(
     disable_table: bool = False,
     disable_csv: bool = False,
 ) -> None:
+    if isinstance(server_access_info, ServerAccessInfo):
+        server_access_info = [server_access_info]
+
     client_cmds = check_str_list_str(client_cmds)
     check_values_in_features_metrics(input_features, output_metrics)
     check_param_in_cmd("output-file", client_cmds)
+    check_param_in_cmd("base-url", client_cmds)
+    check_param_in_cmd("host", client_cmds)
+    check_param_in_cmd("port", client_cmds)
+
+    num_servers = len(server_access_info)
+    num_clients = len(client_cmds)
 
     server_labels = check_server_labels(
-        server_labels=server_labels, num_servers=len(server_base_urls)
+        server_labels=server_labels, num_servers=num_servers
     )
-    client_labels = check_client_labels(client_labels, [len(client_cmds)])
+    client_labels = check_client_labels(client_labels, [num_clients])[0]
 
     output_dir = check_dir(
         output_dir=output_dir, full_data_json_path=FULL_DATA_JSON_PATH
     )
     try:
-        for i in enumerate(len(server_base_urls)):
-            maybe_warmup(
-                cmd=client_cmds[0], output_dir=output_dir, disable_warmup=disable_warmup
+        all_clients_results: List[List[Dict]] = []
+        for i in range(num_servers):
+            cmp_client_cmds = cmp_preprocess_client_cmds(
+                client_cmds, server_access_info[i]
             )
-            cmp_run()
+            maybe_warmup(
+                cmd=cmp_client_cmds[0],
+                output_dir=output_dir,
+                disable_warmup=disable_warmup,
+            )
+            labels = maybe_create_labels(
+                num_clients=num_clients,
+                server_label=server_labels[i],
+                client_labels=client_labels,
+            )
+            all_clients_results.extend(
+                gen_run(cmp_client_cmds, n=n, labels=labels, output_dir=output_dir)
+            )
+
+        # process results
+        if not disable_csv:
+            gen_export_csv(
+                all_clients_results,
+                output_dir=output_dir,
+            )
+
+        if not disable_table:
+            cmp_export_table(
+                all_clients_results,
+                input_features,
+                output_metrics,
+                num_clients=num_clients,
+                num_servers=num_servers,
+                output_dir=output_dir,
+                server_labels=server_labels,
+            )
+        if not disable_plot:
+            logger.warning("Haven't supported plot for cmp yet")
 
     except Exception as e:
         kill_process_tree(os.getpid(), include_parent=False)

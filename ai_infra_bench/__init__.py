@@ -5,7 +5,7 @@ from ai_infra_bench.version import __version__
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(filename)s:%(levelname)s - %(message)s (%(asctime)s)",
+    format="%(levelname)s(%(asctime)s):  %(message)s ",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 

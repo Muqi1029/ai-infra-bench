@@ -3,19 +3,20 @@ import tempfile
 import unittest
 from glob import glob
 
-from utils import client_cmd_str, input_features, output_metrics, server_cmd_str
+from utils import (
+    check_output_content,
+    client_cmd_str,
+    input_features,
+    output_metrics,
+    server_cmd_str,
+)
 
 from ai_infra_bench.client import client_gen
 from ai_infra_bench.sgl import gen_bench
-from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
+from ai_infra_bench.utils import CSV_NAME, TABLE_NAME
 
 
 class TestSGLGen(unittest.TestCase):
-
-    def check_output_content(self, output_dir, expected_files=None):
-        expected_files = expected_files or [FULL_DATA_JSON_PATH, TABLE_NAME, CSV_NAME]
-        for f in expected_files:
-            self.assertTrue(os.path.exists(os.path.join(output_dir, f)), f"Missing {f}")
 
     def run_single_cmd(self, server_cmds, client_cmds, **kwargs):
         with tempfile.TemporaryDirectory() as output_dir:
@@ -27,7 +28,7 @@ class TestSGLGen(unittest.TestCase):
                 output_dir=output_dir,
                 **kwargs,
             )
-            self.check_output_content(output_dir=output_dir)
+            check_output_content(output_dir=output_dir)
 
     def test_basic(self):
         self.run_single_cmd(server_cmd_str, client_cmds=client_cmd_str)
@@ -83,12 +84,7 @@ class TestClientGen(unittest.TestCase):
                 output_dir=output_dir,
                 **kwargs,
             )
-            self.check_output_content(output_dir)
-
-    def check_output_content(self, output_dir, expected_files=None):
-        expected_files = expected_files or [FULL_DATA_JSON_PATH, TABLE_NAME, CSV_NAME]
-        for f in expected_files:
-            self.assertTrue(os.path.exists(os.path.join(output_dir, f)), f"Missing {f}")
+            check_output_content(output_dir)
 
     def test_str(self):
         self.run_single_cmd(client_cmd_str)
@@ -148,7 +144,7 @@ class TestClientGen(unittest.TestCase):
                 output_dir=output_dir,
                 disable_table=True,
             )
-            self.assertTrue(not os.path.exists(f"{output_dir}/table.md"))
+            self.assertTrue(not os.path.exists(f"{output_dir}/{TABLE_NAME}"))
 
 
 if __name__ == "__main__":
