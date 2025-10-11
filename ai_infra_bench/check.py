@@ -2,7 +2,7 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import List, Union
+from typing import List
 
 from ai_infra_bench.utils import is_ci
 

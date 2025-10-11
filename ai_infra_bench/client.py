@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Tuple
 
 from ai_infra_bench.check import (
     check_client_labels,
@@ -30,7 +30,8 @@ def client_slo(
     input_features: List[str],
     output_metrics: List[str],
     check_slo: Callable | List[Callable],
-    request_rates: List[Tuple[int, int]] | Tuple[int, int],
+    request_rates: Tuple[int, int] | List[Tuple[int, int]],
+    server_label: None | str = None,
     client_labels: None | str | List[str] = None,
     n: int = 1,
     output_dir: str = "output",
@@ -38,7 +39,7 @@ def client_slo(
     disable_plot: bool = False,
     disable_table: bool = False,
     disable_csv: bool = False,
-):
+) -> None:
     client_cmds = check_str_list_str(client_cmds)
 
     if isinstance(check_slo, Callable):
@@ -46,9 +47,10 @@ def client_slo(
     if isinstance(request_rates, tuple):
         request_rates = [request_rates] * len(client_cmds)
 
+    server_label = check_server_labels(server_labels=server_label, num_servers=1)[0]
     client_labels = check_client_labels(
         client_labels=client_labels, num_clients=[len(client_cmds)]
-    )
+    )[0]
 
     check_values_in_features_metrics(
         input_features=input_features, output_metrics=output_metrics
@@ -68,8 +70,8 @@ def client_slo(
 
         labels = maybe_create_labels(
             num_clients=len(client_cmds),
-            server_label=None,
-            client_labels=client_labels[0],
+            server_label=server_label,
+            client_labels=client_labels,
         )
         for idx, (client_cmd, request_rate, check_slo_func) in enumerate(
             zip(client_cmds, request_rates, check_slo)
