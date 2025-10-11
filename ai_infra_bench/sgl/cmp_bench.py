@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 from ai_infra_bench.utils import (
     colors,
-    dummy_get_filename,
     graph_per_row,
     kill_process_tree,
     read_jsonl,
