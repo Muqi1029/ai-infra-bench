@@ -193,10 +193,6 @@ def run_cmd(cmd: str, is_block=True):
         return subprocess.Popen(cmd.split(), text=True, stderr=subprocess.STDOUT)
 
 
-def dummy_get_filename(i, label):
-    return f"{label}_client_{i:02d}.jsonl"
-
-
 def read_jsonl(filepath: str):
     if is_ci():
         return [demo_file]
