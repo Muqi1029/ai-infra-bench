@@ -4,7 +4,7 @@ import unittest
 from glob import glob
 from typing import Dict
 
-from utils import input_features, output_metrics, server_cmd_str
+from utils import input_features, output_metrics
 
 client_cmd_str = """
 python -m sglang.bench_serving \
@@ -36,6 +36,14 @@ from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
 
 class TestSGLSlo(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        cls.server_cmd = f"""
+        python -m sglang.launch_server
+            --model-path Qwen/Qwen3-0.6B
+            --port 8888
+        """
+
     def run_single_cmd(
         self,
         server_cmds,
@@ -63,50 +71,54 @@ class TestSGLSlo(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(output_dir, f)), f"Missing {f}")
 
     def test_basic(self):
-        self.run_single_cmd(server_cmd_str, client_cmds=client_cmd_str)
+        self.run_single_cmd(self.server_cmd, client_cmds=client_cmd_str)
 
     def test_client_list(self):
-        self.run_single_cmd(server_cmd_str, client_cmds=[client_cmd_str])
+        self.run_single_cmd(self.server_cmd, client_cmds=[client_cmd_str])
 
     def test_full_list(self):
-        self.run_single_cmd([server_cmd_str], client_cmds=[client_cmd_str])
+        self.run_single_cmd([self.server_cmd], client_cmds=[client_cmd_str])
 
     def test_full_list_length(self):
-        self.run_single_cmd([server_cmd_str] * 2, client_cmds=[client_cmd_str] * 2)
+        self.run_single_cmd([self.server_cmd] * 2, client_cmds=[client_cmd_str] * 2)
 
     def test_n(self):
-        self.run_single_cmd([server_cmd_str] * 2, client_cmds=[client_cmd_str] * 2, n=3)
+        self.run_single_cmd(
+            [self.server_cmd] * 2, client_cmds=[client_cmd_str] * 2, n=3
+        )
 
     @unittest.expectedFailure
     def test_length_fail(self):
-        self.run_single_cmd([server_cmd_str] * 2, client_cmds=[client_cmd_str] * 3)
+        self.run_single_cmd([self.server_cmd] * 2, client_cmds=[client_cmd_str] * 3)
 
     def test_server_labels(self):
-        self.run_single_cmd(server_cmd_str, client_cmd_str, server_labels="ServerLabel")
         self.run_single_cmd(
-            server_cmd_str, client_cmd_str, server_labels=["ServerLabel"]
+            self.server_cmd, client_cmd_str, server_labels="ServerLabel"
+        )
+        self.run_single_cmd(
+            self.server_cmd, client_cmd_str, server_labels=["ServerLabel"]
         )
 
     def test_client_labels(self):
         self.run_single_cmd(
-            server_cmds=server_cmd_str,
+            server_cmds=self.server_cmd,
             client_cmds=client_cmd_str,
             client_labels="ClientLabel",
         )
         self.run_single_cmd(
-            server_cmds=server_cmd_str,
+            server_cmds=self.server_cmd,
             client_cmds=client_cmd_str,
             client_labels=["ClientLabel"],
         )
         self.run_single_cmd(
-            [server_cmd_str] * 2,
+            [self.server_cmd] * 2,
             [client_cmd_str] * 2,
             client_labels=["ClientLabel"] * 2,
         )
 
     def test_server_client_labels(self):
         self.run_single_cmd(
-            server_cmds=[server_cmd_str] * 2,
+            server_cmds=[self.server_cmd] * 2,
             client_cmds=[client_cmd_str] * 2,
             server_labels="ServerLabel",
             client_labels="ClientLabel",

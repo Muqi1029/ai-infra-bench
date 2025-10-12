@@ -120,6 +120,12 @@ def maybe_create_labels(
     server_label: None | str = None,
     client_labels: List[str] | None = None,
 ) -> List[str]:
+    """
+    Receive one group of server_label and client_labels:
+
+    if both server_label and client_labels are None, default [client01, client02, ...], whose length is num_client
+    else repeat server_label with num_clients times or use check_labels directly
+    """
 
     def _validate_client_labels(labels: List[str]):
         if not isinstance(labels, list) or not all(isinstance(l, str) for l in labels):

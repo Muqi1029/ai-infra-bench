@@ -147,7 +147,19 @@ def check_str_list_str(cmds: str | List[str]):
 def check_client_labels(
     client_labels: None | str | List[str] | List[List[str]],
     num_clients: List[int],
-) -> List[None] | List[List[str]]:
+) -> List[None | List[str]]:
+    """
+    Normalize and validate client labels for multiple servers.
+
+    This function ensures that `client_labels` is represented as a list of lists,
+    where each sublist corresponds to the labels of clients under one server.
+
+    Supported input formats:
+      - None: returns `[None] * len(num_clients)`
+      - str: a single label is repeated for each client under each server
+      - list[str]: a single server's labels; must match `num_clients[0]`
+      - list[list[str]]: explicit labels per server and client
+    """
     if client_labels is None:
         return [None] * len(num_clients)
 
@@ -184,7 +196,17 @@ def check_client_labels(
 def check_server_labels(
     server_labels: None | str | List[str],
     num_servers: int,
-) -> List[None] | List[str]:
+) -> List[str | None]:
+    """
+     Normalize and validate server labels for multiple servers.
+
+    This function ensures that `server_labels` is a list of length `num_servers`.
+    - If `server_labels` is None, it returns a list of `[None] * num_servers`.
+    - If it is a single string, it repeats that string `num_servers` times.
+    - If it is a list of strings, it checks that its length matches `num_servers`
+      and that all elements are strings.
+    """
+    # Case 0: None
     if server_labels is None:
         return [None] * num_servers
 
