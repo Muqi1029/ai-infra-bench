@@ -39,7 +39,7 @@ def main():
             print(f"❌ Example file not found: {src}")
             return
         shutil.copy(src, dst)
-        print(f"✅ Copied: {dst}")
+        print(f"✅ Copied to {dst}")
 
     if args.mode == "sgl":
         print("🔧 SGL mode")

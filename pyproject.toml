@@ -17,7 +17,7 @@ where = ["."]
 include = ["ai_infra_bench*"]
 
 [project.scripts]
-ai-bench = "ai_infra_bench.cli:main"
+ai-infra-bench = "ai_infra_bench.cli:main"
 
 [tool.setuptools.package-data]
 "ai_infra_bench" = ["examples/*.py"]
