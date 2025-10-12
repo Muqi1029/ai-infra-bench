@@ -18,6 +18,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
 
+      - name: Clone example code
+        run: |
+          mkdir -p ai_infra_bench/examples
+          cp examples/*.py ai_infra_bench/examples/
+
       - name: Upload to PyPI
         run: |
           pip install build twine

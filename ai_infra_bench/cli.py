@@ -1,34 +1,64 @@
 import argparse
 import shutil
+from importlib import resources
 from pathlib import Path
+
+import ai_infra_bench
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="mycmd", description="生成客户端或 SGL 模板")
-    script_dir = Path(__file__).parent
-    src = script_dir.parent / "examples"
-    print(f"{src=}")
-    parser.add_argument("mode", choices=["sgl", "client"])
-    parser.add_argument("command", choices=["gen", "cmp", "slo"], help="bench type")
+    parser = argparse.ArgumentParser(
+        prog="ai-bench-cli",
+        description="Generate example templates for SGL or client benchmarking.",
+    )
+
     parser.add_argument(
-        "target", type=Path, nargs="?", default=Path("."), help="the objective path"
+        "mode", choices=["sgl", "client"], help="Select mode: sgl or client."
+    )
+    parser.add_argument(
+        "command", choices=["gen", "cmp", "slo"], help="Benchmark type."
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=".",
+        help="Destination path (default: current dir).",
     )
 
     args = parser.parse_args()
 
+    example_dir = resources.files(ai_infra_bench) / "examples"
+    target = Path(args.target)
+    target.mkdir(parents=True, exist_ok=True)
+
+    def copy_example(filename: str):
+        """Copy a single example file from package data to the target directory."""
+        src = example_dir / filename
+        dst = target / filename
+        if not src.exists():
+            print(f"❌ Example file not found: {src}")
+            return
+        shutil.copy(src, dst)
+        print(f"✅ Copied: {dst}")
+
     if args.mode == "sgl":
-        target = args.target
+        print("🔧 SGL mode")
         if args.command == "gen":
-            # TODO: sgl gen 的逻辑
-            print(f"SGL模式: gen -> {target}")
-            shutil.copy(src / "general_bench.py", target)
+            copy_example("gen_bench.py")
         elif args.command == "slo":
-            # TODO: sgl slo 的逻辑
-            print(f"SGL模式: slo -> {target}")
+            copy_example("slo_bench.py")
+        elif args.command == "cmp":
+            copy_example("cmp_bench.py")
+
     elif args.mode == "client":
+        print("🔧 Client mode")
         if args.command == "gen":
-            shutil.copy(src / "client_gen.py", target)
-            print(f"已生成 normal/gen: {target}")
+            copy_example("client_gen.py")
         elif args.command == "slo":
-            shutil.copy("examples/client_slo.py", target)
-            print(f"已生成 normal/slo: {target}")
+            copy_example("client_slo.py")
+        elif args.command == "cmp":
+            copy_example("client_cmp.py")
+
+
+if __name__ == "__main__":
+    main()
