@@ -62,7 +62,7 @@ def client_slo(
     check_param_in_cmd("max-concurrency", client_cmds)
     assert (
         len(client_cmds) == len(request_rates) == len(check_slo)
-    ), "Length of client_cmds, request_rates, and check_slo must be the same"
+    ), f"Length of client_cmds, request_rates, and check_slo must be the same, but {len(client_cmds)=}, {len(request_rates)=} {len(check_slo)=}"
 
     output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
 
