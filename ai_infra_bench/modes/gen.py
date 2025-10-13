@@ -81,7 +81,9 @@ def gen_export_table(
             row_values.append(f"{row_results[0][feature]:.2f}")
         row_values.append("-")
         for metric in output_metrics:
-            row_values.append(avg_std_strf(metric, row_results, precision=2))
+            row_values.append(
+                avg_std_strf(key=metric, item_list=row_results, precision=2)
+            )
         lines.append("| " + " | ".join(row_values) + " |")
 
     with open(os.path.join(output_dir, TABLE_NAME), mode="w", encoding="utf-8") as f:

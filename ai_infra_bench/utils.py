@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import wraps
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 import psutil
@@ -210,7 +210,7 @@ def read_jsonl(filepath: str):
 
 
 def avg_std_strf(
-    key: str, item_list: List[Dict[str, float]], *, sep=", ", precision: int = None
+    key: str, item_list: List[Dict[str, Any]], *, sep=", ", precision: int = None
 ) -> str:
     val_list = [item[key] for item in item_list]
 
@@ -219,7 +219,7 @@ def avg_std_strf(
     if not isinstance(val_list[0], (int, float)):
         return str(val_list[0])
 
-    if len(val_list) == 1 or (std := np.std(val_list, ddof=1)):
+    if len(val_list) == 1 or (std := np.std(val_list, ddof=1)) == 0:
         return format(val_list[0], fmt)
 
     avg = np.mean(val_list)
