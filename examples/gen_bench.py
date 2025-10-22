@@ -8,25 +8,26 @@ input_len = 1200
 output_len = 800
 host = "127.0.0.1"
 port = "8888"
-qwen3_0_6b_model_path = os.environ["QWEN306B"]
-qwen3_8b_model_path = os.environ["QWEN38B"]
-dataset_path = os.environ["S_GPT_DATASET"]
+dataset_path = os.environ["SHAREGPT_DATAPATH"]
 
 
 ####################################
 # Constructing server_cmds & labels
 ####################################
 server_template = """
-python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
---host {host} --port {port}
+python -m sglang.launch_server
+    --model-path {model_path}
+    --tp-size {tp_size}
+    --host {host}
+    --port {port}
 """
 
 server_cmds: List[str] = [
     server_template.format(
-        model_path=qwen3_0_6b_model_path, tp_size=1, host=host, port=port
+        model_path=os.environ["QWEN3_06B"], tp_size=1, host=host, port=port
     ),
     server_template.format(
-        model_path=qwen3_8b_model_path, tp_size=1, host=host, port=port
+        model_path=os.environ["QWEN3_8B"], tp_size=1, host=host, port=port
     ),
 ]
 server_labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]

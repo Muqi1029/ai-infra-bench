@@ -9,7 +9,7 @@ output_len = 800
 host = "127.0.0.1"
 port = "8888"
 tp_size = 1
-model_path = os.environ["QWEN332BFP8"]
+model_path = os.environ["QWEN3_32B_FP8"]
 
 
 ####################################
@@ -32,7 +32,7 @@ server_cmds: List[str] = [
     server_template.format(model_path=model_path, tp_size=tp_size, host=host, port=port)
     + " --tool-call-parser qwen25",
 ]
-labels = ["Qwen3-32B-FP8", "QWEN3-32B-FP8-Without-tool"]
+server_labels = ["Qwen3-32B-FP8", "QWEN3-32B-FP8-Without-tool"]
 
 ##########################
 # Constructing client_cmds
@@ -66,7 +66,7 @@ client_cmds: List[str] = [
 input_features = [
     "request_rate",
 ]
-metrics = [
+output_metrics = [
     "p99_ttft_ms",
     "p99_tpot_ms",
     "p99_itl_ms",
@@ -78,8 +78,8 @@ if __name__ == "__main__":
         server_cmds=server_cmds,
         client_cmds=client_cmds,
         input_features=input_features,
-        metrics=metrics,
-        labels=labels,
+        output_metrics=output_metrics,
+        server_labels=server_labels,
         host=host,
         port=port,
         output_dir="tool_cmp_bench_output",

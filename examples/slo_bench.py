@@ -16,8 +16,12 @@ dataset_path = os.environ["SHAREGPT_DATASET"]
 # Constructing server_cmds & labels
 ####################################
 server_template = """
-python -m sglang.launch_server --model-path {model_path} --tp-size {tp_size}
---host {host} --port {port} --kv-cache-dtype fp8_e4m3
+python -m sglang.launch_server
+    --model-path {model_path}
+    --tp-size {tp_size}
+    --host {host}
+    --port {port}
+    --kv-cache-dtype fp8_e4m3
 """
 
 server_cmds: List[str] = [
@@ -25,7 +29,7 @@ server_cmds: List[str] = [
         model_path=qwen3_30b_a3b_fp8_model_path, tp_size=tp_size, host=host, port=port
     ),
 ]
-labels = ["QWEN3-30B-A3B-FP8-TP1"]
+server_labels = ["QWEN3-30B-A3B-FP8-TP1"]
 
 ##########################
 # Constructing client_cmds
@@ -58,7 +62,7 @@ request_rates: List[Tuple[int, int]] = [
 input_features = [
     "request_rate",
 ]
-metrics = [
+output_metrics = [
     "p99_ttft_ms",
     "p99_tpot_ms",
     "p99_itl_ms",
@@ -80,8 +84,8 @@ if __name__ == "__main__":
         client_cmds=client_cmds,
         request_rates=request_rates,
         input_features=input_features,
-        metrics=metrics,
-        labels=labels,
+        output_metrics=output_metrics,
+        server_labels=server_labels,
         host=host,
         port=port,
         output_dir="slo_bench_output",
