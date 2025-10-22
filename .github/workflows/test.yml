@@ -6,6 +6,7 @@ on:
     paths:
       - "ai_infra_bench/**"
       - ".github/workflows/test.yml"
+      - "test/**"
   pull_request:
   workflow_dispatch:
 
@@ -28,9 +29,3 @@ jobs:
         run: |
           cd test/modes
           python3 -m unittest
-
-  test-sgl:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Test-Env
-        run: echo ${GITHUB_ACTIONS}
