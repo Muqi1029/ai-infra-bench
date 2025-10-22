@@ -51,6 +51,7 @@ class TestClientGen(unittest.TestCase):
         self.run_single_cmd(self.client_cmd, n=3)
         self.run_single_cmd([self.client_cmd], n=3)
         self.run_single_cmd([self.client_cmd] * 3, n=3)
+        self.run_single_cmd([self.client_cmd] * 3, n=3, only_last=True)
 
     ####################### Labels ###################
     def test_server_label(self):
@@ -205,6 +206,12 @@ class TestSGLGen(unittest.TestCase):
             server_cmds=[self.server_cmd] * 2,
             client_cmds=[[self.client_cmd] * 3 for _ in range(2)],
             n=3,
+        )
+        self.run_single_cmd(
+            server_cmds=[self.server_cmd] * 2,
+            client_cmds=[[self.client_cmd] * 3 for _ in range(2)],
+            n=3,
+            only_last=True,
         )
 
     ################# expected failures ################

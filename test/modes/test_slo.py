@@ -86,6 +86,9 @@ class TestSGLSlo(unittest.TestCase):
         self.run_single_cmd(
             [self.server_cmd] * 2, client_cmds=[client_cmd_str] * 2, n=3
         )
+        self.run_single_cmd(
+            [self.server_cmd] * 2, client_cmds=[client_cmd_str] * 2, n=3, only_last=True
+        )
 
     @unittest.expectedFailure
     def test_length_fail(self):
@@ -205,6 +208,7 @@ class TestClientSlo(unittest.TestCase):
 
     def test_n(self):
         self.run_single_cmd(client_cmd_str, n=3)
+        self.run_single_cmd(client_cmd_str, n=3, only_last=True)
 
     def test_client_cmds_type(self):
         with self.assertRaises(ValueError):

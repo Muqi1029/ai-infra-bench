@@ -15,18 +15,18 @@ class TestClientCmp(unittest.TestCase):
     def setUpClass(cls):
         cls.server_access_info = ServerAccessInfo(base_url="http://127.0.0.1:8000")
         cls.client_cmds = """
-python -m sglang.bench_serving \
-		--backend sglang-oai
-        --tokenizer Qwen/Qwen3-0.6B
-        --tokenizer Qwen/Qwen3-0.6B
-		--dataset-name random
-		--random-range-ratio 1
-		--random-input-len 1200
-		--random-output-len 800
-		--request-rate 10
-		--max-concurrency 10
-		--num-prompt 40
-            """
+            python -m sglang.bench_serving \
+                    --backend sglang-oai
+                    --tokenizer Qwen/Qwen3-0.6B
+                    --tokenizer Qwen/Qwen3-0.6B
+                    --dataset-name random
+                    --random-range-ratio 1
+                    --random-input-len 1200
+                    --random-output-len 800
+                    --request-rate 10
+                    --max-concurrency 10
+                    --num-prompt 40
+        """
 
     def run_single_cmd(self, server_access_info, client_cmds, **kwargs):
         with tempfile.TemporaryDirectory() as output_dir:
@@ -61,6 +61,10 @@ python -m sglang.bench_serving \
         self.run_single_cmd([self.server_access_info] * 2, self.client_cmds, n=3)
 
         self.run_single_cmd(self.server_access_info, [self.client_cmds] * 2, n=3)
+
+        self.run_single_cmd(
+            self.server_access_info, [self.client_cmds] * 2, n=3, only_last=True
+        )
 
     ################## LABEL SETTING ##########################
     def test_client_labels(self):
@@ -242,6 +246,10 @@ class TestSGLCmp(unittest.TestCase):
         self.run_single_cmd([self.server_cmds] * 2, self.client_cmds, n=3)
 
         self.run_single_cmd(self.server_cmds, [self.client_cmds] * 2, n=3)
+
+        self.run_single_cmd(
+            self.server_cmds, [self.client_cmds] * 2, n=3, only_last=True
+        )
 
     ################## LABEL SETTING ##########################
     def test_client_labels(self):
