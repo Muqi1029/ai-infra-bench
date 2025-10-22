@@ -40,6 +40,7 @@ def slo_bench(
     port=None,
     base_url: None | str = None,
     n: int = 1,
+    only_last: bool = False,
     output_dir: str = "output",
     disable_warmup: bool = False,
     disable_plot: bool = False,
@@ -100,6 +101,7 @@ def slo_bench(
                 check_slo=check_slo_func,
                 n=n,
                 output_dir=output_dir,
+                only_last=only_last,
                 label=labels[idx],
             )
             all_clients_results.extend(client_results)

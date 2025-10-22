@@ -36,6 +36,7 @@ def gen_bench(
     base_url: None | str = None,
     n: int = 1,
     output_dir: str = "output",
+    only_last: bool = False,
     disable_warmup: bool = False,
     disable_plot: bool = False,
     disable_table: bool = False,
@@ -116,6 +117,7 @@ def gen_bench(
                         server_label=server_labels[idx],
                         client_labels=client_labels[idx],
                     ),
+                    only_last=only_last,
                     output_dir=output_dir,
                 )
             )

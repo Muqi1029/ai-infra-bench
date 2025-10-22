@@ -23,6 +23,7 @@ def slo_run(
     check_slo: Callable,
     n: int,
     output_dir: str,
+    only_last: bool,
     label: None | str,
 ):
     left, right = request_rate
@@ -42,12 +43,18 @@ def slo_run(
             run_cmd(cmd, is_block=True)
             inner_data.append(read_jsonl(output_file)[-1])
 
-        union_avg_item = {}
-        for key in inner_data[0].keys():
-            if not inner_data[0][key] or isinstance(inner_data[0][key], str):
-                union_avg_item[key] = inner_data[0][key]
-            else:
-                union_avg_item[key] = np.median([item[key] for item in inner_data])
+        if only_last:
+            union_avg_item = inner_data[-1]
+        else:
+            union_avg_item = {}
+            for key in inner_data[0].keys():
+                if not inner_data[0][key] or isinstance(inner_data[0][key], str):
+                    # str or None value
+                    union_avg_item[key] = inner_data[0][key]
+                else:
+                    # use median
+                    union_avg_item[key] = np.median([item[key] for item in inner_data])
+
         if check_slo(union_avg_item):
             left = mid + 1
         else:

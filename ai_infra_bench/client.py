@@ -37,6 +37,7 @@ def client_slo(
     client_labels: None | str | List[str] = None,
     n: int = 1,
     output_dir: str = "output",
+    only_last: bool = False,
     disable_warmup: bool = False,
     disable_plot: bool = False,
     disable_table: bool = False,
@@ -89,6 +90,7 @@ def client_slo(
                 check_slo=check_slo_func,
                 n=n,
                 output_dir=output_dir,
+                only_last=only_last,
                 label=labels[idx],
             )
             all_clients_results.extend(client_results)
@@ -128,6 +130,7 @@ def client_gen(
     client_labels: None | str | List[str] = None,
     n: int = 1,
     output_dir: str = "output",
+    only_last: bool = False,
     disable_warmup: bool = False,
     disable_plot: bool = False,
     disable_table: bool = False,
@@ -159,6 +162,7 @@ def client_gen(
             n=n,
             labels=labels,
             output_dir=output_dir,
+            only_last=only_last,
         )
 
         if not disable_table:
@@ -195,6 +199,7 @@ def client_cmp(
     server_labels: None | List[str] = None,
     client_labels: None | List[str] = None,
     n: int = 1,
+    only_last: bool = False,
     output_dir: str = "output",
     disable_warmup: bool = False,
     disable_plot: bool = False,
@@ -239,7 +244,13 @@ def client_cmp(
                 client_labels=client_labels,
             )
             all_clients_results.extend(
-                gen_run(cmp_client_cmds, n=n, labels=labels, output_dir=output_dir)
+                gen_run(
+                    cmp_client_cmds,
+                    n=n,
+                    labels=labels,
+                    output_dir=output_dir,
+                    only_last=only_last,
+                )
             )
 
         # process results

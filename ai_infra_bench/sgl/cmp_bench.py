@@ -37,6 +37,7 @@ def cmp_bench(
     port=None,
     base_url: None | str = None,
     n: int = 1,
+    only_last: bool = False,
     output_dir: str = "output",
     disable_warmup: bool = False,
     disable_plot: bool = False,
@@ -82,7 +83,13 @@ def cmp_bench(
             )
 
             all_clients_results.extend(
-                gen_run(client_cmds, n=n, labels=labels, output_dir=output_dir)
+                gen_run(
+                    client_cmds,
+                    n=n,
+                    labels=labels,
+                    only_last=only_last,
+                    output_dir=output_dir,
+                )
             )
 
             if server_process:

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @enter_decorate(title="GEN RUN")
 def gen_run(
-    client_cmds: List[str], n: int, labels: List[str], output_dir: str
+    client_cmds: List[str], n: int, labels: List[str], output_dir: str, only_last: bool
 ) -> List[List[Dict]]:
     all_clients_results: List[List[Dict]] = []
     for client_id, base_cmd in tqdm(
@@ -55,7 +55,10 @@ def gen_run(
             last_record = read_jsonl(output_path)[-1]
             client_results.append(last_record)
 
-        all_clients_results.append(client_results)
+        if only_last:
+            all_clients_results.append(client_results[-1:])
+        else:
+            all_clients_results.append(client_results)
 
     return all_clients_results
 
