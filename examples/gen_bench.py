@@ -29,7 +29,7 @@ server_cmds: List[str] = [
         model_path=qwen3_8b_model_path, tp_size=1, host=host, port=port
     ),
 ]
-labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]
+server_labels = ["Qwen3-0.6B-TP1", "Qwen3-8B-TP1"]
 
 ##########################
 # Constructing client_cmds
@@ -79,11 +79,12 @@ client_cmds: List[List[str]] = [
 input_features = [
     "request_rate",
 ]
-metrics = [
+output_metrics = [
     "p99_ttft_ms",
     "p99_tpot_ms",
     "p99_itl_ms",
     "output_throughput",
+    "completed",
 ]
 
 if __name__ == "__main__":
@@ -91,9 +92,9 @@ if __name__ == "__main__":
         server_cmds=server_cmds,
         client_cmds=client_cmds,
         input_features=input_features,
-        output_metrics=metrics,
-        labels=labels,
+        output_metrics=output_metrics,
+        server_labels=server_labels,
         host=host,
         port=port,
-        output_dir="general_bench_output",
+        output_dir="gen_bench_output",
     )

@@ -56,7 +56,6 @@ client_cmds = [
         for rate in rate_lists
     ],
 ]
-print(type(client_cmds), type(client_cmds[0]))
 
 input_features = [
     "random_input_len",
@@ -71,13 +70,14 @@ output_metrics = [
     "p99_itl_ms",
     "output_throughput",
     "p99_e2e_latency_ms",
+    "completed",
 ]
 
 if __name__ == "__main__":
     client_gen(
         client_cmds=client_cmds,
         input_features=input_features,
-        metrics=output_metrics,
-        labels="deepseek_r1",
-        output_dir="ali_output",
+        output_metrics=output_metrics,
+        server_labels="deepseek_r1",
+        output_dir="output",
     )
