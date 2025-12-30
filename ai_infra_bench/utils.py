@@ -287,3 +287,53 @@ def kill_process_tree(parent_pid, include_parent: bool = True, skip_pid: int = N
             itself.send_signal(signal.SIGQUIT)
         except psutil.NoSuchProcess:
             pass
+
+
+def stop_server_process(process, timeout=30, cooldown_period=3):
+    """
+    Stops a server sub-process safely by attempting a graceful shutdown
+    followed by a forced kill if necessary.
+
+    Args:
+        process (subprocess.Popen): The process object to stop.
+        timeout (int): Seconds to wait for a graceful shutdown.
+        cooldown_period (int): Extra seconds to wait for VRAM and Port cleanup.
+    """
+    if process is None:
+        logger.warning("No process found to terminate.")
+        return
+
+    # Check if the process is already dead
+    if process.poll() is not None:
+        logger.info(
+            f"Process (PID: {process.pid}) has already exited with code: {process.returncode}"
+        )
+        return
+
+    try:
+        logger.info(f"Sending SIGTERM to process {process.pid} (Graceful Shutdown)...")
+        # 1. Start graceful shutdown
+        process.terminate()
+
+        try:
+            # 2. Block and wait for the process to die
+            process.wait(timeout=timeout)
+            logger.info("Server exited gracefully.")
+        except subprocess.TimeoutExpired:
+            # 3. If it takes too long, force kill it
+            logger.warning(
+                f"Server did not exit within {timeout}s. Sending SIGKILL (Force Kill)..."
+            )
+            process.kill()
+            process.wait()  # Ensure the process is removed from the OS process table
+            logger.info("Server was forcibly killed.")
+
+    except Exception as e:
+        logger.error(f"An error occurred while stopping the server: {e}")
+
+    # 4. Critical: Wait for hardware/network cleanup
+    if cooldown_period > 0:
+        logger.info(
+            f"Waiting {cooldown_period}s for GPU VRAM and TCP ports to be fully released..."
+        )
+        time.sleep(cooldown_period)

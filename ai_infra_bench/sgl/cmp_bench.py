@@ -19,6 +19,7 @@ from ai_infra_bench.utils import (
     maybe_create_labels,
     maybe_warmup,
     run_cmd,
+    stop_server_process,
     wait_for_server,
 )
 
@@ -91,9 +92,7 @@ def cmp_bench(
                     output_dir=output_dir,
                 )
             )
-
-            if server_process:
-                server_process.terminate()
+            stop_server_process(server_process)
 
         if not disable_csv:
             gen_export_csv(

@@ -9,8 +9,27 @@ output_len = 800
 host = "127.0.0.1"
 port = "8888"
 tp_size = 1
-model_path = os.environ["QWEN3_32B_FP8"]
+model_path = "Qwen/Qwen3-0.6B"
+rate_list = [8]
 dataset_path = os.environ["SHAREGPT_DATAPATH"]
+input_features = [
+    "random_input_len",
+    "random_output_len",
+    "request_rate",
+    "max_concurrency",
+]
+
+output_metrics = [
+    "mean_ttft_ms",
+    "p99_ttft_ms",
+    "mean_tpot_ms",
+    "p99_tpot_ms",
+    "mean_itl_ms",
+    "p99_itl_ms",
+    "mean_e2e_latency_ms",
+    "p99_e2e_latency_ms",
+    "output_throughput",
+]
 
 
 ####################################
@@ -23,7 +42,6 @@ python -m sglang.launch_server
     --host {host}
     --port {port}
     --disable-radix-cache
-    --kv-cache-dtype fp8_e4m3
 """
 
 server_cmds: List[str] = [
@@ -31,9 +49,9 @@ server_cmds: List[str] = [
         model_path=model_path, tp_size=tp_size, host=host, port=port
     ),
     server_template.format(model_path=model_path, tp_size=tp_size, host=host, port=port)
-    + " --tool-call-parser qwen25",
+    + " --tool-call-parser qwen",
 ]
-server_labels = ["Qwen3-32B-FP8", "QWEN3-32B-FP8-Without-tool"]
+server_labels = ["Qwen3-06B", "QWEN3-06B-With-Tool-Call-Parser"]
 
 ##########################
 # Constructing client_cmds
@@ -61,27 +79,12 @@ client_cmds: List[str] = [
         output_len=output_len,
         request_rate=rate,
         dataset_path=dataset_path,
-        num_prompt=rate * 10,
+        num_prompt=min(max(rate * 10, 80), 250),
     )
-    for rate in range(4, 12 + 1, 2)
+    for rate in rate_list
 ]
 
 #####################
-input_features = [
-    "request_rate",
-]
-
-output_metrics = [
-    "mean_ttft_ms",
-    "p99_ttft_ms",
-    "mean_tpot_ms",
-    "p99_tpot_ms",
-    "mean_itl_ms",
-    "p99_itl_ms",
-    "mean_e2e_latency_ms",
-    "p99_e2e_latency_ms",
-    "output_throughput",
-]
 
 if __name__ == "__main__":
     cmp_bench(
@@ -92,7 +95,8 @@ if __name__ == "__main__":
         server_labels=server_labels,
         host=host,
         port=port,
-        output_dir="tool_cmp_bench_output",
-        n=3,
+        n=1,
         only_last=True,
+        output_dir="tool_cmp_bench_output",
+        disable_warmup=True,
     )
