@@ -2,15 +2,34 @@ import os
 
 from ai_infra_bench import client_gen
 
+# input args
 base_url = os.environ["BASE_URL"]
 dataset_path = os.environ["SHAREGPT_DATASET"]
+input_features = [
+    "random_input_len",
+    "random_output_len",
+    "request_rate",
+    "max_concurrency",
+]
+output_metrics = [
+    "mean_ttft_ms",
+    "p99_ttft_ms",
+    "mean_tpot_ms",
+    "p99_tpot_ms",
+    "mean_itl_ms",
+    "p99_itl_ms",
+    "mean_e2e_latency_ms",
+    "p99_e2e_latency_ms",
+    "output_throughput",
+]
 
+# construct client requests
 client_template = """
-python -m sglang.bench_serving \
+python -m sglang.bench_serving
         --base-url {base_url}
 		--backend sglang-oai
-        --tokenizer deepseek-ai/DeepSeek-R1-0528
-        --model deepseek-ai/DeepSeek-R1-0528
+        --tokenizer Qwen/Qwen3-0.6B
+        --model Qwen/Qwen3-0.6B
 		--dataset-path {dataset_path}
 		--dataset-name random
 		--random-range-ratio 1
@@ -20,27 +39,27 @@ python -m sglang.bench_serving \
 		--max-concurrency {request_rate}
 		--num-prompt {num_prompt}
 """
-rate_lists = [1, 2, 4, 8, 16, 24, 32, 40]
+rate_lists = [1, 2, 4, 8]
 client_cmds = [
     *[
         client_template.format(
             base_url=base_url,
-            input_len=2000,
-            output_len=1500,
+            input_len=1200,
+            output_len=800,
             dataset_path=dataset_path,
             request_rate=rate,
-            num_prompt=rate * 10,
+            num_prompt=min(max(rate * 10, 80), 250),  # clip to [80, 250]
         )
         for rate in rate_lists
     ],
     *[
         client_template.format(
             base_url=base_url,
-            input_len=900,
+            input_len=800,
             output_len=1200,
             dataset_path=dataset_path,
             request_rate=rate,
-            num_prompt=rate * 10,
+            num_prompt=min(max(rate * 10, 80), 250),  # clip to [80, 250]
         )
         for rate in rate_lists
     ],
@@ -51,33 +70,20 @@ client_cmds = [
             output_len=1500,
             dataset_path=dataset_path,
             request_rate=rate,
-            num_prompt=rate * 10,
+            num_prompt=min(max(rate * 10, 80), 250),  # clip to [80, 250]
         )
         for rate in rate_lists
     ],
 ]
 
-input_features = [
-    "random_input_len",
-    "random_output_len",
-    "request_rate",
-    "max_concurrency",
-]
-
-output_metrics = [
-    "p99_ttft_ms",
-    "p99_tpot_ms",
-    "p99_itl_ms",
-    "output_throughput",
-    "p99_e2e_latency_ms",
-    "completed",
-]
 
 if __name__ == "__main__":
     client_gen(
         client_cmds=client_cmds,
         input_features=input_features,
         output_metrics=output_metrics,
-        server_labels="deepseek_r1",
+        server_labels="qwen3_06b",
+        n=3,
+        only_last=True,
         output_dir="output",
     )
