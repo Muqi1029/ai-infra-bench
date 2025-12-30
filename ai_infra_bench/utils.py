@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import psutil
@@ -21,7 +21,8 @@ import requests
 @dataclass
 class ServerAccessInfo:
     base_url: str
-    api_key: str = None
+    api_key: Optional[str] = None
+    label: Optional[str] = None
 
 
 logger = logging.getLogger(__name__)

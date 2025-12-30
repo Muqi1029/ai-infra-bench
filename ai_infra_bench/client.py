@@ -36,8 +36,8 @@ def client_slo(
     server_label: None | str = None,
     client_labels: None | str | List[str] = None,
     n: int = 1,
-    output_dir: str = "output",
     only_last: bool = False,
+    output_dir: str = "output",
     disable_warmup: bool = False,
     disable_plot: bool = False,
     disable_table: bool = False,
@@ -129,8 +129,8 @@ def client_gen(
     server_label: None | str = None,
     client_labels: None | str | List[str] = None,
     n: int = 1,
-    output_dir: str = "output",
     only_last: bool = False,
+    output_dir: str = "output",
     disable_warmup: bool = False,
     disable_plot: bool = False,
     disable_table: bool = False,
@@ -191,12 +191,11 @@ def client_gen(
 
 
 def client_cmp(
-    server_access_info: ServerAccessInfo | List[ServerAccessInfo],
+    server_access_infos: ServerAccessInfo | List[ServerAccessInfo],
     client_cmds: str | List[str],
     *,
     input_features: List[str],
     output_metrics: List[str],
-    server_labels: None | List[str] = None,
     client_labels: None | List[str] = None,
     n: int = 1,
     only_last: bool = False,
@@ -206,8 +205,8 @@ def client_cmp(
     disable_table: bool = False,
     disable_csv: bool = False,
 ) -> None:
-    if isinstance(server_access_info, ServerAccessInfo):
-        server_access_info = [server_access_info]
+    if isinstance(server_access_infos, ServerAccessInfo):
+        server_access_infos = [server_access_infos]
 
     client_cmds = check_str_list_str(client_cmds)
     check_values_in_features_metrics(input_features, output_metrics)
@@ -216,9 +215,13 @@ def client_cmp(
     check_param_in_cmd("host", client_cmds)
     check_param_in_cmd("port", client_cmds)
 
-    num_servers = len(server_access_info)
+    num_servers = len(server_access_infos)
     num_clients = len(client_cmds)
 
+    server_labels = [
+        info.label if info.label else f"server_idx_{i:02d}"
+        for i, info in enumerate(server_access_infos)
+    ]
     server_labels = check_server_labels(
         server_labels=server_labels, num_servers=num_servers
     )
@@ -231,7 +234,7 @@ def client_cmp(
         all_clients_results: List[List[Dict]] = []
         for i in range(num_servers):
             cmp_client_cmds = cmp_preprocess_client_cmds(
-                client_cmds, server_access_info[i]
+                client_cmds, server_access_infos[i]
             )
             maybe_warmup(
                 cmd=cmp_client_cmds[0],
