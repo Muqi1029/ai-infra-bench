@@ -6,7 +6,7 @@ from ai_infra_bench.utils import ServerAccessInfo
 # input args
 input_len = 1200
 output_len = 800
-dataset_path = os.environ["SHAREGPT_DATASET"]
+dataset_path = os.environ["SHAREGPT_DATAPATH"]
 input_features = [
     "random_input_len",
     "random_output_len",
@@ -41,7 +41,7 @@ python -m sglang.bench_serving
 		--max-concurrency {request_rate}
 		--num-prompt {num_prompt}
 """
-rate_list = [1, 2, 4, 8]
+rate_list = [8]
 client_cmds = [
     client_template.format(
         input_len=input_len,
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         client_cmds=client_cmds,
         input_features=input_features,
         output_metrics=output_metrics,
-        n=3,
+        n=1,
         only_last=True,
         output_dir="version_cmp_bench",
     )
