@@ -6,7 +6,126 @@ from typing import List
 
 from ai_infra_bench.utils import is_ci
 
+try:
+    import sglang
+
+    is_sglang_available = True
+except ImportError:
+    is_sglang_available = False
+
 logger = logging.getLogger(__name__)
+
+DEFAULT_BENCH_SERVING_PATH = "/tmp/ai_infra_bench/bench_serving.py"
+
+
+def ensure_bench_serving_available() -> None:
+    """
+    Automatically download bench_serving.py if sglang is not available.
+    Also installs required dependencies.
+    """
+    if is_sglang_available:
+        return
+
+    if os.path.exists(DEFAULT_BENCH_SERVING_PATH):
+        logger.info(f"bench_serving.py already exists at {DEFAULT_BENCH_SERVING_PATH}")
+        return
+
+    logger.info("sglang is not available, downloading bench_serving.py...")
+    try:
+        import requests
+
+        raw_url = "https://raw.githubusercontent.com/sgl-project/sglang/main/python/sglang/bench_serving.py"
+        response = requests.get(raw_url, timeout=30)
+        response.raise_for_status()
+
+        os.makedirs(os.path.dirname(DEFAULT_BENCH_SERVING_PATH), exist_ok=True)
+        with open(DEFAULT_BENCH_SERVING_PATH, "w") as f:
+            f.write(response.text)
+        logger.info(
+            f"Successfully downloaded bench_serving.py to {DEFAULT_BENCH_SERVING_PATH}"
+        )
+
+        # Install dependencies required by bench_serving.py
+        install_bench_serving_dependencies()
+
+    except Exception as e:
+        logger.error(
+            f"Failed to download bench_serving.py from {raw_url}: {e}. "
+            f"Please ensure you have internet access or manually download the file."
+        )
+        raise
+
+
+def install_bench_serving_dependencies() -> None:
+    """
+    Parse bench_serving.py and install missing dependencies.
+    """
+    import ast
+    import subprocess
+    import sys
+
+    logger.info("Installing bench_serving.py dependencies...")
+
+    try:
+        with open(DEFAULT_BENCH_SERVING_PATH, "r") as f:
+            tree = ast.parse(f.read())
+
+        # Extract all imported modules
+        imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module.split(".")[0])
+
+        # Standard library modules to skip
+        stdlib_modules = set(sys.stdlib_module_names)
+
+        # Filter out standard library modules
+        third_party_imports = {mod for mod in imports if mod not in stdlib_modules}
+
+        if not third_party_imports:
+            logger.info("No third-party dependencies found to install")
+            return
+
+        logger.info(
+            "Found dependencies to install: %s",
+            ", ".join(sorted(third_party_imports)),
+        )
+
+        # Try to install each dependency
+        for module in sorted(third_party_imports):
+            try:
+                __import__(module)
+                logger.debug(f"  {module} is already installed")
+            except ImportError:
+                # Map module names to pip package names (handle common cases)
+                package_map = {
+                    "cv2": "opencv-python",
+                    "PIL": "Pillow",
+                    "yaml": "PyYAML",
+                    "bs4": "beautifulsoup4",
+                }
+                package_name = package_map.get(module, module)
+
+                logger.info("  Installing %s...", package_name)
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", package_name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                logger.debug(f"  {package_name} installed successfully")
+
+        logger.info("All dependencies installed successfully")
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to automatically install dependencies: {e}. "
+            f"Please manually install any missing dependencies if the script fails."
+        )
+
 
 SGLANG_KEYS = [
     "backend",
@@ -16,21 +135,21 @@ SGLANG_KEYS = [
     "sharegpt_output_len",
     "random_input_len",
     "random_output_len",
-    "random_range _ratio",
+    "random_range_ratio",
     "duration",
     "completed",
     "total_input_tokens",
     "total_output_tokens",
     "total_output_tokens_retokenized",
     "request_throughput",
-    "input_through put",
+    "input_throughput",
     "output_throughput",
     "mean_e2e_latency_ms",
     "median_e2e_latency_ms",
     "std_e2e_latency_ms",
     "p99_e2e_latency_ms",
     "mean_ttft_ms",
-    "median_ttft_ms ",
+    "median_ttft_ms",
     "std_ttft_ms",
     "p99_ttft_ms",
     "mean_tpot_ms",
@@ -40,7 +159,7 @@ SGLANG_KEYS = [
     "mean_itl_ms",
     "median_itl_ms",
     "std_itl_ms",
-    "p95_it l_ms",
+    "p95_itl_ms",
     "p99_itl_ms",
     "concurrency",
     "accept_length",
@@ -53,7 +172,7 @@ def check_dir(output_dir: str, full_data_json_path):
     for an action (delete or rename). It re-prompts on invalid input.
     """
     if is_ci():
-        os.makedirs(os.path.join(output_dir, full_data_json_path))
+        os.makedirs(os.path.join(output_dir, full_data_json_path), exist_ok=True)
         return output_dir
 
     if os.path.exists(output_dir):
@@ -85,10 +204,11 @@ def check_dir(output_dir: str, full_data_json_path):
                 output_dir = input("New directory name: ").strip()
                 os.makedirs(output_dir)
                 logger.info(f"New directory created: '{output_dir}'.")
+                break
             elif option == "4":
                 exit(0)
             else:
-                logger.warning("Invalid option. Please enter '1', '2' or '3'.")
+                logger.warning("Invalid option. Please enter '1', '2', '3', or '4'.")
     else:
         # If the directory does not exist, create it directly
         os.makedirs(output_dir)
@@ -96,6 +216,40 @@ def check_dir(output_dir: str, full_data_json_path):
     os.makedirs(os.path.join(output_dir, full_data_json_path))
     logger.info(f"output_dir set to '{output_dir}'")
     return output_dir
+
+
+def check_content_client_cmds(client_cmds: List[List[str]]) -> None:
+    if is_sglang_available:
+        for client_cmd in client_cmds:
+            for cmd in client_cmd:
+                assert any(
+                    cmd.strip().startswith(p)
+                    for p in [
+                        "python -m sglang.bench_serving",
+                        "python3 -m sglang.bench_serving",
+                    ]
+                ), f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
+    else:
+        # Ensure bench_serving is available if sglang is not installed
+        ensure_bench_serving_available()
+        for cmd_list_idx, client_cmd in enumerate(client_cmds):
+            for cmd_idx, cmd in enumerate(client_cmd):
+                if cmd.startswith("python -m sglang.bench_serving"):
+                    cmd = cmd.replace(
+                        "python -m sglang.bench_serving",
+                        f"python {DEFAULT_BENCH_SERVING_PATH}",
+                    )
+                elif cmd.startswith("python3 -m sglang.bench_serving"):
+                    cmd = cmd.replace(
+                        "python3 -m sglang.bench_serving",
+                        f"python3 {DEFAULT_BENCH_SERVING_PATH}",
+                    )
+                else:
+                    raise ValueError(
+                        f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
+                    )
+                client_cmd[cmd_idx] = cmd
+            client_cmds[cmd_list_idx] = client_cmd
 
 
 def check_content_server_client_cmds(
@@ -111,14 +265,34 @@ def check_content_server_client_cmds(
         ), f"Each server_cmd must start with 'python -m sglang.launch_server' or 'python3 -m sglang.launch_server', but found {cmd=}"
 
     for client_cmd in client_cmds:
-        for cmd in client_cmd:
-            assert any(
-                cmd.strip().startswith(p)
-                for p in [
-                    "python -m sglang.bench_serving",
-                    "python3 -m sglang.bench_serving",
-                ]
-            ), f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
+        if is_sglang_available:
+            for cmd in client_cmd:
+                assert any(
+                    cmd.strip().startswith(p)
+                    for p in [
+                        "python -m sglang.bench_serving",
+                        "python3 -m sglang.bench_serving",
+                    ]
+                ), f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
+        else:
+            # Ensure bench_serving is available if sglang is not installed
+            ensure_bench_serving_available()
+            for cmd_idx, cmd in enumerate(client_cmd):
+                if cmd.startswith("python -m sglang.bench_serving"):
+                    cmd = cmd.replace(
+                        "python -m sglang.bench_serving",
+                        f"python {DEFAULT_BENCH_SERVING_PATH}",
+                    )
+                elif cmd.startswith("python3 -m sglang.bench_serving"):
+                    cmd = cmd.replace(
+                        "python3 -m sglang.bench_serving",
+                        f"python3 {DEFAULT_BENCH_SERVING_PATH}",
+                    )
+                else:
+                    raise ValueError(
+                        f"Each client_cmd must start with 'python -m sglang.bench_serving' or 'python3 -m sglang.bench_serving', but found {cmd=}"
+                    )
+                client_cmd[cmd_idx] = cmd
 
 
 def check_values_in_features_metrics(input_features, output_metrics):
@@ -133,7 +307,7 @@ def check_values_in_features_metrics(input_features, output_metrics):
 
 def check_param_in_cmd(param: str, cmds: List[str]):
     for cmd in cmds:
-        assert param not in cmd, f"{cmd=} should not contain '{param}''"
+        assert param not in cmd, f"{cmd=} should not contain '{param}'"
 
 
 def check_str_list_str(cmds: str | List[str]):
