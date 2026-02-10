@@ -82,7 +82,7 @@ if __name__ == "__main__":
         client_cmds=client_cmds,
         input_features=input_features,
         output_metrics=output_metrics,
-        server_labels="qwen3_06b",
+        server_label="qwen3_06b",
         n=3,
         only_last=True,
         output_dir="output",
