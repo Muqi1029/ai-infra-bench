@@ -196,6 +196,7 @@ def check_content_client_cmds(client_cmds: List[List[str]]) -> None:
         ensure_bench_serving_available()
         for cmd_list_idx, client_cmd in enumerate(client_cmds):
             for cmd_idx, cmd in enumerate(client_cmd):
+                cmd = cmd.strip()
                 if cmd.startswith("python -m sglang.bench_serving"):
                     cmd = cmd.replace(
                         "python -m sglang.bench_serving",
