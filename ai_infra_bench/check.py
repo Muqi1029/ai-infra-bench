@@ -83,7 +83,9 @@ def install_bench_serving_dependencies() -> None:
         stdlib_modules = set(sys.stdlib_module_names)
 
         # Filter out standard library modules
-        third_party_imports = {mod for mod in imports if mod not in stdlib_modules}
+        third_party_imports = {
+            mod for mod in imports if mod not in stdlib_modules and mod != "sglang"
+        }
 
         if not third_party_imports:
             logger.info("No third-party dependencies found to install")
