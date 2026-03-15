@@ -241,6 +241,7 @@ def check_content_server_client_cmds(
             # Ensure bench_serving is available if sglang is not installed
             ensure_bench_serving_available()
             for cmd_idx, cmd in enumerate(client_cmd):
+                cmd = cmd.strip()
                 if cmd.startswith("python -m sglang.bench_serving"):
                     cmd = cmd.replace(
                         "python -m sglang.bench_serving",
