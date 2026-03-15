@@ -10,11 +10,11 @@ from ai_infra_bench.check import (
     check_str_list_str,
     check_values_in_features_metrics,
 )
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
 from ai_infra_bench.modes.cmp import cmp_export_table
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
-    FULL_DATA_JSON_PATH,
     ServerAccessInfo,
     add_request_rate,
     cmp_preprocess_client_cmds,
@@ -171,6 +171,7 @@ def client_gen(
                 input_features=input_features,
                 output_metrics=output_metrics,
                 output_dir=output_dir,
+                server_label=server_labels[0],
             )
 
         if not disable_csv:

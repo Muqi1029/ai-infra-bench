@@ -4,13 +4,8 @@ from typing import Dict, List
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ai_infra_bench.utils import (
-    TABLE_NAME,
-    avg_std_strf,
-    colors,
-    enter_decorate,
-    graph_per_row,
-)
+from ai_infra_bench.constants import COLORS, GRAPH_PER_ROW, TABLE_NAME
+from ai_infra_bench.utils import avg_std_strf, enter_decorate
 
 
 @enter_decorate("PLOT TO HTML", filename="<input_feature>.html")
@@ -23,8 +18,8 @@ def cmp_plot(data, input_features, metrics, labels, output_dir):
 
     # there are totally len(input_features) html files
     for input_feature in input_features:
-        rows = (len(metrics) - 1) // graph_per_row + 1
-        cols = graph_per_row
+        rows = (len(metrics) - 1) // GRAPH_PER_ROW + 1
+        cols = GRAPH_PER_ROW
         fig = make_subplots(rows=rows, cols=cols)
 
         # there totally are len(metric) subplots
@@ -47,7 +42,7 @@ def cmp_plot(data, input_features, metrics, labels, output_dir):
                         mode="lines+markers",
                         marker=dict(size=8),
                         line=dict(
-                            color=colors[server_idx % len(colors)],
+                            color=COLORS[server_idx % len(COLORS)],
                             width=3,
                         ),
                         hovertemplate=f"<br>{input_feature}: %{{x}}<br>{metric}: %{{y}}<br><extra></extra>",
@@ -60,7 +55,7 @@ def cmp_plot(data, input_features, metrics, labels, output_dir):
 
             # one subplot is over
             cur_col += 1
-            if cur_col == graph_per_row:
+            if cur_col == GRAPH_PER_ROW:
                 cur_col = 0
                 cur_row += 1
 

@@ -4,7 +4,7 @@ from ai_infra_bench import client_gen
 
 # input args
 base_url = os.environ["BASE_URL"]
-dataset_path = os.environ["SHAREGPT_DATASET"]
+dataset_path = os.environ["SHAREGPT_DATAPATH"]
 input_features = [
     "random_input_len",
     "random_output_len",
@@ -85,5 +85,5 @@ if __name__ == "__main__":
         server_label="qwen3_06b",
         n=3,
         only_last=True,
-        output_dir="output",
+        output_dir="client_gen_output",
     )

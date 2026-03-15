@@ -4,6 +4,7 @@ import shutil
 from datetime import datetime
 from typing import List
 
+from ai_infra_bench.constants import DEFAULT_BENCH_SERVING_PATH, SGLANG_KEYS
 from ai_infra_bench.utils import is_ci
 
 try:
@@ -14,8 +15,6 @@ except ImportError:
     is_sglang_available = False
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_BENCH_SERVING_PATH = "/tmp/ai_infra_bench/bench_serving.py"
 
 
 def ensure_bench_serving_available() -> None:
@@ -125,45 +124,6 @@ def install_bench_serving_dependencies() -> None:
             f"Failed to automatically install dependencies: {e}. "
             f"Please manually install any missing dependencies if the script fails."
         )
-
-
-SGLANG_KEYS = [
-    "backend",
-    "dataset_name",
-    "request_rate",
-    "max_concurrency",
-    "sharegpt_output_len",
-    "random_input_len",
-    "random_output_len",
-    "random_range_ratio",
-    "duration",
-    "completed",
-    "total_input_tokens",
-    "total_output_tokens",
-    "total_output_tokens_retokenized",
-    "request_throughput",
-    "input_throughput",
-    "output_throughput",
-    "mean_e2e_latency_ms",
-    "median_e2e_latency_ms",
-    "std_e2e_latency_ms",
-    "p99_e2e_latency_ms",
-    "mean_ttft_ms",
-    "median_ttft_ms",
-    "std_ttft_ms",
-    "p99_ttft_ms",
-    "mean_tpot_ms",
-    "median_tpot_ms",
-    "std_tpot_ms",
-    "p99_tpot_ms",
-    "mean_itl_ms",
-    "median_itl_ms",
-    "std_itl_ms",
-    "p95_itl_ms",
-    "p99_itl_ms",
-    "concurrency",
-    "accept_length",
-]
 
 
 def check_dir(output_dir: str, full_data_json_path):

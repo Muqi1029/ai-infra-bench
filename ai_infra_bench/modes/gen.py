@@ -9,17 +9,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from tqdm import tqdm
 
-from ai_infra_bench.utils import (
+from ai_infra_bench.constants import (
+    COLORS,
     CSV_NAME,
     FULL_DATA_JSON_PATH,
+    GRAPH_PER_ROW,
     TABLE_NAME,
-    avg_std_strf,
-    colors,
-    enter_decorate,
-    graph_per_row,
-    read_jsonl,
-    run_cmd,
 )
+from ai_infra_bench.utils import avg_std_strf, enter_decorate, read_jsonl, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -103,22 +100,22 @@ def gen_plot(
 ):
     for feature in input_features:
         num_graphs = len(output_metrics)
-        num_rows = math.ceil(num_graphs / graph_per_row)
+        num_rows = math.ceil(num_graphs / GRAPH_PER_ROW)
 
-        fig = make_subplots(rows=num_rows, cols=graph_per_row)
+        fig = make_subplots(rows=num_rows, cols=GRAPH_PER_ROW)
         x_values = [
             np.mean([item[feature] for item in client])
             for client in all_clients_results
         ]
 
         for idx, metric in enumerate(output_metrics):
-            row, col = divmod(idx, graph_per_row)
+            row, col = divmod(idx, GRAPH_PER_ROW)
 
             y_values = [
                 np.mean([item[metric] for item in client])
                 for client in all_clients_results
             ]
-            color = colors[idx % len(colors)]
+            color = COLORS[idx % len(COLORS)]
 
             fig.add_trace(
                 go.Scatter(
@@ -141,7 +138,7 @@ def gen_plot(
             title_text=f"{server_label} - {feature}" if server_label else feature,
             showlegend=True,
             height=300 * num_rows,
-            width=400 * graph_per_row,
+            width=400 * GRAPH_PER_ROW,
             margin=dict(t=50, b=30, l=30, r=30),
         )
 

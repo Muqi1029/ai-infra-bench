@@ -4,8 +4,8 @@ from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
 from ai_infra_bench.utils import (
-    FULL_DATA_JSON_PATH,
     add_request_rate,
     enter_decorate,
     read_jsonl,
