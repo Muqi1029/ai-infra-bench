@@ -1,6 +1,11 @@
 import os
 
-from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME, WARMUP_FILE
+from ai_infra_bench.constants import (
+    CSV_NAME,
+    FULL_DATA_JSON_PATH,
+    TABLE_NAME,
+    WARMUP_FILE,
+)
 
 input_features = [
     "random_input_len",

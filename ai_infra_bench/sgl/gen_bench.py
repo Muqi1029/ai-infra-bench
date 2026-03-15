@@ -10,9 +10,9 @@ from ai_infra_bench.check import (
     check_server_labels,
     check_str_list_str,
 )
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
 from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
 from ai_infra_bench.utils import (
-    FULL_DATA_JSON_PATH,
     kill_process_tree,
     maybe_create_labels,
     maybe_warmup,

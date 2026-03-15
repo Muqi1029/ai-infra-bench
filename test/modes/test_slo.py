@@ -30,8 +30,8 @@ def check_slo(item: Dict) -> bool:
 
 
 from ai_infra_bench.client import client_slo
+from ai_infra_bench.constants import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
 from ai_infra_bench.sgl import slo_bench
-from ai_infra_bench.utils import CSV_NAME, FULL_DATA_JSON_PATH, TABLE_NAME
 
 
 class TestSGLSlo(unittest.TestCase):

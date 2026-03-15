@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from ai_infra_bench import client_gen
 
@@ -39,8 +40,8 @@ python -m sglang.bench_serving
 		--max-concurrency {request_rate}
 		--num-prompt {num_prompt}
 """
-rate_lists = [1, 2, 4, 8]
-client_cmds = [
+rate_lists: List[int] = [1, 2, 4, 8]
+client_cmds: List[str] = [
     *[
         client_template.format(
             base_url=base_url,

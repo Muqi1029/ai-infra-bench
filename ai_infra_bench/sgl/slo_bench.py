@@ -14,9 +14,9 @@ from ai_infra_bench.check import (
     check_server_labels,
     check_str_list_str,
 )
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
 from ai_infra_bench.modes.slo import slo_run
 from ai_infra_bench.utils import (
-    FULL_DATA_JSON_PATH,
     add_request_rate,
     kill_process_tree,
     maybe_create_labels,

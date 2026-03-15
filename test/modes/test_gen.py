@@ -6,8 +6,8 @@ from glob import glob
 from utils import check_output_content, input_features, output_metrics
 
 from ai_infra_bench.client import client_gen
+from ai_infra_bench.constants import CSV_NAME, TABLE_NAME, WARMUP_FILE
 from ai_infra_bench.sgl import gen_bench
-from ai_infra_bench.utils import CSV_NAME, TABLE_NAME, WARMUP_FILE
 
 
 class TestClientGen(unittest.TestCase):
