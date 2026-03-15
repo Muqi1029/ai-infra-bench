@@ -4,7 +4,11 @@ import shutil
 from datetime import datetime
 from typing import List
 
-from ai_infra_bench.constants import DEFAULT_BENCH_SERVING_PATH, SGLANG_KEYS
+from ai_infra_bench.constants import (
+    DEFAULT_BENCH_SERVING_PATH,
+    FULL_DATA_JSON_PATH,
+    SGLANG_KEYS,
+)
 from ai_infra_bench.utils import is_ci
 
 try:
@@ -128,7 +132,7 @@ def install_bench_serving_dependencies() -> None:
         )
 
 
-def check_dir(output_dir: str, full_data_json_path):
+def check_dir(output_dir: str, full_data_json_path=FULL_DATA_JSON_PATH):
     """
     Checks if the specified output directory exists. If it does, it prompts the user
     for an action (delete or rename). It re-prompts on invalid input.

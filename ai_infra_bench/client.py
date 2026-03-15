@@ -65,7 +65,7 @@ def client_slo(
         len(client_cmds) == len(request_rates) == len(check_slo)
     ), f"Length of client_cmds, request_rates, and check_slo must be the same, but {len(client_cmds)=}, {len(request_rates)=} {len(check_slo)=}"
 
-    output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
+    output_dir = check_dir(output_dir)
 
     try:
         all_clients_results: List[List[Dict]] = []
@@ -145,7 +145,7 @@ def client_gen(
         client_labels=client_labels, num_clients=[len(client_cmds)]
     )
 
-    output_dir = check_dir(output_dir, FULL_DATA_JSON_PATH)
+    output_dir = check_dir(output_dir)
 
     try:
         maybe_warmup(
@@ -228,9 +228,7 @@ def client_cmp(
     )
     client_labels = check_client_labels(client_labels, [num_clients])[0]
 
-    output_dir = check_dir(
-        output_dir=output_dir, full_data_json_path=FULL_DATA_JSON_PATH
-    )
+    output_dir = check_dir(output_dir=output_dir)
     try:
         all_clients_results: List[List[Dict]] = []
         for i in range(num_servers):
