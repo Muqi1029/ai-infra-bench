@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument("--evals", nargs="+", choices=DATASET_CHOICES, required=True)
 
     parser.add_argument("--config", type=str)
+    parser.add_argument("--dataset-path", type=str)
     parser.add_argument("--num-questions", type=int)
     parser.add_argument("--override-payload", type=str)
     args = parser.parse_args()

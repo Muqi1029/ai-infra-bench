@@ -26,7 +26,11 @@ class EvalRuntime:
         self.sem: Semaphore | None = None
         self.session: ClientSession | None = None
         self.evals: List[Eval] = [
-            Eval.create_from_name(eval_name, runtime_args.config)
+            Eval.create_from_name(
+                eval_name,
+                config_path=runtime_args.config,
+                dataset_path=runtime_args.dataset_path,
+            )
             for eval_name in runtime_args.evals
         ]
         self.override_payload = {}
@@ -147,7 +151,12 @@ class Eval:
         return success_rate, failed_eval_result
 
     @classmethod
-    def create_from_name(cls, name: str, config_path: str | None = None):
+    def create_from_name(
+        cls,
+        name: str,
+        config_path: str | None = None,
+        dataset_path: str | None = None,
+    ):
         # Convention: name "gsm8k" -> eval_dataset/gsm8k.py -> *Eval subclass
         import importlib
 
@@ -161,8 +170,11 @@ class Eval:
 
         for obj in vars(module).values():
             if isinstance(obj, type) and issubclass(obj, cls) and obj is not cls:
-                if config_path is None:
-                    return obj(name)
-                return obj(name, config_path=config_path)
+                kwargs = {}
+                if config_path is not None:
+                    kwargs["config_path"] = config_path
+                if dataset_path is not None:
+                    kwargs["dataset_path"] = dataset_path
+                return obj(name, **kwargs)
 
         raise ValueError(f"No Eval subclass found in module for name={name!r}")

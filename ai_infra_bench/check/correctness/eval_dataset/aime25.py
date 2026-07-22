@@ -35,12 +35,17 @@ def normalize_aime_answer(answer: str) -> Optional[str]:
 
 
 class AIME25Eval(Eval):
-    def __init__(self, name: str, config_path="configs/aime25.yaml"):
+    def __init__(
+        self,
+        name: str,
+        config_path="configs/aime25.yaml",
+        dataset_path: str | None = None,
+    ):
         self.name = name.replace("_", " ").title()
         self.results = []
         cfg = OmegaConf.load(resolve_config_path(config_path))
 
-        dataset_path = cfg.get("dataset_path", "")
+        dataset_path = dataset_path or cfg.get("dataset_path", "")
         from datasets import load_dataset
 
         dataset1 = load_dataset(dataset_path, "AIME2025-I", split="test")

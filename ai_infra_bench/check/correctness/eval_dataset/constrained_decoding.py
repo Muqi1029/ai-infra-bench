@@ -115,7 +115,12 @@ def check_answer(response_body, mode: str, is_thinking: bool) -> bool:
 class ConstrainedDecodingEval(Eval):
     name: str = "Constrained Decoding"
 
-    def __init__(self, name: str, config_path="configs/constrained_decoding.yaml"):
+    def __init__(
+        self,
+        name: str,
+        config_path="configs/constrained_decoding.yaml",
+        dataset_path: str | None = None,
+    ):
         self.name = name.replace("_", " ").title()
         self.results = []
         cfg = OmegaConf.load(resolve_config_path(config_path))

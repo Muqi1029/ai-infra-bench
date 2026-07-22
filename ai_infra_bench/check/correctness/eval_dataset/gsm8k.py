@@ -30,12 +30,17 @@ def get_answer_value(answer_str):
 
 class GSM8KEval(Eval):
 
-    def __init__(self, name: str, config_path="configs/gsm8k.yaml"):
+    def __init__(
+        self,
+        name: str,
+        config_path="configs/gsm8k.yaml",
+        dataset_path: str | None = None,
+    ):
         self.name = name.replace("_", " ").title()
         self.results = []
         cfg = OmegaConf.load(resolve_config_path(config_path))
 
-        dataset_path = cfg.get("dataset_path", "")
+        dataset_path = dataset_path or cfg.get("dataset_path", "")
         if not os.path.exists(dataset_path):
             from datasets import load_dataset
 
