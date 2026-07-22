@@ -1,0 +1,8 @@
+prompt_template: |
+  {question}
+
+payload:
+  temperature: 0.0
+  max_completion_tokens: 1024
+  top_k: -1
+  top_p: 1

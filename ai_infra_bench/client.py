@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Callable, Dict, List, Tuple
 
-from ai_infra_bench.check import (
+from ai_infra_bench.check_utils import (
     check_client_labels,
     check_dir,
     check_param_in_cmd,

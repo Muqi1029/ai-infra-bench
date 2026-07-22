@@ -1,0 +1,20 @@
+name: AIME25
+
+prompt_template: |
+  Solve the following AIME (American Invitational Mathematics Examination) problem step by step. The last line of your response should be of the form Answer: $ANSWER (without quotes) where $ANSWER is the answer to the problem.
+
+  Note: AIME answers are always integers from 000 to 999 (inclusive). If you get a non-integer answer, you likely made a computational error.
+
+  {question}
+
+  Remember to put your answer on its own line after "Answer:", and express your answer as an integer from 000 to 999.
+
+payload:
+  temperature: 0.0
+  max_completion_tokens: 102400
+  top_k: -1
+  top_p: 1
+  chat_template_kwargs:
+    enable_thinking: false
+
+dataset_path: data/AIME2025

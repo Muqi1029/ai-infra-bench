@@ -8,7 +8,7 @@ import ai_infra_bench
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="ai-bench-cli",
+        prog="ai-infra-bench-cli",
         description="Generate example templates for SGL or client benchmarking.",
     )
 

@@ -1,0 +1,15 @@
+name: GSM8K
+
+prompt_template: |
+  Question: {question}
+  Answer:
+
+payload:
+  temperature: 0.0
+  max_completion_tokens: 10240
+  top_k: -1
+  top_p: 1
+  chat_template_kwargs:
+    enable_thinking: false
+
+dataset_path: openai/gsm8k
