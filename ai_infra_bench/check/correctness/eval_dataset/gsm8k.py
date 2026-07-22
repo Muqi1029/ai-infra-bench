@@ -10,6 +10,7 @@ from ai_infra_bench.check.correctness.eval_dataset.base import Eval
 from ai_infra_bench.check.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
+    generate_payload_from_content,
     read_jsonl,
     resolve_config_path,
 )
@@ -28,6 +29,19 @@ def get_answer_value(answer_str):
         return INVALID
 
 
+def get_one_example(row, include_answer: bool) -> str:
+    prompt = f"Question: {row['question']}\nAnswer:"
+    if include_answer:
+        prompt += f" {row['answer']}"
+    return prompt
+
+
+def get_few_shot_examples(rows, num_shots: int) -> str:
+    return "".join(
+        get_one_example(rows[i], include_answer=True) + "\n\n" for i in range(num_shots)
+    )
+
+
 class GSM8KEval(Eval):
 
     def __init__(
@@ -35,18 +49,35 @@ class GSM8KEval(Eval):
         name: str,
         config_path="configs/gsm8k.yaml",
         dataset_path: str | None = None,
+        num_shots: int = 5,
     ):
         self.name = name.replace("_", " ").title()
         self.results = []
+        self.num_shots = num_shots
         cfg = OmegaConf.load(resolve_config_path(config_path))
 
         dataset_path = dataset_path or cfg.get("dataset_path", "")
         if not os.path.exists(dataset_path):
             from datasets import load_dataset
 
-            self.rows = load_dataset(dataset_path, name="main", split="test")
+            rows = load_dataset(dataset_path, name="main", split="test")
         else:
-            self.rows = list(read_jsonl(dataset_path))
+            rows = list(read_jsonl(dataset_path))
+
+        self.few_shot_prompt = ""
+        if self.num_shots:
+            if len(rows) <= self.num_shots:
+                raise ValueError(
+                    f"GSM8K dataset has {len(rows)} examples but num_shots="
+                    f"{self.num_shots} requires at least {self.num_shots + 1}."
+                )
+            self.few_shot_prompt = get_few_shot_examples(rows, self.num_shots)
+            if hasattr(rows, "select"):
+                self.rows = rows.select(range(self.num_shots, len(rows)))
+            else:
+                self.rows = rows[self.num_shots :]
+        else:
+            self.rows = rows
 
         self.prompt_template = cfg.get("prompt_template", "")
         self.default_payload = OmegaConf.to_container(
@@ -68,12 +99,23 @@ class GSM8KEval(Eval):
 
     def get_payload_and_answer(self, override_payload) -> Tuple[Dict, Any]:
         for row in self.rows:
-            payload = generate_payload(
-                self.prompt_template,
-                row,
-                default_payload=self.default_payload,
-                override_payload=override_payload,
-            )
+            row = dict(row)
+            if self.num_shots:
+                prompt_content = self.few_shot_prompt + get_one_example(
+                    row, include_answer=False
+                )
+                payload = generate_payload_from_content(
+                    prompt_content,
+                    default_payload=self.default_payload,
+                    override_payload=override_payload,
+                )
+            else:
+                payload = generate_payload(
+                    self.prompt_template,
+                    row,
+                    default_payload=self.default_payload,
+                    override_payload=override_payload,
+                )
             yield payload, get_answer_value(row["answer"])
 
     def _eval(self, body, answer, payload=None):

@@ -120,6 +120,7 @@ class ConstrainedDecodingEval(Eval):
         name: str,
         config_path="configs/constrained_decoding.yaml",
         dataset_path: str | None = None,
+        num_shots: int = 0,
     ):
         self.name = name.replace("_", " ").title()
         self.results = []

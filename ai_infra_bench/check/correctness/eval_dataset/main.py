@@ -19,11 +19,14 @@ def parse_args():
 
     parser.add_argument("--config", type=str)
     parser.add_argument("--dataset-path", type=str)
+    parser.add_argument("--num-shots", type=int, default=5)
     parser.add_argument("--num-questions", type=int)
     parser.add_argument("--override-payload", type=str)
     args = parser.parse_args()
     if args.config and len(args.evals) != 1:
         parser.error("--config can only be used with exactly one --evals value")
+    if args.num_shots < 0:
+        parser.error("--num-shots must be non-negative")
     return args
 
 

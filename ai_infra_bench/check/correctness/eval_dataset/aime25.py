@@ -40,6 +40,7 @@ class AIME25Eval(Eval):
         name: str,
         config_path="configs/aime25.yaml",
         dataset_path: str | None = None,
+        num_shots: int = 0,
     ):
         self.name = name.replace("_", " ").title()
         self.results = []

@@ -30,6 +30,7 @@ class EvalRuntime:
                 eval_name,
                 config_path=runtime_args.config,
                 dataset_path=runtime_args.dataset_path,
+                num_shots=runtime_args.num_shots,
             )
             for eval_name in runtime_args.evals
         ]
@@ -156,6 +157,7 @@ class Eval:
         name: str,
         config_path: str | None = None,
         dataset_path: str | None = None,
+        num_shots: int | None = None,
     ):
         # Convention: name "gsm8k" -> eval_dataset/gsm8k.py -> *Eval subclass
         import importlib
@@ -175,6 +177,8 @@ class Eval:
                     kwargs["config_path"] = config_path
                 if dataset_path is not None:
                     kwargs["dataset_path"] = dataset_path
+                if num_shots is not None:
+                    kwargs["num_shots"] = num_shots
                 return obj(name, **kwargs)
 
         raise ValueError(f"No Eval subclass found in module for name={name!r}")

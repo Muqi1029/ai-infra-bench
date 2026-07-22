@@ -21,7 +21,15 @@ def resolve_config_path(config_path: str) -> str:
 def generate_payload(
     prompt_template: str, row: Dict, default_payload: Dict, override_payload
 ):
-    user_message = {"role": "user", "content": prompt_template.format(**row)}
+    return generate_payload_from_content(
+        prompt_template.format(**row), default_payload, override_payload
+    )
+
+
+def generate_payload_from_content(
+    prompt_content: str, default_payload: Dict, override_payload
+):
+    user_message = {"role": "user", "content": prompt_content}
     payload = copy.deepcopy(default_payload)
     payload.update(override_payload)
     if payload.get("messages") is None:
