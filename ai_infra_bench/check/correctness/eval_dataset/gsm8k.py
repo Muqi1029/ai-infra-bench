@@ -11,6 +11,7 @@ from ai_infra_bench.check.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
     read_jsonl,
+    resolve_config_path,
 )
 
 INVALID = -9999999
@@ -32,7 +33,7 @@ class GSM8KEval(Eval):
     def __init__(self, name: str, config_path="configs/gsm8k.yaml"):
         self.name = name.replace("_", " ").title()
         self.results = []
-        cfg = OmegaConf.load(config_path)
+        cfg = OmegaConf.load(resolve_config_path(config_path))
 
         dataset_path = cfg.get("dataset_path", "")
         if not os.path.exists(dataset_path):

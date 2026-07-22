@@ -1,15 +1,21 @@
 import copy
 import json
+from importlib import resources
+from pathlib import Path
 from typing import Any, Dict
 
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
-def _to_plain(obj: Any) -> Any:
-    """Convert OmegaConf nodes to plain Python so aiohttp/json can serialize."""
-    if isinstance(obj, (DictConfig, ListConfig)):
-        return OmegaConf.to_container(obj, resolve=True)
-    return obj
+def resolve_config_path(config_path: str) -> str:
+    candidate = Path(config_path)
+    if candidate.is_absolute() or candidate.exists():
+        return str(candidate)
+
+    path = (
+        resources.files("ai_infra_bench.check.correctness.eval_dataset") / config_path
+    )
+    return str(path)
 
 
 def generate_payload(

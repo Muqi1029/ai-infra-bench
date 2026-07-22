@@ -18,6 +18,7 @@ include = ["ai_infra_bench*"]
 
 [project.scripts]
 ai-infra-bench = "ai_infra_bench.cli:main"
+ai-infra-bench-eval-dataset = "ai_infra_bench.check.correctness.eval_dataset.main:main"
 
 [tool.setuptools.package-data]
-"ai_infra_bench" = ["examples/*.py"]
+"ai_infra_bench" = ["examples/*.py", "check/correctness/eval_dataset/configs/*.yaml"]

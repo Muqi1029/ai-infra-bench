@@ -5,7 +5,10 @@ from typing import Any, Dict, Tuple
 from omegaconf import OmegaConf
 
 from ai_infra_bench.check.correctness.eval_dataset.base import Eval
-from ai_infra_bench.check.correctness.eval_dataset.utils import generate_payload
+from ai_infra_bench.check.correctness.eval_dataset.utils import (
+    generate_payload,
+    resolve_config_path,
+)
 
 schema = {
     "type": "object",
@@ -115,7 +118,7 @@ class ConstrainedDecodingEval(Eval):
     def __init__(self, name: str, config_path="configs/constrained_decoding.yaml"):
         self.name = name.replace("_", " ").title()
         self.results = []
-        cfg = OmegaConf.load(config_path)
+        cfg = OmegaConf.load(resolve_config_path(config_path))
 
         self.prompt_template = cfg.get("prompt_template", "")
         self.default_payload = OmegaConf.to_container(

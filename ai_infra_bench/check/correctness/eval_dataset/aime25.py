@@ -8,6 +8,7 @@ from ai_infra_bench.check.correctness.eval_dataset.base import Eval
 from ai_infra_bench.check.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
+    resolve_config_path,
 )
 
 ANSWER_PATTERN = r"(?i)Answer\s*:\s*([^\n]+)"
@@ -37,7 +38,7 @@ class AIME25Eval(Eval):
     def __init__(self, name: str, config_path="configs/aime25.yaml"):
         self.name = name.replace("_", " ").title()
         self.results = []
-        cfg = OmegaConf.load(config_path)
+        cfg = OmegaConf.load(resolve_config_path(config_path))
 
         dataset_path = cfg.get("dataset_path", "")
         from datasets import load_dataset

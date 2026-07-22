@@ -15,11 +15,15 @@ def parse_args():
     parser.add_argument("--max-concurrency", type=int, default=32)
     parser.add_argument("--repeat", type=int, default=1)
 
-    parser.add_argument("--evals", nargs="+", choices=DATASET_CHOICES)
+    parser.add_argument("--evals", nargs="+", choices=DATASET_CHOICES, required=True)
 
+    parser.add_argument("--config", type=str)
     parser.add_argument("--num-questions", type=int)
     parser.add_argument("--override-payload", type=str)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.config and len(args.evals) != 1:
+        parser.error("--config can only be used with exactly one --evals value")
+    return args
 
 
 def main():
