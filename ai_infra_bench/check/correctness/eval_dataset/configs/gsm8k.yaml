@@ -1,6 +1,6 @@
 name: GSM8K
 
-prompt_template: |
+prompt_template: |-
   Question: {question}
   Answer:
 
