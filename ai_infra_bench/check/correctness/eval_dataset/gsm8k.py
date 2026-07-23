@@ -13,6 +13,7 @@ from ai_infra_bench.check.correctness.eval_dataset.utils import (
     generate_payload_from_content,
     read_jsonl,
     resolve_config_path,
+    resolve_dataset_path,
 )
 
 INVALID = -9999999
@@ -56,7 +57,7 @@ class GSM8KEval(Eval):
         self.num_shots = num_shots
         cfg = OmegaConf.load(resolve_config_path(config_path))
 
-        dataset_path = dataset_path or cfg.get("dataset_path", "")
+        dataset_path = resolve_dataset_path(dataset_path or cfg.get("dataset_path", ""))
         if not os.path.exists(dataset_path):
             from datasets import load_dataset
 

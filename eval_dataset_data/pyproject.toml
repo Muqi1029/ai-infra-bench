@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-infra-bench-dataset"
+version = "0.1.3.post3"
+description = "Packaged evaluation datasets for ai-infra-bench"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_infra_bench_dataset*"]
+
+[tool.setuptools.package-data]
+"ai_infra_bench_dataset" = [
+  "data/AIME2025/*.jsonl",
+  "data/AIME2025/README.md",
+  "data/gsm8k/*.jsonl",
+]

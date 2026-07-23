@@ -9,4 +9,4 @@ payload:
   max_completion_tokens: 10240
   top_p: 1
 
-dataset_path: openai/gsm8k
+dataset_path: data-package://data/gsm8k/test.jsonl

@@ -7,16 +7,40 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
+EVAL_DATASET_PACKAGE = "ai_infra_bench.check.correctness.eval_dataset"
+DATA_PACKAGE_RESOURCE_PREFIX = "data-package://"
+DATA_PACKAGE = "ai_infra_bench_dataset"
+
 
 def resolve_config_path(config_path: str) -> str:
     candidate = Path(config_path)
     if candidate.is_absolute() or candidate.exists():
         return str(candidate)
 
-    path = (
-        resources.files("ai_infra_bench.check.correctness.eval_dataset") / config_path
-    )
+    path = resources.files(EVAL_DATASET_PACKAGE) / config_path
     return str(path)
+
+
+def resolve_dataset_path(dataset_path: str) -> str:
+    if dataset_path.startswith(DATA_PACKAGE_RESOURCE_PREFIX):
+        resource_path = dataset_path.removeprefix(DATA_PACKAGE_RESOURCE_PREFIX)
+        try:
+            return str(resources.files(DATA_PACKAGE) / resource_path)
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Dataset package is not installed. Install ai-infra-bench[data] "
+                "or install ai-infra-bench-dataset."
+            ) from exc
+
+    candidate = Path(dataset_path)
+    if candidate.is_absolute() or candidate.exists():
+        return str(candidate)
+
+    path = resources.files(EVAL_DATASET_PACKAGE) / dataset_path
+    if path.exists():
+        return str(path)
+
+    return dataset_path
 
 
 def generate_payload(

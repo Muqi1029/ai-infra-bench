@@ -1,3 +1,4 @@
+import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
@@ -8,7 +9,9 @@ from ai_infra_bench.check.correctness.eval_dataset.base import Eval
 from ai_infra_bench.check.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
+    read_jsonl,
     resolve_config_path,
+    resolve_dataset_path,
 )
 
 ANSWER_PATTERN = r"(?i)Answer\s*:\s*([^\n]+)"
@@ -46,11 +49,15 @@ class AIME25Eval(Eval):
         self.results = []
         cfg = OmegaConf.load(resolve_config_path(config_path))
 
-        dataset_path = dataset_path or cfg.get("dataset_path", "")
-        from datasets import load_dataset
+        dataset_path = resolve_dataset_path(dataset_path or cfg.get("dataset_path", ""))
+        if os.path.isdir(dataset_path):
+            dataset1 = read_jsonl(os.path.join(dataset_path, "aime2025-I.jsonl"))
+            dataset2 = read_jsonl(os.path.join(dataset_path, "aime2025-II.jsonl"))
+        else:
+            from datasets import load_dataset
 
-        dataset1 = load_dataset(dataset_path, "AIME2025-I", split="test")
-        dataset2 = load_dataset(dataset_path, "AIME2025-II", split="test")
+            dataset1 = load_dataset(dataset_path, "AIME2025-I", split="test")
+            dataset2 = load_dataset(dataset_path, "AIME2025-II", split="test")
         examples1 = [
             {"question": row["question"], "answer": str(row["answer"])}
             for row in dataset1
