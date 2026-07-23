@@ -5,7 +5,7 @@ prompt_template: |-
   Answer:
 
 payload:
-  temperature: 0
+  temperature: 0.0
   max_completion_tokens: 10240
   top_p: 1
 

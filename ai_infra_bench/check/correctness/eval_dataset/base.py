@@ -58,12 +58,13 @@ class EvalRuntime:
                             self.endpoint_url,
                             body,
                         )
+                        eval.add_failed_result(body, payload)
                         return
 
                     eval.eval(body, answer, payload)
             except Exception:
                 logger.exception("Request failed for eval=%s", eval.name)
-                eval.eval("", answer, payload)
+                eval.add_failed_result(None, payload)
             finally:
                 pbar.update(1)
 
@@ -95,13 +96,14 @@ class EvalRuntime:
                         ]
                         await asyncio.gather(*tasks)
 
-                        success_rate, failed = eval.summary()
+                        correct_rate, wrong_rate, failed_rate = eval.summary()
                         logger.info(
-                            "%s round %s: success_rate=%.4f failed=%d",
+                            "%s round %s: correct_rate=%.4f wrong_rate=%.4f failed_rate=%.4f",
                             eval.name,
                             i + 1,
-                            success_rate,
-                            len(failed),
+                            correct_rate,
+                            wrong_rate,
+                            failed_rate,
                         )
         finally:
             pbar.close()
@@ -114,6 +116,7 @@ class EvalResult:
     response: Any
     payload: Dict = field(default_factory=dict)
     is_right: bool = False
+    is_failed: bool = False
 
 
 class Eval:
@@ -126,7 +129,7 @@ class Eval:
     def get_payload_and_answer(self) -> Iterable[Tuple[Dict, Any]]:
         raise NotImplementedError()
 
-    def _eval(self, response_content, answer):
+    def _eval(self, response_content, answer, payload=None):
         raise NotImplementedError()
 
     def eval(self, response_content, answer, payload):
@@ -138,18 +141,32 @@ class Eval:
             )
         )
 
+    def add_failed_result(self, response_content, payload):
+        self.results.append(
+            EvalResult(
+                response=response_content,
+                payload=payload,
+                is_right=False,
+                is_failed=True,
+            )
+        )
+
     def summary(self):
         if not self.results:
-            return 0.0, []
-        failed_eval_result = [
-            eval_result for eval_result in self.results if not eval_result.is_right
-        ]
-        success_rate = (len(self.results) - len(failed_eval_result)) / len(self.results)
-        self.results = []
-        print(
-            f"{self.name} success_rate={success_rate:.2f} failed={len(failed_eval_result)}"
+            return 0.0, 0.0, 0.0
+        total = len(self.results)
+        correct_count = sum(
+            1
+            for eval_result in self.results
+            if eval_result.is_right and not eval_result.is_failed
         )
-        return success_rate, failed_eval_result
+        failed_count = sum(1 for eval_result in self.results if eval_result.is_failed)
+        wrong_count = total - correct_count - failed_count
+        correct_rate = correct_count / total
+        wrong_rate = wrong_count / total
+        failed_rate = failed_count / total
+        self.results = []
+        return correct_rate, wrong_rate, failed_rate
 
     @classmethod
     def create_from_name(
