@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 from typing import Any, Dict, Tuple
 
 from omegaconf import OmegaConf
@@ -10,6 +11,7 @@ from ai_infra_bench.check.correctness.eval_dataset.utils import (
     resolve_config_path,
 )
 
+logger = logging.getLogger(__name__)
 schema = {
     "type": "object",
     "properties": {
@@ -72,7 +74,12 @@ def check_function(function) -> bool:
         return False
     if function["name"] != "select_name":
         return False
-    args = json.loads(function["arguments"])
+    try:
+        args = json.loads(function["arguments"])
+    except json.decoder.JSONDecodeError:
+        logger.error(f"Failed to loads: {function["arguments"]}")
+        return False
+
     if args["name_"] != "Muqi Li" or args["_age"] != 24:
         return False
     return True
@@ -104,10 +111,14 @@ def check_answer(response_body, mode: str, is_thinking: bool) -> bool:
             return False
         return check_function(tool_calls[0].get("function"))
     elif mode == "response_format_json_schema":
-        data = json.loads(message.get("content"))
-        if data["name_"] != "Muqi Li" or data["_age"] != 24:
+        try:
+            data = json.loads(message.get("content"))
+            if data["name_"] != "Muqi Li" or data["_age"] != 24:
+                return False
+            return True
+        except json.decoder.JSONDecodeError:
+            logger.error(f"Failed to loads: {message.get("content")}")
             return False
-        return True
     else:
         raise ValueError(f"{mode=} is not supported")
 

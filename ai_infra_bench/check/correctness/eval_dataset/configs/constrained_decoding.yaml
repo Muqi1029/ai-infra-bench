@@ -3,6 +3,6 @@ prompt_template: |
 
 payload:
   temperature: 0.0
-  max_completion_tokens: 1024
+  max_completion_tokens: 2048
   top_k: -1
   top_p: 1
