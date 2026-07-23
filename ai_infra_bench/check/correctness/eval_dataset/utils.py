@@ -1,10 +1,11 @@
 import copy
 import json
+import logging
 from importlib import resources
 from pathlib import Path
 from typing import Any, Dict
 
-from omegaconf import DictConfig, ListConfig, OmegaConf
+logger = logging.getLogger(__name__)
 
 
 def resolve_config_path(config_path: str) -> str:
@@ -49,7 +50,9 @@ def read_jsonl(filename: str):
 
 def extract_response_text(response_json: Dict[str, Any]) -> str:
     choice = (response_json.get("choices") or [{}])[0]
-    message = choice.get("message") or {}
-    content = message.get("content") or ""
-    reasoning = message.get("reasoning_content") or ""
-    return f"{reasoning}{content}"
+    content = choice.get("message", {}).get("content") or ""
+    if not content:
+        logger.warning(
+            f"content is None, the full response choice is\n{json.dumps(choice, ensure_ascii=False, indent=4)}"
+        )
+    return f"{content}"
