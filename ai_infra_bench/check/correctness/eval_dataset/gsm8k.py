@@ -1,10 +1,11 @@
 import ast
+import json
+import logging
 import os
 import re
 from typing import Any, Dict, Tuple
 
-import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 from ai_infra_bench.check.correctness.eval_dataset.base import Eval
 from ai_infra_bench.check.correctness.eval_dataset.utils import (
@@ -17,6 +18,7 @@ from ai_infra_bench.check.correctness.eval_dataset.utils import (
 )
 
 INVALID = -9999999
+logger = logging.getLogger(__name__)
 
 
 def get_answer_value(answer_str):
@@ -84,6 +86,10 @@ class GSM8KEval(Eval):
         self.default_payload = OmegaConf.to_container(
             cfg.get("payload", {}), resolve=True
         )
+        if self.default_payload:
+            logger.info(
+                f"Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
+            )
 
     def maybe_truncate(self, num_questions: int | None):
         if num_questions is None:
@@ -121,12 +127,3 @@ class GSM8KEval(Eval):
 
     def _eval(self, body, answer, payload=None):
         return get_answer_value(extract_response_text(body)) == answer
-
-
-@hydra.main(config_path="configs", config_name="gsm8k", version_base=None)
-def main(cfg: DictConfig):
-    pass
-
-
-if __name__ == "__main__":
-    main()

@@ -1,9 +1,10 @@
+import json
+import logging
 import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
-import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 from ai_infra_bench.check.correctness.eval_dataset.base import Eval
 from ai_infra_bench.check.correctness.eval_dataset.utils import (
@@ -13,6 +14,8 @@ from ai_infra_bench.check.correctness.eval_dataset.utils import (
     resolve_config_path,
     resolve_dataset_path,
 )
+
+logger = logging.getLogger(__name__)
 
 ANSWER_PATTERN = r"(?i)Answer\s*:\s*([^\n]+)"
 
@@ -72,6 +75,10 @@ class AIME25Eval(Eval):
         self.default_payload = OmegaConf.to_container(
             cfg.get("payload", {}), resolve=True
         )
+        if self.default_payload:
+            logger.info(
+                f"Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
+            )
 
     def maybe_truncate(self, num_questions: int | None):
         if num_questions is None:
@@ -100,12 +107,3 @@ class AIME25Eval(Eval):
         match = re.search(ANSWER_PATTERN, extract_response_text(response_json))
         extracted_answer = match.group(1).strip() if match else None
         return normalize_aime_answer(extracted_answer) == answer
-
-
-@hydra.main(config_path="configs", config_name="aime25", version_base=None)
-def main(cfg: DictConfig):
-    pass
-
-
-if __name__ == "__main__":
-    main()

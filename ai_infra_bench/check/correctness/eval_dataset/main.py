@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from argparse import ArgumentParser
 
 from ai_infra_bench.check.correctness.eval_dataset.base import (
     DATASET_CHOICES,
     EvalRuntime,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args():
@@ -15,7 +18,9 @@ def parse_args():
     parser.add_argument("--max-concurrency", type=int, default=32)
     parser.add_argument("--repeat", type=int, default=1)
 
-    parser.add_argument("--evals", nargs="+", choices=DATASET_CHOICES, required=True)
+    parser.add_argument(
+        "--evals", nargs="+", choices=["all", *DATASET_CHOICES], required=True
+    )
 
     parser.add_argument("--config", type=str)
     parser.add_argument("--dataset-path", type=str)
@@ -27,6 +32,10 @@ def parse_args():
         parser.error("--config can only be used with exactly one --evals value")
     if args.num_shots < 0:
         parser.error("--num-shots must be non-negative")
+
+    if "all" in args.evals:
+        logger.info(f"--evals has all, means eval all datasets: {DATASET_CHOICES}")
+        args.evals = DATASET_CHOICES
     return args
 
 

@@ -37,6 +37,7 @@ class EvalRuntime:
         self.override_payload = {}
         if runtime_args.override_payload:
             self.override_payload = json.loads(runtime_args.override_payload)
+            logging.info(f"Override Payload: {self.override_payload}")
         self.maybe_truncate_eval()
 
     def maybe_truncate_eval(self):
