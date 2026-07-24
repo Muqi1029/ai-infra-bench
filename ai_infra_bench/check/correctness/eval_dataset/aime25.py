@@ -77,7 +77,7 @@ class AIME25Eval(Eval):
         )
         if self.default_payload:
             logger.info(
-                f"Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
+                f"[{self.name}] Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
             )
 
     def maybe_truncate(self, num_questions: int | None):
