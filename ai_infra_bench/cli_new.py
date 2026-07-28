@@ -19,6 +19,12 @@ def main(argv: Optional[Sequence[str]] = None):
 
         main(extra_argv)
 
+    elif args.subcommand == "eval-logits":
+        pass
+
+    elif args.subcommand == "eval-hidden-states":
+        pass
+
 
 if __name__ == "__main__":
     main()
