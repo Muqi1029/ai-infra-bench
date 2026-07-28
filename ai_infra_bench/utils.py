@@ -317,3 +317,9 @@ def print_table(title: str, rows: List[List[str]]) -> None:
         if idx == 0:
             print(border)
     print(border)
+
+
+def sanitize_url(url: str) -> str:
+    if not url.startswith(("http://", "https://")):
+        return f"http://{url.strip()}"
+    return url

@@ -14,6 +14,8 @@ from typing import Dict
 import openai
 import requests
 
+from ai_infra_bench.utils import sanitize_url
+
 json_schema_response_format = {
     "name": "require_named",
     "description": "a schema for the response format",
@@ -563,7 +565,9 @@ def openai_request(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser("")
-    parser.add_argument("--base-url", type=str, default="http://localhost:8888")
+    parser.add_argument(
+        "--base-url", type=sanitize_url, default="http://localhost:8888"
+    )
     parser.add_argument("--api-key", type=str, default="JustKeepMe")
     parser.add_argument(
         "--model", type=str, help="override the model field in the payload"
@@ -620,8 +624,6 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     if args.backend == "http":
-        if not args.base_url.startswith("http://"):
-            args.base_url = f"http://{args.base_url.strip()}"
         http_request(args)
     else:
         openai_request(args)
