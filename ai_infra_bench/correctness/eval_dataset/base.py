@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from aiohttp import ClientSession
 from tqdm import tqdm
 
-from ai_infra_bench.check.common import _create_bench_client_session
+from ai_infra_bench.common import _create_bench_client_session
 
 logger = logging.getLogger(__name__)
 
@@ -182,11 +182,12 @@ class Eval:
 
         module_name = name.lower().replace("-", "_")
         try:
-            module = importlib.import_module(
-                f"ai_infra_bench.check.correctness.eval_dataset.{module_name}"
-            )
+            module_path = f"ai_infra_bench.correctness.eval_dataset.{module_name}"
+            module = importlib.import_module(module_path)
         except ModuleNotFoundError as e:
-            raise ValueError(f"Unknown eval name: {name!r}") from e
+            raise ValueError(
+                f"Failed to import {module_path}. This is mostly due to this eval is not supported yet"
+            ) from e
 
         for obj in vars(module).values():
             if isinstance(obj, type) and issubclass(obj, cls) and obj is not cls:

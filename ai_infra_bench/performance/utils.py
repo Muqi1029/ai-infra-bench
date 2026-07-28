@@ -5,10 +5,9 @@ import random
 from dataclasses import asdict
 from typing import List, Optional
 
-import aiohttp
 import numpy as np
 
-from ai_infra_bench.check.performance.struct import OutputMetric
+from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils import print_table
 
 logger = logging.getLogger(__name__)

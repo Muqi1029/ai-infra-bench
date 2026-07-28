@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-EVAL_DATASET_PACKAGE = "ai_infra_bench.check.correctness.eval_dataset"
+EVAL_DATASET_PACKAGE = "ai_infra_bench.correctness.eval_dataset"
 DATA_PACKAGE_RESOURCE_PREFIX = "data-package://"
 DATA_PACKAGE = "ai_infra_bench_dataset"
 

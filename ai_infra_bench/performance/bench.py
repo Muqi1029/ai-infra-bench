@@ -10,10 +10,10 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
-from ai_infra_bench.check.performance.common_args import add_common_args
-from ai_infra_bench.check.performance.core import request_func
-from ai_infra_bench.check.performance.struct import OutputMetric
-from ai_infra_bench.check.performance.utils import (
+from ai_infra_bench.performance.common_args import add_common_args
+from ai_infra_bench.performance.core import request_func
+from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.performance.utils import (
     _create_bench_client_session,
     get_request,
     handle_outputs,

@@ -9,8 +9,8 @@ from typing import Dict, List, Optional
 import aiohttp
 from tqdm import tqdm
 
-from ai_infra_bench.check.performance.core import request_func
-from ai_infra_bench.check.performance.utils import (
+from ai_infra_bench.performance.core import request_func
+from ai_infra_bench.performance.utils import (
     _create_bench_client_session,
     get_request,
     handle_outputs,

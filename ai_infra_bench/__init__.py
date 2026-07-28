@@ -1,6 +1,6 @@
 import logging
 
-from ai_infra_bench.client import client_cmp, client_gen, client_slo
+# from ai_infra_bench.client import client_cmp, client_gen, client_slo
 from ai_infra_bench.version import __version__
 
 logging.basicConfig(

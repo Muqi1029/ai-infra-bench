@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional, Tuple
 
 from omegaconf import OmegaConf
 
-from ai_infra_bench.check.correctness.eval_dataset.base import Eval
-from ai_infra_bench.check.correctness.eval_dataset.utils import (
+from ai_infra_bench.correctness.eval_dataset.base import Eval
+from ai_infra_bench.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
     read_jsonl,

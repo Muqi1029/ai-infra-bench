@@ -12,7 +12,7 @@ from typing import AsyncIterator, Dict, Optional
 import aiohttp
 from tqdm import tqdm
 
-from ai_infra_bench.check.performance.struct import OutputMetric
+from ai_infra_bench.performance.struct import OutputMetric
 
 logger = logging.getLogger(__name__)
 

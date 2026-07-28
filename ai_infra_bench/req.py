@@ -561,7 +561,7 @@ def openai_request(args):
         )
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser("")
     parser.add_argument("--base-url", type=str, default="http://localhost:8888")
     parser.add_argument("--api-key", type=str, default="JustKeepMe")
@@ -618,7 +618,7 @@ def main():
     mutex_group.add_argument("--payload-path", type=str, help="The path of payload")
     mutex_group.add_argument("--input-ids-path", type=str, help="The path of input_ids")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.backend == "http":
         if not args.base_url.startswith("http://"):
             args.base_url = f"http://{args.base_url.strip()}"
