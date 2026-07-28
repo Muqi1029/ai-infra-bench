@@ -8,26 +8,31 @@ def main(argv: Optional[Sequence[str]] = None):
     subparsers.add_parser("req", help="Send a simple request", add_help=False)
     subparsers.add_parser("eval-dataset", help="Eval Dataset", add_help=False)
     subparsers.add_parser("eval-logits", help="Eval Logits", add_help=False)
+    subparsers.add_parser(
+        "eval-hidden-states", help="Eval Hidden States", add_help=False
+    )
 
-    args, extra_argv = parser.parse_known_args()
+    args, extra_argv = parser.parse_known_args(argv)
 
     if args.subcommand == "req":
         from ai_infra_bench.req import main
 
-        main(extra_argv)
+        return main(extra_argv)
     elif args.subcommand == "eval-dataset":
         from ai_infra_bench.correctness.eval_dataset.main import main
 
-        main(extra_argv)
+        return main(extra_argv)
 
     elif args.subcommand == "eval-logits":
         from ai_infra_bench.correctness.logits import main
 
-        main(extra_argv)
+        return main(extra_argv)
 
     elif args.subcommand == "eval-hidden-states":
-        pass
+        from ai_infra_bench.correctness.hidden_states import main
+
+        return main(extra_argv)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
