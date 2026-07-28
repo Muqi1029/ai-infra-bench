@@ -8,13 +8,21 @@ dynamic = ["version"]
 description = "AI Infra bench"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["plotly", "numpy", "psutil", "requests", "tqdm", "hydra-core"]
+dependencies = [
+    "openai",
+    "plotly",
+    "numpy",
+    "psutil",
+    "requests",
+    "tqdm",
+    "hydra-core",
+]
 
 [project.optional-dependencies]
-data = ["datasets", "ai-infra-bench-dataset==0.1.4"]
+data = ["datasets", "ai-infra-bench-dataset==0.1.4.post1"]
 
 [tool.setuptools.dynamic]
-version = {attr = "ai_infra_bench.version.__version__"}
+version = { attr = "ai_infra_bench.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
