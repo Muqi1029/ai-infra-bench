@@ -620,6 +620,8 @@ def main():
 
     args = parser.parse_args()
     if args.backend == "http":
+        if not args.base_url.startswith("http://"):
+            args.base_url = f"http://{args.base_url.strip()}"
         http_request(args)
     else:
         openai_request(args)
