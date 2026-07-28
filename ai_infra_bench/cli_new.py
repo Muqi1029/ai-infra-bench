@@ -3,10 +3,10 @@ from typing import Optional, Sequence
 
 
 def main(argv: Optional[Sequence[str]] = None):
-    parser = ArgumentParser(prog="AI Infra Bench(aib) usage")
+    parser = ArgumentParser(prog="AI Infra Bench(aib)")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
-    subparsers.add_parser("req", help="Send a simple request")
-    subparsers.add_parser("eval-dataset", help="Eval Dataset")
+    subparsers.add_parser("req", help="Send a simple request", add_help=False)
+    subparsers.add_parser("eval-dataset", help="Eval Dataset", add_help=False)
 
     args, extra_argv = parser.parse_known_args()
 
