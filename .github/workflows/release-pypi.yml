@@ -8,7 +8,9 @@ on:
       - "ai_infra_bench/version.py"
 
 jobs:
-  publish:
+  # Publish dataset first so the matching version exists when the main
+  # package pins ai-infra-bench-dataset==<version>.
+  publish-dataset:
     if: github.repository == 'Muqi1029/ai-infra-bench'
     runs-on: ubuntu-latest
     steps:
@@ -16,15 +18,74 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Clone example code
+      - name: Bake version from ai_infra_bench/version.py
+        run: |
+          VERSION=$(python -c "from ai_infra_bench.version import __version__; print(__version__)")
+          echo "__version__ = \"${VERSION}\"" > eval_dataset_data/ai_infra_bench_dataset/version.py
+          echo "dataset version=${VERSION}"
+
+      - name: Build and upload dataset package
+        working-directory: eval_dataset_data
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          python -m pip install -U pip build twine
+          python -m build
+          python -m twine check dist/*
+          python -m twine upload dist/*
+
+  publish:
+    if: github.repository == 'Muqi1029/ai-infra-bench'
+    needs: publish-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync optional data extra pin with version.py
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          from ai_infra_bench.version import __version__
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          new_text, n = re.subn(
+              r'ai-infra-bench-dataset==[^"\']+',
+              f"ai-infra-bench-dataset=={__version__}",
+              text,
+              count=1,
+          )
+          if n != 1:
+              raise SystemExit(
+                  f"expected to patch exactly 1 dataset pin, patched {n}"
+              )
+          path.write_text(new_text, encoding="utf-8")
+          print(f"pinned ai-infra-bench-dataset=={__version__}")
+          PY
+
+      - name: Bundle example scripts into package data
         run: |
           mkdir -p ai_infra_bench/examples
           cp examples/*.py ai_infra_bench/examples/
 
-      - name: Upload to PyPI
+      - name: Build and upload main package
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          pip install build twine
+          python -m pip install -U pip build twine
           python -m build
-          python -m twine upload dist/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+          python -m twine check dist/*
+          python -m twine upload dist/*
