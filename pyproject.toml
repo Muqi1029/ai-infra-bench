@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 data = ["datasets", "ai-infra-bench-dataset==0.1.4.post1"]
+deepswe = ["datacurve-pier>=0.3.0; python_version >= '3.12'"]
 
 [tool.setuptools.dynamic]
 version = { attr = "ai_infra_bench.version.__version__" }

@@ -13,6 +13,8 @@ from ai_infra_bench.common import _create_bench_client_session
 logger = logging.getLogger(__name__)
 
 DATASET_CHOICES = ["gsm8k", "aime25", "constrained_decoding"]
+DEEPSWE_EVAL = "deepswe"
+AGENT_DATASET_CHOICES = [DEEPSWE_EVAL]
 
 
 class EvalRuntime:
@@ -35,8 +37,10 @@ class EvalRuntime:
             for eval_name in runtime_args.evals
         ]
         self.override_payload = {}
+        if model := getattr(runtime_args, "model", None):
+            self.override_payload["model"] = model
         if runtime_args.override_payload:
-            self.override_payload = json.loads(runtime_args.override_payload)
+            self.override_payload.update(json.loads(runtime_args.override_payload))
             logging.info(f"[All] Override Payload: {self.override_payload}")
         self.maybe_truncate_eval()
 
