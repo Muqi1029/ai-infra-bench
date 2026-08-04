@@ -10,50 +10,14 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
-from ai_infra_bench.common import _create_bench_client_session
+from ai_infra_bench.performance.bench_utils import get_request, handle_outputs, set_seed
 from ai_infra_bench.performance.common_args import add_common_args
 from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.performance.utils import get_request, handle_outputs, set_seed
+from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.req import normalize_payload
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 logger = logging.getLogger(__name__)
-DROP_REQUEST_PARAMS = (
-    "cache_salt",
-    "bootstrap_port",
-    "stop_regex",
-    "routed_experts_start_len",
-    "session_params",
-    "encrypt_type",
-    "task",
-    "stream_reasoning",
-    "extra_key",
-    "return_routed_experts",
-    "no_stop_trim",
-    "bootstrap_room",
-    "priority",
-    "stop_token_ids",
-    "disagg_prefill_dp_rank",
-    "ebnf",
-    "return_hidden_states",
-    "continue_final_message",
-    "routed_dp_rank",
-    "custom_logit_processor",
-    "data_parallel_rank",
-    "use_audio_in_video",
-    "lora_path",
-    "separate_reasoning",
-    "min_dynamic_patch",
-    "max_dynamic_patch",
-    "regex",
-    "bootstrap_host",
-    "custom_params",
-    "return_cached_tokens_details",
-)
 
 
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
@@ -102,32 +66,13 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
     return requests
 
 
-def normalize_payload(payload: Dict) -> None:
-    """Align recorded SGLang request bodies with router/OpenAI expectations."""
-    if payload.get("min_tokens") is not None and payload["min_tokens"] < 1:
-        payload.pop("min_tokens")
-    for param in DROP_REQUEST_PARAMS:
-        payload.pop(param, None)
-
-    response_format = payload.get("response_format")
-    if not isinstance(response_format, dict):
-        return payload
-    json_schema = response_format.get("json_schema")
-    if not isinstance(json_schema, dict):
-        return payload
-    # SGLang logs use schema_; router deserializer requires schema (OpenAI shape).
-    if "schema" not in json_schema and "schema_" in json_schema:
-        json_schema["schema"] = json_schema.pop("schema_")
-    return payload
-
-
 async def run_benchmark(args):
     # read dataset
     if args.with_ts:
         requests = read_requests_with_ts(args.payload_regex_path, args)
     else:
         requests = read_requests(args.payload_regex_path, args)
-    request_url = args.base_url.rstrip("/") + "/v1/chat/completions"
+    request_url = args.base_url + "/v1/chat/completions"
 
     if args.debug:
         args.num_requests = 10
@@ -173,14 +118,14 @@ async def run_benchmark(args):
             logger.info(f"Warming up done")
 
         formal_run_requests = requests[args.num_warmup_requests :]
-        pbar = tqdm(total=len(formal_run_requests), desc="Formally running")
+        pbar = tqdm(total=len(formal_run_requests), desc="Formally Running")
         tasks = []
         benchmark_start_time = time.perf_counter()
         async for payload in get_request(formal_run_requests, args.request_rate):
+            payload["model"] = args.model
             tasks.append(
                 asyncio.create_task(
                     request_func(
-                        args,
                         session,
                         request_url,
                         normalize_payload(payload),

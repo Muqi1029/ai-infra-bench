@@ -298,15 +298,6 @@ def stop_server_process(process, timeout=30, cooldown_period=3):
         time.sleep(cooldown_period)
 
 
-def sanitize_url(url: str) -> str:
-    url = url.rstrip("/")
-    if not url.startswith(("http://", "https://")):
-        return f"http://{url.strip()}"
-    if url.endswith("/v1"):
-        url = url.rstrip("/v1")
-    return url
-
-
 def read_json(filepath: str):
     if not Path(filepath).exists():
         raise ValueError(f"{filepath} doesn't exist!")

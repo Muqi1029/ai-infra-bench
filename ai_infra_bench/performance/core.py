@@ -13,6 +13,7 @@ import aiohttp
 from tqdm import tqdm
 
 from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.utils.req import STREAM_RETURN_PAYLOAD
 
 logger = logging.getLogger(__name__)
 
@@ -38,21 +39,13 @@ async def iter_sse_data(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
 
 
 async def request_func(
-    args: Namespace,
     session: aiohttp.ClientSession,
     request_url: str,
     payload: Dict,
     sem: Optional[asyncio.Semaphore] = None,
     pbar: Optional[tqdm] = None,
 ):
-    # set model and stream
-    if args.model:
-        payload["model"] = args.model
-    payload["stream"] = True
-    payload["stream_options"] = {
-        "include_usage": True,
-        "continuous_usage_stats": True,
-    }
+    payload.update(STREAM_RETURN_PAYLOAD)
 
     output = OutputMetric(payload=payload)
     st = 0.0
@@ -67,9 +60,11 @@ async def request_func(
                             continue
 
                         data = json.loads(chunk)
-                        usage_data = data.get("usage") or {}
-                        if usage_data:
+
+                        if usage_data := data.get("usage"):
                             output.handle_usage_data(usage_data)
+                        if sglext := data.get("sglext"):
+                            output.handle_sglext_data(sglext)
 
                         choices = data.get("choices") or []
                         if not choices:

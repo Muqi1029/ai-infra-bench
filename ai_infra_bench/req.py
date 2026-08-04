@@ -5,8 +5,13 @@ from typing import Dict
 
 import requests
 
-from ai_infra_bench.draw import Color, color_print, fmt, print_table
-from ai_infra_bench.utils import read_json, sanitize_url
+from ai_infra_bench.utils.draw import Color, color_print, fmt, print_table
+from ai_infra_bench.utils.ori import read_json
+from ai_infra_bench.utils.req import (
+    NO_STREAM_RETURN_PAYLOAD,
+    STREAM_RETURN_PAYLOAD,
+    sanitize_url,
+)
 
 json_schema_response_format = {
     "name": "require_named",
@@ -302,8 +307,7 @@ def http_request(args):
 
     info_print(headers, payload, url)
     if args.disable_stream:
-        payload["stream"] = False
-        payload["return_meta_info"] = True
+        payload.update(NO_STREAM_RETURN_PAYLOAD)
         start_time = time.perf_counter()
         res = requests.post(
             url,
@@ -331,13 +335,7 @@ def http_request(args):
             )
             print_metrics(start_time, end_time)
     else:
-        payload["stream"] = True
-        payload["stream_options"] = {
-            "include_usage": True,
-            "continuous_usage_stats": True,
-        }
-        payload["return_cached_tokens_details"] = True
-        payload["return_spec_tokens_details"] = True
+        payload.update(STREAM_RETURN_PAYLOAD)
         normalize_payload(payload)
 
         start_time = time.perf_counter()

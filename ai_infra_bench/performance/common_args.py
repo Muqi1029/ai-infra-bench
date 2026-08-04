@@ -1,6 +1,14 @@
-def add_common_args(parser):
+from argparse import Namespace
+
+from ai_infra_bench.utils.req import sanitize_url
+
+
+def add_common_args(parser: Namespace):
     parser.add_argument(
-        "--base-url", default="http://127.0.0.1:8888", help="The base URL of the router"
+        "--base-url",
+        default="http://127.0.0.1:8888",
+        type=sanitize_url,
+        help="The base URL of the router",
     )
     parser.add_argument(
         "--api-key", default="JustKeepMe", help="The API key of the router"

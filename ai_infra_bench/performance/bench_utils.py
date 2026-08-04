@@ -7,8 +7,8 @@ from typing import List, Optional
 
 import numpy as np
 
-from ai_infra_bench.draw import print_table
 from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.utils.draw import print_table
 
 logger = logging.getLogger(__name__)
 
@@ -81,17 +81,29 @@ def handle_outputs(
         if (itl_ms := calculate_itl_ms(output)) is not None
     ]
     latency_ms_list = [output.latency_ms for output in filtered_outputs]
+
     prompt_tokens_list = [output.prompt_tokens for output in filtered_outputs]
+    total_prompt_tokens = sum(prompt_tokens_list)
+
+    completion_tokens_list = [output.completion_tokens for output in filtered_outputs]
+    reasoning_tokens_list = [output.reasoning_tokens for output in filtered_outputs]
+
+    # cached tokens
     cached_tokens_list = [output.cached_tokens for output in filtered_outputs]
+    total_cached_tokens = sum(cached_tokens_list)
+    total_cached_tokens_device = sum(
+        [output.cached_tokens_device for output in filtered_outputs]
+    )
+    total_cached_tokens_host = sum(
+        [output.cached_tokens_host for output in filtered_outputs]
+    )
+
+    # Match the per-request cache ratio denominator: prompt_tokens - 1.
     cached_tokens_ratio_list = [
         output.cached_tokens / max(output.prompt_tokens - 1, 1)
         for output in filtered_outputs
     ]
-    completion_tokens_list = [output.completion_tokens for output in filtered_outputs]
-    total_prompt_tokens = sum(prompt_tokens_list)
-    total_cached_tokens = sum(cached_tokens_list)
 
-    # Match the per-request cache ratio denominator: prompt_tokens - 1.
     total_cacheable_prompt_tokens = total_prompt_tokens - num_success_requests
     global_cache_ratio = (
         total_cached_tokens / total_cacheable_prompt_tokens
@@ -123,6 +135,14 @@ def handle_outputs(
             ["Output throughput", f"{output_throughput:.2f} tokens/s"],
             ["Total prompt tokens", f"{total_prompt_tokens} tokens"],
             ["Total cached tokens", f"{total_cached_tokens} tokens"],
+            [
+                "Total cached tokens device",
+                f"{total_cached_tokens_device} ({total_cached_tokens_device/total_cached_tokens:.2%}) tokens",
+            ],
+            [
+                "Total cached tokens host",
+                f"{total_cached_tokens_host} ({total_cached_tokens_host/total_cached_tokens:.2%}) tokens",
+            ],
             ["Global cache ratio", f"{global_cache_ratio:.2%}"],
         ],
     )
@@ -136,6 +156,7 @@ def handle_outputs(
             format_percentile(numeric_metrics, 99),
         ]
 
+    # latency
     print_table(
         "Latency & Token Metrics",
         [
@@ -165,6 +186,7 @@ def handle_outputs(
                 *compute_metrics(completion_tokens_list),
                 "tokens",
             ],
+            ["Reasoning tokens", *compute_metrics(reasoning_tokens_list), "tokens"],
             [
                 "Cached tokens",
                 *compute_metrics(cached_tokens_list),
@@ -181,6 +203,40 @@ def handle_outputs(
         ],
     )
 
+    # spec tokens
+    total_spec_num_proposed_drafts = sum(
+        [output.spec_num_proposed_drafts for output in filtered_outputs]
+    )
+    total_spec_num_correct_drafts = sum(
+        [output.spec_num_correct_drafts for output in filtered_outputs]
+    )
+    total_spec_accept_rate = (
+        total_spec_num_correct_drafts / total_spec_num_proposed_drafts
+    )
+    spec_accept_length_list = [output.spec_accept_length for output in filtered_outputs]
+    spec_correct_drafts_histogram_arr = np.array(
+        [output.spec_correct_drafts_histogram for output in filtered_outputs]
+    )
+    total_spec_correct_drafts_histogram = np.sum(
+        spec_correct_drafts_histogram_arr, axis=0
+    ).tolist()
+
+    if total_spec_num_proposed_drafts != 0:
+        print()
+        print_table(
+            "Spec Tokens Statistics",
+            [
+                ["Metric", "Value"],
+                ["Avg Spec Accept Rate", f"{total_spec_accept_rate:.2%}"],
+                ["Avg Spec Accept Length", format_mean(spec_accept_length_list)],
+                [
+                    "Total Spec Correct Drafts Historgram",
+                    total_spec_correct_drafts_histogram,
+                ],
+            ],
+        )
+
+    # finish reason
     finish_reasons = ("stop", "length", "tool_calls", "abort")
     finish_reason_counts = {
         finish_reason: sum(

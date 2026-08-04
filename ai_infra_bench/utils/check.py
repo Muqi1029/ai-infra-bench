@@ -9,7 +9,7 @@ from ai_infra_bench.constants import (
     FULL_DATA_JSON_PATH,
     SGLANG_KEYS,
 )
-from ai_infra_bench.utils import is_ci
+from ai_infra_bench.utils.ori import is_ci
 
 try:
     import sglang
