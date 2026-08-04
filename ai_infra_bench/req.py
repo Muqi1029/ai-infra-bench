@@ -1,15 +1,8 @@
-"""
-Usage:
-1. Send a "who are you" Request: python request.py --base-url <default: http://127.0.0.1:8888> --api-key <default: JustKeepMe> --backend <default: http>
-2. Send a payload Requests: python requests.py --payload-path <path of payload>
-"""
-
 import argparse
 import json
 import time
 from typing import Dict
 
-import openai
 import requests
 
 from ai_infra_bench.draw import Color, color_print, fmt, print_table
@@ -97,16 +90,6 @@ status ::= "the capital of " country
 country ::= "England" | "France" | "Germany" | "Italy"
 """
 
-# ebnf = """
-# root ::= number " + " number " = " number
-#
-# number ::= integer | float
-#
-# integer ::= digit+
-# float ::= number "." number
-# digit ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-# """
-
 
 def normalize_payload(payload: Dict) -> None:
     """Align recorded SGLang request bodies with router/OpenAI expectations."""
@@ -119,7 +102,6 @@ def normalize_payload(payload: Dict) -> None:
     json_schema = response_format.get("json_schema")
     if not isinstance(json_schema, dict):
         return
-    # SGLang logs use schema_; router deserializer requires schema (OpenAI shape).
     if "schema" not in json_schema and "schema_" in json_schema:
         json_schema["schema"] = json_schema.pop("schema_")
 
@@ -173,7 +155,7 @@ def extract_response_metrics(response):
         return None
 
     # usage
-    metrics = {
+    metrics.update(
         {
             key: first(
                 [key],
@@ -181,7 +163,7 @@ def extract_response_metrics(response):
             )
             for key in USAGE_TOKEN_METRICS
         }
-    }
+    )
     # cached tokens
     metrics.update(
         {
@@ -355,18 +337,19 @@ def http_request(args):
             "continuous_usage_stats": True,
         }
         payload["return_cached_tokens_details"] = True
+        payload["return_spec_tokens_details"] = True
         normalize_payload(payload)
 
         start_time = time.perf_counter()
         first_token_time = None
         metrics = {}
-        res = requests.post(
-            url=url,
-            headers=headers,
-            json=payload,
-            stream=True,
-        )
         try:
+            res = requests.post(
+                url=url,
+                headers=headers,
+                json=payload,
+                stream=True,
+            )
             res.raise_for_status()
             for line in res.iter_lines():
                 if not line:
@@ -379,8 +362,6 @@ def http_request(args):
                 if decoded_line.startswith("data: "):
                     data_str = decoded_line[6:]
                     if data_str.strip() == "[DONE]":
-                        if not args.raw:
-                            print("\n[DONE]")
                         break
 
                     now = time.perf_counter()
@@ -427,93 +408,25 @@ def http_request(args):
                 metrics=metrics,
             )
 
-        except Exception as e:
+        except requests.HTTPError as e:
             end_time = time.perf_counter()
+            resp = e.response
+            body = ""
+            if resp is not None:
+                try:
+                    body = resp.text
+                except Exception:
+                    body = resp.reason or ""
             color_print(
-                f"Request Error, Status Code={res.status_code}, Reason: {res.text} Error: {e}",
+                f"Request Error, Status Code={getattr(resp, 'status_code', 'N/A')}, "
+                f"Reason: {body}",
                 Color.RED,
             )
-            raise e
-
-
-def openai_request(args):
-    client = openai.OpenAI(
-        base_url=f"{args.base_url}/v1/chat/completions",
-        api_key=args.api_key,
-    )
-    model_id = list(client.models.list())[0].id
-
-    extra_body = {}
-    if args.ebnf:
-        extra_body["ebnf"] = ebnf_content
-
-    if args.disable_stream:
-        extra_body["return_meta_info"] = True
-        start_time = time.perf_counter()
-        response = client.chat.completions.create(
-            model=model_id,
-            messages=[{"role": "user", "content": "who are you"}],
-            extra_body=extra_body,
-        )
-        end_time = time.perf_counter()
-        print(response)
-        response_metrics = extract_response_metrics(response)
-        print_metrics(
-            start_time,
-            end_time,
-            metrics=response_metrics,
-        )
-    else:
-        start_time = time.perf_counter()
-        first_token_time = None
-        metrics = {}
-        response_stream = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": "who are you",
-                }
-            ],
-            model=model_id,
-            extra_body=extra_body,
-            # extra_body={
-            #     "chat_template_kwargs": {"thinking": True}
-            # },  # True or False to control model thinking
-            # tools=tools,
-            # tool_choice = ,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
-        for chunk in response_stream:
-            now = time.perf_counter()
-            chunk_metrics = extract_response_metrics(chunk)
-            update_metrics(metrics, chunk_metrics)
-            chunk_completion_tokens = chunk_metrics.get("completion_tokens")
-            if chunk_completion_tokens is not None:
-                completion_tokens = chunk_completion_tokens
-
-            choices = chunk.choices
-            if choices:
-                choice = choices[0]
-                if reasoning_content := getattr(
-                    choice.delta, "reasoning_content", None
-                ):
-                    if first_token_time is None:
-                        first_token_time = now
-                    print(reasoning_content, end="", flush=True)
-                if content := choice.delta.content:
-                    if first_token_time is None:
-                        first_token_time = now
-                    print(content, end="", flush=True)
-                if tool_calls := choice.delta.tool_calls:
-                    print(tool_calls[0], flush=True)
-        end_time = time.perf_counter()
-        print_metrics(
-            start_time,
-            end_time,
-            first_token_time=first_token_time,
-            metrics=metrics,
-        )
+            raise
+        except Exception as e:
+            end_time = time.perf_counter()
+            color_print(f"Request Error: {e}", Color.RED)
+            raise
 
 
 def main(argv=None):
@@ -525,9 +438,6 @@ def main(argv=None):
     )
 
     parser.add_argument("--disable-stream", action="store_true")
-    parser.add_argument(
-        "--backend", type=str, default="http", choices=["http", "openai"]
-    )
     parser.add_argument("--prompt", type=str, default="Who are you")
     parser.add_argument("--tokenizer-path", type=str, help="The path of tokenizer path")
 
@@ -568,10 +478,7 @@ def main(argv=None):
     mutex_group.add_argument("--input-ids-path", type=str, help="The path of input_ids")
 
     args = parser.parse_args(argv)
-    if args.backend == "http":
-        http_request(args)
-    else:
-        openai_request(args)
+    http_request(args)
 
 
 if __name__ == "__main__":
