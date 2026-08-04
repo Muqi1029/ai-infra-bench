@@ -3,10 +3,10 @@ import asyncio
 import json
 import logging
 import time
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from glob import glob
-from typing import Dict, List
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from tqdm import tqdm
 
@@ -15,7 +15,7 @@ from ai_infra_bench.performance.common_args import add_common_args
 from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.req import normalize_payload
+from ai_infra_bench.utils.req import api_url, prepare_payload
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +23,36 @@ logger = logging.getLogger(__name__)
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
 
 
-def tool_filter_request(req: dict):
-    # the most strict grammar
-    if req["tool_choices"] == "required" or isinstance(req["tool_choices"], dict):
+def tool_filter_request(request: Mapping[str, Any]) -> bool:
+    """Return whether a request can run without constrained decoding."""
+    tool_choice = request.get("tool_choice", request.get("tool_choices"))
+    if tool_choice == "required" or isinstance(tool_choice, dict):
         return False
-    if any([tool["strict"] for tool in req["tools"]]):
+    if any(
+        tool.get("strict") or (tool.get("function") or {}).get("strict")
+        for tool in request.get("tools") or []
+    ):
         return False
-    if req["response_format"]:
-        return False
-    return True
+    return not bool(request.get("response_format"))
 
 
-def read_requests_with_ts(payload_regex_path: str, args) -> List[Dict]:
-    data: Dict[str, str] = {}
-    file_paths = sorted(glob(payload_regex_path))
-    for file_path in file_paths:
+def _read_json(file_path: str) -> Any:
+    with open(file_path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def read_requests_with_ts(payload_regex_path: str, args: Namespace) -> List[Dict]:
+    timestamped_requests = []
+    for file_path in sorted(glob(payload_regex_path, recursive=True)):
         logger.info(f"Reading {file_path}")
-        with open(file_path, "r", encoding="utf-8") as f:
-            items = json.load(f)
-            for item in items:
-                ts, content = item
-                data[ts] = content
-    sorted_items = sorted(
-        data.items(), key=lambda x: datetime.strptime(x[0], DATE_FORMAT)
-    )
-    requests = [json.loads(content) for _, content in sorted_items]
+        timestamped_requests.extend(_read_json(file_path))
+
+    timestamped_requests.sort(key=lambda item: datetime.strptime(item[0], DATE_FORMAT))
+    requests = [json.loads(content) for _, content in timestamped_requests]
     if args.filter_constrained_grammar_requests:
-        filtered_requests = [req for req in requests if tool_filter_request(req)]
+        filtered_requests = [
+            request for request in requests if tool_filter_request(request)
+        ]
         num_filtered_requests = len(requests) - len(filtered_requests)
         logger.info(f"Filter {num_filtered_requests} due to constrained decoding")
         requests = filtered_requests
@@ -59,20 +62,54 @@ def read_requests_with_ts(payload_regex_path: str, args) -> List[Dict]:
 
 def read_requests(payload_regex_path: str) -> List[Dict]:
     requests = []
-    for file_path in glob(payload_regex_path, recursive=True):
-        with open(file_path, "r", encoding="utf-8") as f:
-            reqs = json.load(f)
-            requests.extend(reqs)
+    for file_path in sorted(glob(payload_regex_path, recursive=True)):
+        logger.info(f"Reading {file_path}")
+        requests.extend(_read_json(file_path))
+    logger.info(f"Read {len(requests)} requests")
     return requests
 
 
-async def run_benchmark(args):
-    # read dataset
+def load_requests(args: Namespace) -> List[Dict]:
     if args.with_ts:
-        requests = read_requests_with_ts(args.payload_regex_path, args)
-    else:
-        requests = read_requests(args.payload_regex_path)
-    request_url = args.base_url + "/v1/chat/completions"
+        return read_requests_with_ts(args.payload_regex_path, args)
+    return read_requests(args.payload_regex_path)
+
+
+def validate_args(args: Namespace) -> None:
+    if args.max_concurrency < 1:
+        raise ValueError("--max-concurrency must be >= 1")
+    if args.request_rate <= 0:
+        raise ValueError("--request-rate must be > 0")
+    if args.num_warmup_requests < 0:
+        raise ValueError("--num-warmup-requests must be >= 0")
+    if args.num_requests is not None and args.num_requests < 1:
+        raise ValueError("--num-requests must be >= 1")
+
+
+async def run_requests(
+    session,
+    request_url: str,
+    requests: Iterable[Mapping[str, Any]],
+    model: str,
+    semaphore: asyncio.Semaphore,
+    progress: tqdm,
+    request_rate: float = float("inf"),
+) -> List[OutputMetric]:
+    tasks = []
+    async for request in get_request(requests, request_rate):
+        payload = prepare_payload(request, model)
+        tasks.append(
+            asyncio.create_task(
+                request_func(session, request_url, payload, semaphore, progress)
+            )
+        )
+    return await asyncio.gather(*tasks)
+
+
+async def run_benchmark(args: Namespace) -> None:
+    validate_args(args)
+    requests = load_requests(args)
+    request_url = api_url(args.base_url, "/v1/chat/completions")
 
     if args.debug:
         args.num_requests = 10
@@ -85,59 +122,39 @@ async def run_benchmark(args):
         requests = requests[: args.num_requests]
         logger.info(f"Pruned to {len(requests)} requests")
 
-    if args.max_concurrency < 1:
-        raise ValueError("--max-concurrency must be >= 1")
-    if args.request_rate <= 0:
-        raise ValueError("--request-rate must be > 0")
-
-    sem = asyncio.Semaphore(args.max_concurrency)
+    semaphore = asyncio.Semaphore(args.max_concurrency)
 
     async with _create_bench_client_session(
         args.max_concurrency, args.api_key
     ) as session:
-        # warmup
-        if args.num_warmup_requests:
-            pbar = tqdm(total=args.num_warmup_requests, desc="Warmup")
-            logger.info(f"Warming up {args.num_warmup_requests} requests")
-            warmup_requests = requests[: args.num_warmup_requests]
-            await asyncio.gather(
-                *[
-                    asyncio.create_task(
-                        request_func(
-                            session,
-                            request_url,
-                            normalize_payload(payload),
-                            sem,
-                            pbar,
-                        )
-                    )
-                    for payload in warmup_requests
-                ]
-            )
-            logger.info(f"Warming up done")
-
-        formal_run_requests = requests[args.num_warmup_requests :]
-        pbar = tqdm(total=len(formal_run_requests), desc="Formally Running")
-        tasks = []
-        benchmark_start_time = time.perf_counter()
-        async for payload in get_request(formal_run_requests, args.request_rate):
-            payload["model"] = args.model
-            tasks.append(
-                asyncio.create_task(
-                    request_func(
-                        session,
-                        request_url,
-                        normalize_payload(payload),
-                        sem,
-                        pbar,
-                    )
+        warmup_requests = requests[: args.num_warmup_requests]
+        if warmup_requests:
+            logger.info(f"Warming up {len(warmup_requests)} requests")
+            with tqdm(total=len(warmup_requests), desc="Warmup") as progress:
+                await run_requests(
+                    session,
+                    request_url,
+                    warmup_requests,
+                    args.model,
+                    semaphore,
+                    progress,
                 )
-            )
-        outputs: List[OutputMetric] = await asyncio.gather(*tasks)
-        benchmark_end_time = time.perf_counter()
-        duration_s = benchmark_end_time - benchmark_start_time
+            logger.info("Warming up done")
 
-    # handle outputs
+        formal_requests = requests[args.num_warmup_requests :]
+        with tqdm(total=len(formal_requests), desc="Formally Running") as progress:
+            benchmark_start_time = time.perf_counter()
+            outputs = await run_requests(
+                session,
+                request_url,
+                formal_requests,
+                args.model,
+                semaphore,
+                progress,
+                args.request_rate,
+            )
+            duration_s = time.perf_counter() - benchmark_start_time
+
     handle_outputs(
         outputs=outputs,
         duration_s=duration_s,
@@ -148,7 +165,7 @@ async def run_benchmark(args):
     )
 
 
-def parse_args(args=None):
+def parse_args(args: Optional[Sequence[str]] = None) -> Namespace:
     parser = ArgumentParser(description="Benchmark router")
 
     parser.add_argument(

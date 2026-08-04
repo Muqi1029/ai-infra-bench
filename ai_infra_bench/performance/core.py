@@ -61,10 +61,7 @@ async def request_func(
 
                         data = json.loads(chunk)
 
-                        if usage_data := data.get("usage"):
-                            output.handle_usage_data(usage_data)
-                        if sglext := data.get("sglext"):
-                            output.handle_sglext_data(sglext)
+                        output.update_response_metrics(data)
 
                         choices = data.get("choices") or []
                         if not choices:

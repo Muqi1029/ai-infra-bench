@@ -9,6 +9,7 @@ import numpy as np
 
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.draw import print_table
+from ai_infra_bench.utils.req import format_histogram_percentages
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,12 @@ def handle_outputs(
     total_cached_tokens_host = sum(
         [output.cached_tokens_host for output in filtered_outputs]
     )
+    cached_tokens_device_ratio = (
+        total_cached_tokens_device / total_cached_tokens if total_cached_tokens else 0.0
+    )
+    cached_tokens_host_ratio = (
+        total_cached_tokens_host / total_cached_tokens if total_cached_tokens else 0.0
+    )
 
     # Match the per-request cache ratio denominator: prompt_tokens - 1.
     cached_tokens_ratio_list = [
@@ -137,11 +144,11 @@ def handle_outputs(
             ["Total cached tokens", f"{total_cached_tokens} tokens"],
             [
                 "Total cached tokens device",
-                f"{total_cached_tokens_device} ({total_cached_tokens_device/total_cached_tokens:.2%}) tokens",
+                f"{total_cached_tokens_device} ({cached_tokens_device_ratio:.2%}) tokens",
             ],
             [
                 "Total cached tokens host",
-                f"{total_cached_tokens_host} ({total_cached_tokens_host/total_cached_tokens:.2%}) tokens",
+                f"{total_cached_tokens_host} ({cached_tokens_host_ratio:.2%}) tokens",
             ],
             ["Global cache ratio", f"{global_cache_ratio:.2%}"],
         ],
@@ -236,8 +243,12 @@ def handle_outputs(
                 ["Avg Spec Accept Rate", f"{total_spec_accept_rate:.2%}"],
                 ["Avg Spec Accept Length", format_mean(spec_accept_length_list)],
                 [
-                    "Total Spec Correct Drafts Historgram",
+                    "Total Spec Correct Drafts Histogram",
                     total_spec_correct_drafts_histogram,
+                ],
+                [
+                    "Spec Correct Drafts Histogram Percentages",
+                    format_histogram_percentages(total_spec_correct_drafts_histogram),
                 ],
             ],
         )
@@ -301,9 +312,15 @@ async def wait_for_request_interval(request_rate: float) -> None:
 
 
 async def get_request(requests, request_rate):
-    for req in requests:
-        yield req
+    iterator = iter(requests)
+    try:
+        yield next(iterator)
+    except StopIteration:
+        return
+
+    for req in iterator:
         await wait_for_request_interval(request_rate)
+        yield req
 
 
 def set_seed(seed: int):

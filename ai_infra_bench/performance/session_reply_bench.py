@@ -9,14 +9,14 @@ from typing import Dict, List, Optional
 import aiohttp
 from tqdm import tqdm
 
-from ai_infra_bench.performance.core import request_func
-from ai_infra_bench.performance.utils import (
-    _create_bench_client_session,
+from ai_infra_bench.performance.bench_utils import (
     get_request,
     handle_outputs,
     set_seed,
     wait_for_request_interval,
 )
+from ai_infra_bench.performance.core import request_func
+from ai_infra_bench.utils.client import _create_bench_client_session
 
 logging.basicConfig(
     level=logging.INFO,

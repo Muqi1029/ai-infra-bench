@@ -1,16 +1,24 @@
 import argparse
 import json
 import time
-from typing import Dict
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 
 from ai_infra_bench.utils.draw import Color, color_print, fmt, print_table
 from ai_infra_bench.utils.ori import read_json
 from ai_infra_bench.utils.req import (
+    CACHED_METRIC_KEYS,
     NO_STREAM_RETURN_PAYLOAD,
+    SPEC_METRIC_KEYS,
     STREAM_RETURN_PAYLOAD,
+    USAGE_METRIC_KEYS,
+    api_url,
+    extract_response_metrics,
+    format_histogram_percentages,
+    prepare_payload,
     sanitize_url,
+    update_metrics,
 )
 
 json_schema_response_format = {
@@ -66,24 +74,6 @@ tool_select_name = {
 
 tools = [tool_select_name]
 
-USAGE_TOKEN_METRICS = [
-    "prompt_tokens",
-    "reasoning_tokens",
-    "completion_tokens",
-]
-
-SPEC_TOKEN_METRICS = [
-    "spec_accept_rate",
-    "spec_accept_length",
-    "spec_num_correct_drafts",
-    "spec_num_proposed_drafts",
-    "spec_verify_ct",
-    "spec_correct_drafts_histogram",
-]
-
-
-CACHED_TOKEN_METRICS = ["cached_tokens", "cached_tokens_details"]
-
 
 ebnf_content = """
 root ::= city | description
@@ -96,21 +86,6 @@ country ::= "England" | "France" | "Germany" | "Italy"
 """
 
 
-def normalize_payload(payload: Dict) -> None:
-    """Align recorded SGLang request bodies with router/OpenAI expectations."""
-    if payload.get("min_tokens") is not None and payload["min_tokens"] < 1:
-        payload.pop("min_tokens")
-
-    response_format = payload.get("response_format")
-    if not isinstance(response_format, dict):
-        return
-    json_schema = response_format.get("json_schema")
-    if not isinstance(json_schema, dict):
-        return
-    if "schema" not in json_schema and "schema_" in json_schema:
-        json_schema["schema"] = json_schema.pop("schema_")
-
-
 def info_print(headers, payload, url):
     print("=" * 80)
     print(f"Sending to {url=}")
@@ -118,94 +93,11 @@ def info_print(headers, payload, url):
     print(f"payload={json.dumps(payload, indent=2, ensure_ascii=False)}")
 
 
-def extract_response_metrics(response):
-    metrics = {}
-
-    if hasattr(response, "model_dump"):
-        data = response.model_dump()
-    else:
-        data = response
-    if not isinstance(data, dict):
-        return metrics
-
-    # usage
-    usage = data.get("usage", {}) or {}
-
-    # prompt tokens details
-    prompt_tokens_details = usage.get("prompt_tokens_details", {}) or {}
-
-    choices = data.get("choices", []) or []
-    choice_meta_info = {}
-    if choices and isinstance(choices[0], dict):
-        choice_meta_info = choices[0].get("meta_info", {}) or {}
-
-    # sgl_ext
-    sglext = data.get("sglext", {}) or {}
-    spec_tokens_details = sglext.get("spec_tokens_details", {}) or {}
-
-    def get_first_value(data, keys):
-        if not isinstance(data, dict):
-            return None
-        for key in keys:
-            value = data.get(key)
-            if value is not None:
-                return value
-        return None
-
-    def first(keys, sources):
-        for source in sources:
-            value = get_first_value(source, keys)
-            if value is not None:
-                return value
-        return None
-
-    # usage
-    metrics.update(
-        {
-            key: first(
-                [key],
-                (usage,),
-            )
-            for key in USAGE_TOKEN_METRICS
-        }
-    )
-    # cached tokens
-    metrics.update(
-        {
-            "cached_tokens": first(
-                ["cached_tokens"],
-                (prompt_tokens_details, choice_meta_info),
-            ),
-            "cached_tokens_details": first(["cached_tokens_details"], (sglext,)),
-        }
-    )
-    # spec tokens
-    metrics.update(
-        {
-            key: first(
-                [key],
-                (
-                    spec_tokens_details,
-                    choice_meta_info,
-                ),
-            )
-            for key in SPEC_TOKEN_METRICS
-        }
-    )
-    return metrics
-
-
-def update_metrics(metrics, new_metrics):
-    for key, value in new_metrics.items():
-        if value is not None:
-            metrics[key] = value
-
-
 def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
     e2e = end_time - start_time
     ttft = first_token_time - start_time if first_token_time is not None else None
     e2e_ms = e2e * 1000
-    ttft_ms = ttft * 1000 if ttft is not None else e2e
+    ttft_ms = ttft * 1000 if ttft is not None else None
 
     metrics = metrics or {}
     completion_tokens = metrics.get("completion_tokens")
@@ -224,41 +116,52 @@ def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
         ("e2e", fmt(e2e_ms), "ms"),
         ("tpot", fmt(tpot_ms), "ms"),
         ("token/s", fmt(token_per_sec), "token"),
-        *[(key, fmt(metrics.get(key)), "token") for key in USAGE_TOKEN_METRICS],
+        *[(key, fmt(metrics.get(key)), "token") for key in USAGE_METRIC_KEYS],
     ]
 
-    print()
     print_table(title="Single Request Benchmark", rows=rows)
 
-    print()
     print_table(
         title="Cached Token Metrics",
         rows=[
             ("Metric", "Value"),
-            *[(key, fmt(metrics.get(key))) for key in CACHED_TOKEN_METRICS],
+            *[(key, fmt(metrics.get(key))) for key in CACHED_METRIC_KEYS],
         ],
     )
 
-    print()
     print_table(
         title="Spec Token Metrics",
         rows=[
             ("Metric", "Value"),
-            *[(key, fmt(metrics.get(key))) for key in SPEC_TOKEN_METRICS],
+            *[(key, fmt(metrics.get(key))) for key in SPEC_METRIC_KEYS],
+            (
+                "spec_correct_drafts_histogram_percentages",
+                format_histogram_percentages(
+                    metrics.get("spec_correct_drafts_histogram") or []
+                ),
+            ),
         ],
     )
 
 
-def http_request(args):
-    url = f"{args.base_url}/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {args.api_key}"}
+def build_request(args) -> Tuple[str, Dict[str, Any]]:
+    url = api_url(args.base_url, "/v1/chat/completions")
 
-    # construct payload
-    payload = {}
+    if args.payload_path:
+        payload = read_json(args.payload_path)
+    elif args.input_ids_path:
+        if not args.tokenizer_path:
+            raise ValueError("--tokenizer-path is required with --input-ids-path")
 
-    if not args.input_ids_path and not args.payload_path:
-        # if there is no msg path, input_ids path, payload path
-        payload["messages"] = [{"role": "user", "content": args.prompt}]
+        from transformers import AutoTokenizer
+
+        input_ids = read_json(args.input_ids_path)
+        prompt = AutoTokenizer.from_pretrained(args.tokenizer_path).decode(input_ids)
+        print(f"{prompt=}")
+        payload = {"prompt": prompt}
+        url = api_url(args.base_url, "/v1/completions")
+    else:
+        payload = {"messages": [{"role": "user", "content": args.prompt}]}
         if args.ebnf:
             payload["ebnf"] = ebnf_content
         elif args.json_schema_response_format:
@@ -269,30 +172,6 @@ def http_request(args):
         elif args.tools:
             payload["tools"] = tools
             payload["tool_choice"] = "required"
-    else:
-        if args.payload_path:
-            # read payload path
-            payload = read_json(args.payload_path)
-        elif args.input_ids_path:
-            # read input_ids path
-            input_ids = read_json(args.input_ids_path)
-
-            from transformers import AutoTokenizer
-
-            assert (
-                args.tokenizer_path
-            ), f"tokenizer_path must be provided in the input-ids-path, use --tokenizer-path <TOKENIZER PATH>"
-            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
-            prompt = tokenizer.decode(input_ids)
-            print(f"{prompt=}")
-
-            # use v1/completions api since it is already applied chat template
-            payload["prompt"] = prompt
-            url = f"{args.base_url}/v1/completions"
-
-    # special field setting
-    if args.model:
-        payload["model"] = args.model
 
     if args.disable_separate_reasoning:
         payload["separate_reasoning"] = False
@@ -305,126 +184,128 @@ def http_request(args):
     elif args.disable_thinking:
         payload["chat_template_kwargs"] = {"enable_thinking": False}
 
+    return url, prepare_payload(payload, args.model)
+
+
+def _print_request_error(response, error: Exception) -> None:
+    color_print(
+        f"Request Error, Status Code={response.status_code}, "
+        f"Reason: {response.text} Error: {error}",
+        Color.RED,
+    )
+
+
+def _handle_non_stream_request(url, headers, payload) -> None:
+    payload.update(NO_STREAM_RETURN_PAYLOAD)
+    start_time = time.perf_counter()
+    response = requests.post(url=url, headers=headers, json=payload)
+    end_time = time.perf_counter()
+
+    try:
+        response.raise_for_status()
+        response_json = response.json()
+        color_print(
+            json.dumps(response_json, indent=2, ensure_ascii=False),
+            Color.LIGHT_GREEN,
+        )
+        metrics = extract_response_metrics(response_json)
+    except Exception as error:
+        _print_request_error(response, error)
+        metrics = None
+
+    print_metrics(start_time, end_time, metrics=metrics)
+
+
+def _render_delta(delta: Dict[str, Any]) -> bool:
+    rendered_token = False
+    for key, color in (
+        ("reasoning_content", Color.LIGHT_CYAN),
+        ("content", Color.LIGHT_GREEN),
+    ):
+        if text := delta.get(key):
+            color_print(text, color)
+            rendered_token = True
+
+    for tool_call in delta.get("tool_calls") or []:
+        function = tool_call.get("function") or {}
+        if func_name := function.get("name"):
+            color_print(
+                f"\n\n[Tool Call Detected]: Function={func_name}\nArgument:",
+                Color.LIGHT_YELLOW,
+            )
+            rendered_token = True
+        if func_arg := function.get("arguments"):
+            color_print(func_arg, Color.LIGHT_YELLOW)
+            rendered_token = True
+    return rendered_token
+
+
+def _handle_stream_request(url, headers, payload, raw: bool) -> None:
+    payload.update(STREAM_RETURN_PAYLOAD)
+    start_time = time.perf_counter()
+    first_token_time: Optional[float] = None
+    metrics: Dict[str, Any] = {}
+
+    try:
+        response = requests.post(url=url, headers=headers, json=payload, stream=True)
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line:
+                continue
+            decoded_line = line.decode("utf-8")
+            if raw:
+                print(decoded_line)
+            if not decoded_line.startswith("data:"):
+                continue
+
+            data_str = decoded_line[len("data:") :].lstrip()
+            if data_str.strip() == "[DONE]":
+                break
+
+            try:
+                chunk = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+
+            update_metrics(metrics, extract_response_metrics(chunk))
+            choices = chunk.get("choices") or []
+            delta = choices[0].get("delta") or {} if choices else {}
+            received_at = time.perf_counter()
+            has_token = bool(
+                delta.get("reasoning_content")
+                or delta.get("content")
+                or delta.get("tool_calls")
+            )
+            if not raw:
+                has_token = _render_delta(delta)
+            if has_token and first_token_time is None:
+                first_token_time = received_at
+
+        end_time = time.perf_counter()
+        print_metrics(start_time, end_time, first_token_time, metrics)
+    except requests.HTTPError as error:
+        response = error.response
+        body = response.text if response is not None else ""
+        color_print(
+            f"Request Error, Status Code="
+            f"{getattr(response, 'status_code', 'N/A')}, Reason: {body}",
+            Color.RED,
+        )
+        raise
+    except Exception as error:
+        color_print(f"Request Error: {error}", Color.RED)
+        raise
+
+
+def http_request(args):
+    url, payload = build_request(args)
+    headers = {"Authorization": f"Bearer {args.api_key}"}
+
     info_print(headers, payload, url)
     if args.disable_stream:
-        payload.update(NO_STREAM_RETURN_PAYLOAD)
-        start_time = time.perf_counter()
-        res = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-        )
-        end_time = time.perf_counter()
-        try:
-            res.raise_for_status()
-            response_json = res.json()
-            color_print(
-                json.dumps(response_json, indent=2, ensure_ascii=False),
-                Color.LIGHT_GREEN,
-            )
-            response_metrics = extract_response_metrics(response_json)
-            print_metrics(
-                start_time,
-                end_time,
-                metrics=response_metrics,
-            )
-        except Exception as e:
-            color_print(
-                f"Request Error, Status Code={res.status_code}, Reason: {res.text} Error: {e}",
-                Color.RED,
-            )
-            print_metrics(start_time, end_time)
+        _handle_non_stream_request(url, headers, payload)
     else:
-        payload.update(STREAM_RETURN_PAYLOAD)
-        normalize_payload(payload)
-
-        start_time = time.perf_counter()
-        first_token_time = None
-        metrics = {}
-        try:
-            res = requests.post(
-                url=url,
-                headers=headers,
-                json=payload,
-                stream=True,
-            )
-            res.raise_for_status()
-            for line in res.iter_lines():
-                if not line:
-                    continue
-                decoded_line = line.decode("utf-8")
-
-                if args.raw:
-                    print(decoded_line)
-
-                if decoded_line.startswith("data: "):
-                    data_str = decoded_line[6:]
-                    if data_str.strip() == "[DONE]":
-                        break
-
-                    now = time.perf_counter()
-
-                    try:
-                        chunk = json.loads(data_str)
-                        if chunk.get("usage") or chunk.get("sglext"):
-                            chunk_metrics = extract_response_metrics(chunk)
-                            update_metrics(metrics, chunk_metrics)
-
-                        if "choices" in chunk and len(chunk["choices"]) > 0:
-                            delta = chunk["choices"][0].get("delta", {})
-                            if reasoning_content := delta.get("reasoning_content", ""):
-                                if first_token_time is None:
-                                    first_token_time = now
-                                if not args.raw:
-                                    color_print(reasoning_content, Color.LIGHT_CYAN)
-
-                            if content := delta.get("content", ""):
-                                if first_token_time is None:
-                                    first_token_time = now
-                                if not args.raw:
-                                    color_print(content, Color.LIGHT_GREEN)
-
-                            if not args.raw and (
-                                tool_calls := delta.get("tool_calls", "")
-                            ):
-                                tc = tool_calls[0]
-                                if func_name := tc.get("function", {}).get("name"):
-                                    color_print(
-                                        f"\n\n[Tool Call Detected]: Function={func_name}\nArgument:",
-                                        Color.LIGHT_YELLOW,
-                                    )
-                                if func_arg := tc.get("function", {}).get("arguments"):
-                                    color_print(func_arg, Color.LIGHT_YELLOW)
-
-                    except json.JSONDecodeError:
-                        continue
-            end_time = time.perf_counter()
-            print_metrics(
-                start_time,
-                end_time,
-                first_token_time=first_token_time,
-                metrics=metrics,
-            )
-
-        except requests.HTTPError as e:
-            end_time = time.perf_counter()
-            resp = e.response
-            body = ""
-            if resp is not None:
-                try:
-                    body = resp.text
-                except Exception:
-                    body = resp.reason or ""
-            color_print(
-                f"Request Error, Status Code={getattr(resp, 'status_code', 'N/A')}, "
-                f"Reason: {body}",
-                Color.RED,
-            )
-            raise
-        except Exception as e:
-            end_time = time.perf_counter()
-            color_print(f"Request Error: {e}", Color.RED)
-            raise
+        _handle_stream_request(url, headers, payload, args.raw)
 
 
 def main(argv=None):

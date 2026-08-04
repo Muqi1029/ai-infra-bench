@@ -1,6 +1,8 @@
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
+
+from ai_infra_bench.utils.req import extract_response_metrics
 
 
 @dataclass
@@ -29,7 +31,7 @@ class OutputMetric:
     spec_accept_rate: float = 0.0
     spec_accept_length: float = 0.0
     spec_verify_ct: int = 0
-    spec_correct_drafts_histogram: Optional[List] = None
+    spec_correct_drafts_histogram: List[int] = field(default_factory=list)
 
     def update_stream_output(self, text: str, start_time: float):
         if not text:
@@ -39,38 +41,35 @@ class OutputMetric:
         if self.ttft_ms == 0.0:
             self.ttft_ms = (time.perf_counter() - start_time) * 1000
 
-    def handle_usage_data(self, usage_data):
-        self.prompt_tokens = usage_data.get("prompt_tokens", 0)
-        self.completion_tokens = usage_data.get("completion_tokens", 0)
-        self.reasoning_tokens = usage_data.get("reasoning_tokens", 0)
+    def update_response_metrics(self, response: Mapping[str, Any]) -> None:
+        metrics = extract_response_metrics(response)
+        for field_name in (
+            "prompt_tokens",
+            "completion_tokens",
+            "reasoning_tokens",
+            "cached_tokens",
+            "spec_num_proposed_drafts",
+            "spec_num_correct_drafts",
+            "spec_accept_length",
+            "spec_accept_rate",
+            "spec_verify_ct",
+            "spec_correct_drafts_histogram",
+        ):
+            value = metrics.get(field_name)
+            if value is not None:
+                setattr(self, field_name, value)
 
-        cached_tokens = usage_data.get("cached_tokens")
-        if cached_tokens is not None:
-            self.cached_tokens = int(cached_tokens)
+        cached_details = metrics.get("cached_tokens_details") or {}
+        self.cached_tokens_device = cached_details.get(
+            "device", self.cached_tokens_device
+        )
+        self.cached_tokens_host = cached_details.get("host", self.cached_tokens_host)
 
-        prompt_tokens_details = usage_data.get("prompt_tokens_details") or {}
-        if isinstance(prompt_tokens_details, dict):
-            cached_tokens = prompt_tokens_details.get("cached_tokens")
-            if cached_tokens is not None:
-                self.cached_tokens = int(cached_tokens)
+    def handle_usage_data(self, usage_data: Mapping[str, Any]) -> None:
+        self.update_response_metrics({"usage": usage_data})
 
-    def handle_sglext_data(self, sglext):
-        if cached_tokens_details := sglext.get("cached_tokens_details"):
-            self.cached_tokens_device = cached_tokens_details.get("device", 0)
-            self.cached_tokens_host = cached_tokens_details.get("host", 0)
-        if spec_tokens_details := sglext.get("spec_tokens_details"):
-            self.spec_num_proposed_drafts = spec_tokens_details.get(
-                "spec_num_proposed_drafts", 0
-            )
-            self.spec_num_correct_drafts = spec_tokens_details.get(
-                "spec_num_correct_drafts", 0
-            )
-            self.spec_accept_length = spec_tokens_details.get("spec_accept_length", 0)
-            self.spec_accept_rate = spec_tokens_details.get("spec_accept_rate", 0)
-            self.spec_verify_ct = spec_tokens_details.get("spec_verify_ct", 0)
-            self.spec_correct_drafts_histogram = spec_tokens_details.get(
-                "spec_correct_drafts_histogram", []
-            )
+    def handle_sglext_data(self, sglext: Mapping[str, Any]) -> None:
+        self.update_response_metrics({"sglext": sglext})
 
     def stream_text_or_empty(self, value) -> str:
         if value is None:

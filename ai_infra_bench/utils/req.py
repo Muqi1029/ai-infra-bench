@@ -1,4 +1,5 @@
-from typing import Dict
+from copy import deepcopy
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
 
 STREAM_RETURN_PAYLOAD = {
     "stream": True,
@@ -12,8 +13,23 @@ STREAM_RETURN_PAYLOAD = {
 
 NO_STREAM_RETURN_PAYLOAD = {"stream": False, "return_meta_info": True}
 
+USAGE_METRIC_KEYS = (
+    "prompt_tokens",
+    "reasoning_tokens",
+    "completion_tokens",
+)
+CACHED_METRIC_KEYS = ("cached_tokens", "cached_tokens_details")
+SPEC_METRIC_KEYS = (
+    "spec_accept_rate",
+    "spec_accept_length",
+    "spec_num_correct_drafts",
+    "spec_num_proposed_drafts",
+    "spec_verify_ct",
+    "spec_correct_drafts_histogram",
+)
 
-def normalize_payload(payload: Dict) -> None:
+
+def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Align recorded SGLang request bodies with router/OpenAI expectations."""
     if payload.get("min_tokens") is not None and payload["min_tokens"] < 1:
         payload.pop("min_tokens")
@@ -30,10 +46,88 @@ def normalize_payload(payload: Dict) -> None:
     return payload
 
 
+def prepare_payload(
+    payload: Mapping[str, Any], model: Optional[str] = None
+) -> Dict[str, Any]:
+    """Copy and normalize a payload before request-specific fields are added."""
+    prepared = normalize_payload(deepcopy(dict(payload)))
+    if model:
+        prepared["model"] = model
+    return prepared
+
+
 def sanitize_url(url: str) -> str:
-    url = url.rstrip("/")
+    url = url.strip().rstrip("/")
     if not url.startswith(("http://", "https://")):
-        return f"http://{url.strip()}"
+        url = f"http://{url}"
     if url.endswith("/v1"):
-        url = url.rstrip("/v1")
+        url = url[: -len("/v1")]
     return url
+
+
+def api_url(base_url: str, endpoint: str) -> str:
+    return f"{sanitize_url(base_url)}/{endpoint.lstrip('/')}"
+
+
+def format_histogram_percentages(histogram: Sequence[int]) -> str:
+    total = sum(histogram)
+    if total == 0:
+        return "[]"
+    percentages = (f"{count / total:.2%}" for count in histogram)
+    return f"[{', '.join(percentages)}]"
+
+
+def _as_mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _first_value(keys: Sequence[str], sources: Iterable[Mapping[str, Any]]) -> Any:
+    for source in sources:
+        for key in keys:
+            value = source.get(key)
+            if value is not None:
+                return value
+    return None
+
+
+def extract_response_metrics(response: Any) -> Dict[str, Any]:
+    """Extract OpenAI and SGLang metrics from a response or stream chunk."""
+    data = response.model_dump() if hasattr(response, "model_dump") else response
+    if not isinstance(data, Mapping):
+        return {}
+
+    usage = _as_mapping(data.get("usage"))
+    prompt_details = _as_mapping(usage.get("prompt_tokens_details"))
+    sglext = _as_mapping(data.get("sglext"))
+    spec_details = _as_mapping(sglext.get("spec_tokens_details"))
+
+    choices = data.get("choices") or []
+    first_choice = choices[0] if choices else {}
+    choice_meta = _as_mapping(_as_mapping(first_choice).get("meta_info"))
+
+    metrics = {
+        key: _first_value((key,), (usage, choice_meta)) for key in USAGE_METRIC_KEYS
+    }
+    metrics.update(
+        {
+            "cached_tokens": _first_value(
+                ("cached_tokens",), (prompt_details, choice_meta)
+            ),
+            "cached_tokens_details": _first_value(
+                ("cached_tokens_details",), (sglext, choice_meta)
+            ),
+        }
+    )
+    metrics.update(
+        {
+            key: _first_value((key,), (spec_details, choice_meta))
+            for key in SPEC_METRIC_KEYS
+        }
+    )
+    return metrics
+
+
+def update_metrics(metrics: Dict[str, Any], new_metrics: Mapping[str, Any]) -> None:
+    metrics.update(
+        {key: value for key, value in new_metrics.items() if value is not None}
+    )
