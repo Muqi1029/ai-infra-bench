@@ -176,7 +176,7 @@ def parse_args(args: Optional[Sequence[str]] = None) -> Namespace:
     )
     parser.add_argument(
         "--num-warmup-requests",
-        default=100,
+        default=10,
         type=int,
         help="The number of requests to warmup",
     )
