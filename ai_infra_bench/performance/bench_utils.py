@@ -146,7 +146,6 @@ def handle_outputs(
             ["Global cache ratio", f"{global_cache_ratio:.2%}"],
         ],
     )
-    print()
 
     def compute_metrics(numeric_metrics: List):
         return [
@@ -214,15 +213,21 @@ def handle_outputs(
         total_spec_num_correct_drafts / total_spec_num_proposed_drafts
     )
     spec_accept_length_list = [output.spec_accept_length for output in filtered_outputs]
-    spec_correct_drafts_histogram_arr = np.array(
-        [output.spec_correct_drafts_histogram for output in filtered_outputs]
+
+    max_length_hist = max(
+        [len(output.spec_correct_drafts_histogram) for output in filtered_outputs]
     )
+    spec_correct_drafts_histogram_list = [
+        output.spec_correct_drafts_histogram
+        + [0] * (max_length_hist - len(output.spec_correct_drafts_histogram))
+        for output in filtered_outputs
+    ]
+    spec_correct_drafts_histogram_arr = np.array(spec_correct_drafts_histogram_list)
     total_spec_correct_drafts_histogram = np.sum(
         spec_correct_drafts_histogram_arr, axis=0
     ).tolist()
 
     if total_spec_num_proposed_drafts != 0:
-        print()
         print_table(
             "Spec Tokens Statistics",
             [
@@ -244,7 +249,6 @@ def handle_outputs(
         )
         for finish_reason in finish_reasons
     }
-    print()
     print_table(
         "Finish Reason Statistics",
         [

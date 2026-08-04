@@ -71,7 +71,7 @@ async def run_benchmark(args):
     if args.with_ts:
         requests = read_requests_with_ts(args.payload_regex_path, args)
     else:
-        requests = read_requests(args.payload_regex_path, args)
+        requests = read_requests(args.payload_regex_path)
     request_url = args.base_url + "/v1/chat/completions"
 
     if args.debug:
@@ -104,7 +104,6 @@ async def run_benchmark(args):
                 *[
                     asyncio.create_task(
                         request_func(
-                            args,
                             session,
                             request_url,
                             normalize_payload(payload),

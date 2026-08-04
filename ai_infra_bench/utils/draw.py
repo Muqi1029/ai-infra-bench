@@ -28,6 +28,7 @@ def color_print(text: str, color: Color):
 
 
 def print_table(title: str, rows: List[List[str]]) -> None:
+    print()
     if not rows:
         return
 
@@ -47,6 +48,7 @@ def print_table(title: str, rows: List[List[str]]) -> None:
         if idx == 0:
             print(border)
     print(border)
+    print()
 
 
 def fmt(value, fmt: str = ".2f", suffix: str = "") -> str:
