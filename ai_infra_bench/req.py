@@ -131,16 +131,6 @@ def info_print(headers, payload, url):
     print(f"payload={json.dumps(payload, indent=2, ensure_ascii=False)}")
 
 
-def get_first_value(data, keys):
-    if not isinstance(data, dict):
-        return None
-    for key in keys:
-        value = data.get(key)
-        if value is not None:
-            return value
-    return None
-
-
 def extract_response_metrics(response):
     metrics = {}
 
@@ -166,8 +156,14 @@ def extract_response_metrics(response):
     sglext = data.get("sglext", {}) or {}
     spec_tokens_details = sglext.get("spec_tokens_details", {}) or {}
 
-    # cached_token_details
-    # cached_tokens_details = sglext.get("cached_tokens_details")
+    def get_first_value(data, keys):
+        if not isinstance(data, dict):
+            return None
+        for key in keys:
+            value = data.get(key)
+            if value is not None:
+                return value
+        return None
 
     def first(keys, sources):
         for source in sources:
@@ -176,16 +172,27 @@ def extract_response_metrics(response):
                 return value
         return None
 
+    # usage
     metrics = {
-        "prompt_tokens": first(["prompt_tokens"], (usage,)),
-        "completion_tokens": first(["completion_tokens"], (usage,)),
-        "reasoning_tokens": first(["reasoning_tokens"], (usage,)),
-        "cached_tokens": first(
-            ["cached_tokens"],
-            (prompt_tokens_details, choice_meta_info),
-        ),
-        "cached_tokens_details": first(["cached_tokens_details"], (sglext,)),
+        {
+            key: first(
+                [key],
+                (usage,),
+            )
+            for key in USAGE_TOKEN_METRICS
+        }
     }
+    # cached tokens
+    metrics.update(
+        {
+            "cached_tokens": first(
+                ["cached_tokens"],
+                (prompt_tokens_details, choice_meta_info),
+            ),
+            "cached_tokens_details": first(["cached_tokens_details"], (sglext,)),
+        }
+    )
+    # spec tokens
     metrics.update(
         {
             key: first(
