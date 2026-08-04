@@ -206,28 +206,29 @@ def handle_outputs(
     total_spec_num_proposed_drafts = sum(
         [output.spec_num_proposed_drafts for output in filtered_outputs]
     )
-    total_spec_num_correct_drafts = sum(
-        [output.spec_num_correct_drafts for output in filtered_outputs]
-    )
-    total_spec_accept_rate = (
-        total_spec_num_correct_drafts / total_spec_num_proposed_drafts
-    )
-    spec_accept_length_list = [output.spec_accept_length for output in filtered_outputs]
-
-    max_length_hist = max(
-        [len(output.spec_correct_drafts_histogram) for output in filtered_outputs]
-    )
-    spec_correct_drafts_histogram_list = [
-        output.spec_correct_drafts_histogram
-        + [0] * (max_length_hist - len(output.spec_correct_drafts_histogram))
-        for output in filtered_outputs
-    ]
-    spec_correct_drafts_histogram_arr = np.array(spec_correct_drafts_histogram_list)
-    total_spec_correct_drafts_histogram = np.sum(
-        spec_correct_drafts_histogram_arr, axis=0
-    ).tolist()
-
     if total_spec_num_proposed_drafts != 0:
+        total_spec_num_correct_drafts = sum(
+            [output.spec_num_correct_drafts for output in filtered_outputs]
+        )
+        total_spec_accept_rate = (
+            total_spec_num_correct_drafts / total_spec_num_proposed_drafts
+        )
+        spec_accept_length_list = [
+            output.spec_accept_length for output in filtered_outputs
+        ]
+
+        max_length_hist = max(
+            [len(output.spec_correct_drafts_histogram) for output in filtered_outputs]
+        )
+        spec_correct_drafts_histogram_list = [
+            output.spec_correct_drafts_histogram
+            + [0] * (max_length_hist - len(output.spec_correct_drafts_histogram))
+            for output in filtered_outputs
+        ]
+        spec_correct_drafts_histogram_arr = np.array(spec_correct_drafts_histogram_list)
+        total_spec_correct_drafts_histogram = np.sum(
+            spec_correct_drafts_histogram_arr, axis=0
+        ).tolist()
         print_table(
             "Spec Tokens Statistics",
             [
