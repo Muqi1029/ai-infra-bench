@@ -11,6 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import wraps
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -297,29 +298,17 @@ def stop_server_process(process, timeout=30, cooldown_period=3):
         time.sleep(cooldown_period)
 
 
-def print_table(title: str, rows: List[List[str]]) -> None:
-    if not rows:
-        return
-
-    widths = [max(len(str(row[i])) for row in rows) for i in range(len(rows[0]))]
-    border = "+-" + "-+-".join("-" * width for width in widths) + "-+"
-    title_line = f"| {title.center(len(border) - 4)} |"
-
-    print(border)
-    print(title_line)
-    print(border)
-    for idx, row in enumerate(rows):
-        print(
-            "| "
-            + " | ".join(str(value).ljust(widths[i]) for i, value in enumerate(row))
-            + " |"
-        )
-        if idx == 0:
-            print(border)
-    print(border)
-
-
 def sanitize_url(url: str) -> str:
+    url = url.rstrip("/")
     if not url.startswith(("http://", "https://")):
         return f"http://{url.strip()}"
+    if url.endswith("/v1"):
+        url = url.rstrip("/v1")
     return url
+
+
+def read_json(filepath: str):
+    if not Path(filepath).exists():
+        raise ValueError(f"{filepath} doesn't exist!")
+    with open(filepath, mode="r", encoding="utf-8") as f:
+        return json.load(f)

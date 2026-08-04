@@ -10,15 +10,11 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
+from ai_infra_bench.common import _create_bench_client_session
 from ai_infra_bench.performance.common_args import add_common_args
 from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.performance.utils import (
-    _create_bench_client_session,
-    get_request,
-    handle_outputs,
-    set_seed,
-)
+from ai_infra_bench.performance.utils import get_request, handle_outputs, set_seed
 
 logging.basicConfig(
     level=logging.INFO,
@@ -208,7 +204,7 @@ async def run_benchmark(args):
     )
 
 
-def parse_args():
+def parse_args(args=None):
     parser = ArgumentParser(description="Benchmark router")
 
     parser.add_argument(
@@ -232,11 +228,11 @@ def parse_args():
     parser.add_argument("--with-ts", action="store_true")
     add_common_args(parser)
 
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
-def main():
-    args = parse_args()
+def main(args=None):
+    args = parse_args(args)
     logger.info(f"{args=}")
     set_seed(args.seed)
     asyncio.run(run_benchmark(args))
