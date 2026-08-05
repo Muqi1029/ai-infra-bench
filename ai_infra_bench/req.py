@@ -112,18 +112,26 @@ def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
     if completion_tokens and completion_tokens > 1 and ttft_ms is not None:
         tpot_ms = (e2e_ms - ttft_ms) / (completion_tokens - 1)
 
+    cached_tokens = metrics.get("cached_tokens", 0)
+    prompt_tokens = metrics.get("prompt_tokens", 0)
+    cached_tokens_ratio = (
+        cached_tokens / (prompt_tokens - 1) if prompt_tokens > 0 else 0.0
+    )
+
     rows = [
         ("Metric", "Value", "Unit"),
         ("ttft", fmt(ttft_ms), "ms"),
-        ("e2e", fmt(e2e_ms), "ms"),
+        ("e2e latency", fmt(e2e_ms), "ms"),
         ("tpot", fmt(tpot_ms), "ms"),
-        ("token/s", fmt(token_per_sec), "token"),
-        *[(key, fmt(metrics.get(key)), "token") for key in USAGE_METRIC_KEYS],
+        ("tps", fmt(token_per_sec), "tokens"),
+        *[(key, fmt(metrics.get(key)), "tokens") for key in USAGE_METRIC_KEYS],
+        ("cached_tokens", fmt(cached_tokens), "tokens"),
+        ("cached_tokens_ratio", fmt(cached_tokens_ratio * 100), "%"),
     ]
 
     print_table(title="Single Request Benchmark", rows=rows)
 
-    if metrics.get("cached_tokens"):
+    if cached_tokens:
         print_table(
             title="Cached Token Metrics",
             rows=[
