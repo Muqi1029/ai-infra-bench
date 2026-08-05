@@ -10,8 +10,6 @@ prompt_template: |-
   Remember to put your answer on its own line after "Answer:", and express your answer as an integer from 000 to 999.
 
 payload:
-  temperature: 0.0
-  top_p: 1.0
-  max_tokens: 1024000
+  max_tokens: 102400
 
 dataset_path: data-package://data/AIME2025

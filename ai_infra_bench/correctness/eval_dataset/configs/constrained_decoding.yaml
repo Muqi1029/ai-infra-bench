@@ -1,7 +1,5 @@
-prompt_template: |
+prompt_template: |-
   {question}
 
 payload:
-  temperature: 0.0
   max_completion_tokens: 2048
-  top_p: 1
