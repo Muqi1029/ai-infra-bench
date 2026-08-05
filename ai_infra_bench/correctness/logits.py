@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from itertools import zip_longest
 from typing import Any, Optional, Sequence
 
-from ai_infra_bench.common import _create_bench_client_session
-from ai_infra_bench.utils import sanitize_url
+from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.req import sanitize_url
 
 logger = logging.getLogger(__name__)
 

@@ -16,7 +16,7 @@ from ai_infra_bench.constants import (
     GRAPH_PER_ROW,
     TABLE_NAME,
 )
-from ai_infra_bench.utils import avg_std_strf, enter_decorate, read_jsonl, run_cmd
+from ai_infra_bench.utils.ori import avg_std_strf, enter_decorate, read_jsonl, run_cmd
 
 logger = logging.getLogger(__name__)
 

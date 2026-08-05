@@ -2,7 +2,10 @@ import logging
 import os
 from typing import Callable, Dict, List, Tuple
 
-from ai_infra_bench.check_utils import (
+from ai_infra_bench.modes.cmp import cmp_export_table
+from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
+from ai_infra_bench.modes.slo import slo_run
+from ai_infra_bench.utils.check import (
     check_client_labels,
     check_dir,
     check_param_in_cmd,
@@ -10,11 +13,7 @@ from ai_infra_bench.check_utils import (
     check_str_list_str,
     check_values_in_features_metrics,
 )
-from ai_infra_bench.constants import FULL_DATA_JSON_PATH
-from ai_infra_bench.modes.cmp import cmp_export_table
-from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot, gen_run
-from ai_infra_bench.modes.slo import slo_run
-from ai_infra_bench.utils import (
+from ai_infra_bench.utils.ori import (
     ServerAccessInfo,
     add_request_rate,
     cmp_preprocess_client_cmds,

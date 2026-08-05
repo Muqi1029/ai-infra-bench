@@ -2,7 +2,10 @@ import logging
 import os
 from typing import Dict, List
 
-from ai_infra_bench.check import (
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
+from ai_infra_bench.modes.cmp import cmp_export_table
+from ai_infra_bench.modes.gen import gen_export_csv, gen_run
+from ai_infra_bench.utils.check import (
     check_client_labels,
     check_content_server_client_cmds,
     check_dir,
@@ -11,10 +14,7 @@ from ai_infra_bench.check import (
     check_str_list_str,
     check_values_in_features_metrics,
 )
-from ai_infra_bench.constants import FULL_DATA_JSON_PATH
-from ai_infra_bench.modes.cmp import cmp_export_table
-from ai_infra_bench.modes.gen import gen_export_csv, gen_run
-from ai_infra_bench.utils import (
+from ai_infra_bench.utils.ori import (
     kill_process_tree,
     maybe_create_labels,
     maybe_warmup,

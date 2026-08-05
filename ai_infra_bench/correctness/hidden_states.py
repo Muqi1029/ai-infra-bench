@@ -14,8 +14,8 @@ from typing import Any, Optional, Sequence
 
 import numpy as np
 
-from ai_infra_bench.common import _create_bench_client_session
-from ai_infra_bench.utils import sanitize_url
+from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.req import sanitize_url
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,9 @@ from ai_infra_bench.modes.gen import gen_export_csv, gen_export_table, gen_plot
 
 logger = logging.getLogger(__name__)
 
-from ai_infra_bench.check import (
+from ai_infra_bench.constants import FULL_DATA_JSON_PATH
+from ai_infra_bench.modes.slo import slo_run
+from ai_infra_bench.utils.check import (
     check_client_labels,
     check_content_server_client_cmds,
     check_dir,
@@ -14,9 +16,7 @@ from ai_infra_bench.check import (
     check_server_labels,
     check_str_list_str,
 )
-from ai_infra_bench.constants import FULL_DATA_JSON_PATH
-from ai_infra_bench.modes.slo import slo_run
-from ai_infra_bench.utils import (
+from ai_infra_bench.utils.ori import (
     add_request_rate,
     kill_process_tree,
     maybe_create_labels,

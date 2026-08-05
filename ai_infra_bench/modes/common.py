@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Dict, List
 
-from ai_infra_bench.utils import avg_std_strf
+from ai_infra_bench.utils.ori import avg_std_strf
 
 logger = logging.getLogger(__name__)
 
