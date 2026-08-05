@@ -1,5 +1,6 @@
 import argparse
 import json
+import random
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -21,6 +22,7 @@ from ai_infra_bench.utils.req import (
     update_metrics,
 )
 
+RANDOM_TOKEN_UPPER_BOUND = 10_000
 json_schema_response_format = {
     "name": "require_named",
     "description": "a schema for the response format",
@@ -121,27 +123,29 @@ def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
 
     print_table(title="Single Request Benchmark", rows=rows)
 
-    print_table(
-        title="Cached Token Metrics",
-        rows=[
-            ("Metric", "Value"),
-            *[(key, fmt(metrics.get(key))) for key in CACHED_METRIC_KEYS],
-        ],
-    )
+    if metrics.get("cached_tokens"):
+        print_table(
+            title="Cached Token Metrics",
+            rows=[
+                ("Metric", "Value"),
+                *[(key, fmt(metrics.get(key))) for key in CACHED_METRIC_KEYS],
+            ],
+        )
 
-    print_table(
-        title="Spec Token Metrics",
-        rows=[
-            ("Metric", "Value"),
-            *[(key, fmt(metrics.get(key))) for key in SPEC_METRIC_KEYS],
-            (
-                "spec_correct_drafts_histogram_percentages",
-                format_histogram_percentages(
-                    metrics.get("spec_correct_drafts_histogram") or []
+    if metrics.get("spec_num_proposed_drafts"):
+        print_table(
+            title="Spec Token Metrics",
+            rows=[
+                ("Metric", "Value"),
+                *[(key, fmt(metrics.get(key))) for key in SPEC_METRIC_KEYS],
+                (
+                    "spec_correct_drafts_histogram_percentages",
+                    format_histogram_percentages(
+                        metrics.get("spec_correct_drafts_histogram") or []
+                    ),
                 ),
-            ),
-        ],
-    )
+            ],
+        )
 
 
 def build_request(args) -> Tuple[str, Dict[str, Any]]:
@@ -149,16 +153,19 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
 
     if args.payload_path:
         payload = read_json(args.payload_path)
+    elif args.input_len is not None:
+        input_ids = random.Random(args.seed).choices(
+            range(RANDOM_TOKEN_UPPER_BOUND), k=args.input_len
+        )
+        payload = {
+            "prompt": input_ids,
+            "max_tokens": args.output_len,
+            "ignore_eos": True,
+        }
+        url = api_url(args.base_url, "/v1/completions")
     elif args.input_ids_path:
-        if not args.tokenizer_path:
-            raise ValueError("--tokenizer-path is required with --input-ids-path")
-
-        from transformers import AutoTokenizer
-
         input_ids = read_json(args.input_ids_path)
-        prompt = AutoTokenizer.from_pretrained(args.tokenizer_path).decode(input_ids)
-        print(f"{prompt=}")
-        payload = {"prompt": prompt}
+        payload = {"prompt": input_ids}
         url = api_url(args.base_url, "/v1/completions")
     else:
         payload = {"messages": [{"role": "user", "content": args.prompt}]}
@@ -240,6 +247,24 @@ def _render_delta(delta: Dict[str, Any]) -> bool:
     return rendered_token
 
 
+def _render_stream_choice(choice: Dict[str, Any], raw: bool) -> bool:
+    if "text" in choice:
+        text = choice.get("text") or ""
+        if text and not raw:
+            color_print(text, Color.LIGHT_GREEN)
+        return bool(text)
+
+    delta = choice.get("delta") or {}
+    has_token = bool(
+        delta.get("reasoning_content")
+        or delta.get("content")
+        or delta.get("tool_calls")
+    )
+    if not raw:
+        has_token = _render_delta(delta)
+    return has_token
+
+
 def _handle_stream_request(url, headers, payload, raw: bool) -> None:
     payload.update(STREAM_RETURN_PAYLOAD)
     start_time = time.perf_counter()
@@ -269,15 +294,8 @@ def _handle_stream_request(url, headers, payload, raw: bool) -> None:
 
             update_metrics(metrics, extract_response_metrics(chunk))
             choices = chunk.get("choices") or []
-            delta = choices[0].get("delta") or {} if choices else {}
             received_at = time.perf_counter()
-            has_token = bool(
-                delta.get("reasoning_content")
-                or delta.get("content")
-                or delta.get("tool_calls")
-            )
-            if not raw:
-                has_token = _render_delta(delta)
+            has_token = _render_stream_choice(choices[0], raw) if choices else False
             if has_token and first_token_time is None:
                 first_token_time = received_at
 
@@ -318,7 +336,12 @@ def main(argv=None):
 
     parser.add_argument("--disable-stream", action="store_true")
     parser.add_argument("--prompt", type=str, default="Who are you")
-    parser.add_argument("--tokenizer-path", type=str, help="The path of tokenizer path")
+    parser.add_argument("--seed", type=int, default=42, help="Random token seed")
+    parser.add_argument(
+        "--output-len",
+        type=int,
+        help="Force this many output tokens with ignore_eos",
+    )
 
     # extra kwargs in the payload
     think_mutex_group = parser.add_mutually_exclusive_group()
@@ -355,8 +378,19 @@ def main(argv=None):
     mutex_group.add_argument("--tools", action="store_true", help="Add tool")
     mutex_group.add_argument("--payload-path", type=str, help="The path of payload")
     mutex_group.add_argument("--input-ids-path", type=str, help="The path of input_ids")
+    mutex_group.add_argument(
+        "--input-len",
+        type=int,
+        help="Generate this many random input token IDs",
+    )
 
     args = parser.parse_args(argv)
+    if (args.input_len is None) != (args.output_len is None):
+        parser.error("--input-len and --output-len must be used together")
+    if args.input_len is not None and args.input_len < 1:
+        parser.error("--input-len must be at least 1")
+    if args.output_len is not None and args.output_len < 1:
+        parser.error("--output-len must be at least 1")
     http_request(args)
 
 
