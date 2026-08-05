@@ -197,7 +197,7 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
             "enable_thinking": True,
         }
     elif args.disable_thinking:
-        payload["chat_template_kwargs"] = {"enable_thinking": False}
+        payload["chat_template_kwargs"] = {"enable_thinking": False, "thinking": False}
 
     return url, prepare_payload(payload, args.model)
 
