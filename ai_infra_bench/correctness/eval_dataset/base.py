@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from aiohttp import ClientSession
 from tqdm import tqdm
 
-from ai_infra_bench.common import _create_bench_client_session
+from ai_infra_bench.utils.client import _create_bench_client_session
 
 logger = logging.getLogger(__name__)
 

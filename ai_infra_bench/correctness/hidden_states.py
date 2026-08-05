@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import json
 import logging
-import math
 import os
 import sys
 from dataclasses import dataclass
