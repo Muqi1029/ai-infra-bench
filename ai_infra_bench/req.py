@@ -319,7 +319,8 @@ def http_request(args):
     url, payload = build_request(args)
     headers = {"Authorization": f"Bearer {args.api_key}"}
 
-    info_print(headers, payload, url)
+    if args.verbose:
+        info_print(headers, payload, url)
     if args.disable_stream:
         _handle_non_stream_request(url, headers, payload)
     else:
@@ -333,6 +334,7 @@ def main(argv=None):
     parser.add_argument(
         "--model", type=str, help="override the model field in the payload"
     )
+    parser.add_argument("-v", "--verbose", action="store_true")
 
     parser.add_argument("--disable-stream", action="store_true")
     parser.add_argument("--prompt", type=str, default="Who are you")
