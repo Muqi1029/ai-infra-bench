@@ -91,6 +91,7 @@ async def run_requests(
     request_url: str,
     requests: Iterable[Mapping[str, Any]],
     model: str,
+    override_payload: str,
     semaphore: asyncio.Semaphore,
     progress: tqdm,
     request_rate: float = float("inf"),
@@ -98,6 +99,11 @@ async def run_requests(
     tasks = []
     async for request in get_request(requests, request_rate):
         payload = prepare_payload(request, model)
+        if override_payload:
+            try:
+                payload.update(json.loads(override_payload))
+            except json.JSONDecodeError:
+                logger.error(f"Failed to decode {override_payload=}")
         tasks.append(
             asyncio.create_task(
                 request_func(session, request_url, payload, semaphore, progress)
@@ -136,6 +142,7 @@ async def run_benchmark(args: Namespace) -> None:
                     request_url,
                     warmup_requests,
                     args.model,
+                    args.override_payload,
                     semaphore,
                     progress,
                 )
@@ -149,6 +156,7 @@ async def run_benchmark(args: Namespace) -> None:
                 request_url,
                 formal_requests,
                 args.model,
+                args.override_payload,
                 semaphore,
                 progress,
                 args.request_rate,

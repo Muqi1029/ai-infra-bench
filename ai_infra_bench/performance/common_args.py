@@ -13,9 +13,9 @@ def add_common_args(parser: Namespace):
     parser.add_argument(
         "--api-key", default="JustKeepMe", help="The API key of the router"
     )
-    parser.add_argument(
-        "--model", type=str, required=True, help="The model to benchmark"
-    )
+    parser.add_argument("--model", type=str, help="The model to benchmark")
+
+    parser.add_argument("--override-payload", type=str)
 
     parser.add_argument("--seed", type=int, default=42, help="The seed for random")
 
