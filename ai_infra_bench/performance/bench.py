@@ -94,10 +94,34 @@ async def run_requests(
     model: str,
     override_payload: str,
     semaphore: asyncio.Semaphore,
-    progress: tqdm,
+    progress: Optional[tqdm],
     request_rate: float = float("inf"),
+    benchmark_start_time: Optional[float] = None,
 ) -> List[OutputMetric]:
     tasks = []
+    completion_tokens_sum = 0
+
+    async def run_request(payload: Dict[str, Any]) -> OutputMetric:
+        nonlocal completion_tokens_sum
+
+        output = await request_func(
+            session,
+            request_url,
+            payload,
+            semaphore,
+            None,
+        )
+        if progress is not None:
+            progress.update(1)
+            if benchmark_start_time is not None:
+                if output.success:
+                    completion_tokens_sum += output.completion_tokens
+                elapsed_s = max(time.perf_counter() - benchmark_start_time, 1e-9)
+                progress.set_postfix(
+                    {"TPS": (f"{completion_tokens_sum / elapsed_s:.2f} tokens/s")}
+                )
+        return output
+
     async for request in get_request(requests, request_rate):
         payload = prepare_payload(request, model)
         if override_payload:
@@ -105,11 +129,7 @@ async def run_requests(
                 payload.update(json.loads(override_payload))
             except json.JSONDecodeError:
                 logger.error(f"Failed to decode {override_payload=}")
-        tasks.append(
-            asyncio.create_task(
-                request_func(session, request_url, payload, semaphore, progress)
-            )
-        )
+        tasks.append(asyncio.create_task(run_request(payload)))
     return await asyncio.gather(*tasks)
 
 
@@ -161,6 +181,7 @@ async def run_benchmark(args: Namespace) -> None:
                 semaphore,
                 progress,
                 args.request_rate,
+                benchmark_start_time,
             )
             duration_s = time.perf_counter() - benchmark_start_time
 

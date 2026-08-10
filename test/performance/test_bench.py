@@ -113,6 +113,52 @@ def test_run_requests_prepares_copied_payloads(monkeypatch):
     assert original == {"min_tokens": 0, "model": "recorded-model"}
 
 
+def test_run_requests_updates_live_output_throughput(monkeypatch):
+    class Progress:
+        def __init__(self):
+            self.updates = 0
+            self.postfixes = []
+
+        def update(self, count):
+            self.updates += count
+
+        def set_postfix(self, values):
+            self.postfixes.append(values)
+
+    async def return_output(session, request_url, payload, semaphore, progress):
+        assert progress is None
+        return OutputMetric(
+            success=True,
+            completion_tokens=payload["completion_tokens"],
+        )
+
+    times = iter([12.0, 14.0])
+    progress = Progress()
+    monkeypatch.setattr("ai_infra_bench.performance.bench.request_func", return_output)
+    monkeypatch.setattr(
+        "ai_infra_bench.performance.bench.time.perf_counter", lambda: next(times)
+    )
+
+    asyncio.run(
+        run_requests(
+            session=None,
+            request_url="http://localhost/v1/chat/completions",
+            requests=[{"completion_tokens": 10}, {"completion_tokens": 20}],
+            model=None,
+            override_payload=None,
+            semaphore=asyncio.Semaphore(1),
+            progress=progress,
+            benchmark_start_time=10.0,
+        )
+    )
+
+    assert progress.updates == 2
+    assert progress.postfixes == [
+        {"TPS": "5.00 tokens/s"},
+        {"TPS": "7.50 tokens/s"},
+    ]
+
+
 def test_output_metric_uses_shared_response_metric_extraction():
     output = OutputMetric()
 
