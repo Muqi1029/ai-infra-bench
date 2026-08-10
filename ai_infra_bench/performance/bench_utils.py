@@ -88,6 +88,8 @@ def handle_outputs(
 
     completion_tokens_list = [output.completion_tokens for output in filtered_outputs]
     reasoning_tokens_list = [output.reasoning_tokens for output in filtered_outputs]
+    total_completion_tokens = sum(completion_tokens_list)
+    total_reasoning_tokens = sum(reasoning_tokens_list)
 
     # cached tokens
     cached_tokens_list = [output.cached_tokens for output in filtered_outputs]
@@ -120,7 +122,7 @@ def handle_outputs(
 
     duration_s = max(duration_s, 1e-9)
     finished_requests_per_second = num_success_requests / duration_s
-    output_throughput = sum(completion_tokens_list) / duration_s
+    output_throughput = total_completion_tokens / duration_s
     request_rate_display = (
         "unlimited" if request_rate == float("inf") else f"{request_rate:g} req/s"
     )
@@ -141,6 +143,8 @@ def handle_outputs(
             ],
             ["Output throughput", f"{output_throughput:.2f} tokens/s"],
             ["Total prompt tokens", f"{total_prompt_tokens} tokens"],
+            ["Total completion tokens", f"{total_completion_tokens} tokens"],
+            ["Total reasoning tokens", f"{total_reasoning_tokens} tokens"],
             ["Total cached tokens", f"{total_cached_tokens} tokens"],
             [
                 "Total cached tokens device",
