@@ -15,6 +15,7 @@ from ai_infra_bench.performance.common_args import add_common_args
 from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.io import _read_json, _read_jsonl
 from ai_infra_bench.utils.req import api_url, prepare_payload
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,6 @@ def tool_filter_request(request: Mapping[str, Any]) -> bool:
     ):
         return False
     return not bool(request.get("response_format"))
-
-
-def _read_json(file_path: str) -> Any:
-    with open(file_path, "r", encoding="utf-8") as file:
-        return json.load(file)
 
 
 def read_requests_with_ts(payload_regex_path: str, args: Namespace) -> List[Dict]:
@@ -64,7 +60,12 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
     requests = []
     for file_path in sorted(glob(payload_regex_path, recursive=True)):
         logger.info(f"Reading {file_path}")
-        requests.extend(_read_json(file_path))
+        if file_path.endswith(".json"):
+            requests.extend(_read_json(file_path))
+        elif file_path.endswith(".jsonl"):
+            requests.extend(_read_jsonl(file_path))
+        else:
+            logger.error(f"{file_path} cannot be read. Only support json/jsonl suffix")
     logger.info(f"Read {len(requests)} requests")
     return requests
 
