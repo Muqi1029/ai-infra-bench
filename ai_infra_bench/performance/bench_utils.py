@@ -2,8 +2,9 @@ import asyncio
 import json
 import logging
 import random
+import subprocess
 from dataclasses import asdict
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -12,6 +13,33 @@ from ai_infra_bench.utils.draw import print_table
 from ai_infra_bench.utils.req import format_histogram_percentages
 
 logger = logging.getLogger(__name__)
+
+
+def get_first_gpu_info() -> Tuple[str, str]:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return "N/A", "N/A"
+
+    first_gpu = next(
+        (line.strip() for line in result.stdout.splitlines() if line.strip()),
+        "",
+    )
+    try:
+        name, memory_mib = (value.strip() for value in first_gpu.rsplit(",", 1))
+    except ValueError:
+        return "N/A", "N/A"
+    return name, f"{memory_mib} MiB"
 
 
 def calculate_itl_ms(output: OutputMetric) -> Optional[float]:
@@ -126,11 +154,14 @@ def handle_outputs(
     request_rate_display = (
         "unlimited" if request_rate == float("inf") else f"{request_rate:g} req/s"
     )
+    device_name, device_memory = get_first_gpu_info()
 
     print_table(
         "Benchmark Summary",
         [
             ["Metric", "Value"],
+            ["Device info", device_name],
+            ["Device memory", device_memory],
             ["Total requests", str(num_total_requests)],
             ["Successful requests", str(num_success_requests)],
             ["Failed requests", str(num_failed_requests)],

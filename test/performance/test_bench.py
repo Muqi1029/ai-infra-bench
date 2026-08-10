@@ -16,6 +16,21 @@ from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.req import format_histogram_percentages
 
 
+def test_get_first_gpu_info_uses_first_gpu(monkeypatch):
+    def run(command, **kwargs):
+        assert command == [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+        assert kwargs["timeout"] == 5
+        return Namespace(stdout="GPU 0, 81920\nGPU 1, 40960\n")
+
+    monkeypatch.setattr(bench_utils.subprocess, "run", run)
+
+    assert bench_utils.get_first_gpu_info() == ("GPU 0", "81920 MiB")
+
+
 def test_tool_filter_request_supports_openai_tool_shape():
     unconstrained = {
         "tool_choice": "auto",
@@ -197,6 +212,48 @@ def test_handle_outputs_supports_zero_cached_tokens():
     )
 
     handle_outputs([output], duration_s=1, max_concurrency=1, request_rate=1)
+
+
+def test_benchmark_summary_includes_total_output_tokens(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "get_first_gpu_info",
+        lambda: ("Test GPU", "81920 MiB"),
+    )
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+    outputs = [
+        OutputMetric(
+            success=True,
+            prompt_tokens=2,
+            completion_tokens=10,
+            reasoning_tokens=3,
+        ),
+        OutputMetric(
+            success=True,
+            prompt_tokens=2,
+            completion_tokens=20,
+            reasoning_tokens=7,
+        ),
+        OutputMetric(
+            success=False,
+            prompt_tokens=2,
+            completion_tokens=100,
+            reasoning_tokens=100,
+        ),
+    ]
+
+    handle_outputs(outputs, duration_s=2, max_concurrency=1, request_rate=1)
+
+    summary_rows = next(rows for title, rows in tables if title == "Benchmark Summary")
+    assert ["Device info", "Test GPU"] in summary_rows
+    assert ["Device memory", "81920 MiB"] in summary_rows
+    assert ["Total completion tokens", "30 tokens"] in summary_rows
+    assert ["Total reasoning tokens", "10 tokens"] in summary_rows
 
 
 def test_format_histogram_percentages():
