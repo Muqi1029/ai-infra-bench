@@ -69,11 +69,20 @@ def test_http_streaming_request_disables_meta_info():
 
 
 def test_print_metrics_includes_spec_histogram_percentages():
-    with patch("ai_infra_bench.req.print_table") as print_table:
+    with (
+        patch("ai_infra_bench.req.print_table") as print_table,
+        patch(
+            "ai_infra_bench.req.get_first_gpu_info",
+            return_value=("Test GPU", "81920 MiB"),
+        ),
+    ):
         print_metrics(
             0,
             1,
-            metrics={"spec_correct_drafts_histogram": [1, 2, 1]},
+            metrics={
+                "spec_num_proposed_drafts": 1,
+                "spec_correct_drafts_histogram": [1, 2, 1],
+            },
         )
 
     spec_rows = print_table.call_args_list[-1].kwargs["rows"]
@@ -81,6 +90,10 @@ def test_print_metrics_includes_spec_histogram_percentages():
         "spec_correct_drafts_histogram_percentages",
         "[25.00%, 50.00%, 25.00%]",
     ) in spec_rows
+
+    summary_rows = print_table.call_args_list[0].kwargs["rows"]
+    assert ("device info", "Test GPU", "") in summary_rows
+    assert ("device memory", "81920 MiB", "") in summary_rows
 
 
 def test_length_request_uses_random_input_ids_and_completions_api():

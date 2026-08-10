@@ -13,6 +13,7 @@ from ai_infra_bench.performance.bench import (
 )
 from ai_infra_bench.performance.bench_utils import handle_outputs
 from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.utils import device
 from ai_infra_bench.utils.req import format_histogram_percentages
 
 
@@ -26,7 +27,7 @@ def test_get_first_gpu_info_uses_first_gpu(monkeypatch):
         assert kwargs["timeout"] == 5
         return Namespace(stdout="GPU 0, 81920\nGPU 1, 40960\n")
 
-    monkeypatch.setattr(bench_utils.subprocess, "run", run)
+    monkeypatch.setattr(device.subprocess, "run", run)
 
     assert bench_utils.get_first_gpu_info() == ("GPU 0", "81920 MiB")
 

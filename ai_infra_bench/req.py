@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import requests
 
+from ai_infra_bench.utils.device import get_first_gpu_info
 from ai_infra_bench.utils.draw import Color, color_print, fmt, print_table
 from ai_infra_bench.utils.ori import read_json
 from ai_infra_bench.utils.req import (
@@ -112,14 +113,17 @@ def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
     if completion_tokens and completion_tokens > 1 and ttft_ms is not None:
         tpot_ms = (e2e_ms - ttft_ms) / (completion_tokens - 1)
 
-    cached_tokens = metrics.get("cached_tokens", 0)
-    prompt_tokens = metrics.get("prompt_tokens", 0)
+    cached_tokens = metrics.get("cached_tokens") or 0
+    prompt_tokens = metrics.get("prompt_tokens") or 0
     cached_tokens_ratio = (
         cached_tokens / (prompt_tokens - 1) if prompt_tokens > 0 else 0.0
     )
+    device_name, device_memory = get_first_gpu_info()
 
     rows = [
         ("Metric", "Value", "Unit"),
+        ("device info", device_name, ""),
+        ("device memory", device_memory, ""),
         ("ttft", fmt(ttft_ms), "ms"),
         ("e2e latency", fmt(e2e_ms), "ms"),
         ("tpot", fmt(tpot_ms), "ms"),
