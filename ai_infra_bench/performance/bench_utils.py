@@ -86,11 +86,14 @@ def handle_outputs(
     finish_reason_length_output_path: Optional[str] = None,
     dump_path: Optional[str] = None,
     metrics_path: Optional[str] = None,
+    label: Optional[str] = None,
 ):
     if dump_path:
         dump_outputs(outputs, dump_path)
 
     metric_tables: Dict[str, List[Dict[str, Any]]] = {}
+    if label:
+        metric_tables["label"] = label
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
         print_table(title, rows)
