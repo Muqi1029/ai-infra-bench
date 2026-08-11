@@ -3,7 +3,7 @@ import json
 import logging
 import random
 from dataclasses import asdict
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -47,6 +47,36 @@ def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
     return filtered_outputs
 
 
+def dump_outputs(outputs: List[OutputMetric], dump_path: str) -> None:
+    if not dump_path.endswith(".jsonl"):
+        logger.warning(
+            "Dump path only supports jsonl format; appending the .jsonl suffix"
+        )
+        dump_path += ".jsonl"
+
+    logger.info(f"Dumping all {len(outputs)} outputs to {dump_path}")
+    with open(dump_path, "w", encoding="utf-8") as f:
+        for output in outputs:
+            f.write(json.dumps(asdict(output), ensure_ascii=False) + "\n")
+
+
+def dump_metric_tables(
+    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: str
+) -> None:
+    normalized_path = metrics_path.lower()
+    if normalized_path.endswith(".json"):
+        logger.info(f"Writing metrics to {metrics_path}")
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            json.dump(metric_tables, f, ensure_ascii=False, indent=2)
+        return
+    if normalized_path.endswith(".jsonl"):
+        logger.info(f"Appending metrics to {metrics_path}")
+        with open(metrics_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(metric_tables, ensure_ascii=False) + "\n")
+        return
+    raise ValueError("--metrics-path must end with .json or .jsonl")
+
+
 def handle_outputs(
     outputs: List[OutputMetric],
     duration_s: float,
@@ -54,7 +84,22 @@ def handle_outputs(
     request_rate: float,
     completion_tokens_output_path: Optional[str] = None,
     finish_reason_length_output_path: Optional[str] = None,
+    dump_path: Optional[str] = None,
+    metrics_path: Optional[str] = None,
 ):
+    if dump_path:
+        dump_outputs(outputs, dump_path)
+
+    metric_tables: Dict[str, List[Dict[str, Any]]] = {}
+
+    def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
+        print_table(title, rows)
+        headers = rows[0]
+        metric_tables[title] = [
+            {str(header): value for header, value in zip(headers, row)}
+            for row in rows[1:]
+        ]
+
     # filter failed requests
     filtered_outputs = filter_outputs(outputs)
     num_total_requests = len(outputs)
@@ -64,7 +109,7 @@ def handle_outputs(
         if num_failed_requests > 0:
             logger.warning(f"Failed requests: {num_failed_requests}")
     if not filtered_outputs:
-        print_table(
+        emit_metric_table(
             "Benchmark Results",
             [
                 ["Metric", "Value"],
@@ -74,6 +119,8 @@ def handle_outputs(
                 ["Status", "No successful requests"],
             ],
         )
+        if metrics_path:
+            dump_metric_tables(metric_tables, metrics_path)
         return
 
     ttft_ms_list = [output.ttft_ms for output in filtered_outputs]
@@ -129,7 +176,7 @@ def handle_outputs(
     )
     device_name, device_memory = get_first_gpu_info()
 
-    print_table(
+    emit_metric_table(
         "Benchmark Summary",
         [
             ["Metric", "Value"],
@@ -171,7 +218,7 @@ def handle_outputs(
         ]
 
     # latency
-    print_table(
+    emit_metric_table(
         "Latency & Token Metrics",
         [
             ["Metric", "Mean", "P50", "P95", "P99", "Unit"],
@@ -244,7 +291,7 @@ def handle_outputs(
         total_spec_correct_drafts_histogram = np.sum(
             spec_correct_drafts_histogram_arr, axis=0
         ).tolist()
-        print_table(
+        emit_metric_table(
             "Spec Tokens Statistics",
             [
                 ["Metric", "Value"],
@@ -269,7 +316,7 @@ def handle_outputs(
         )
         for finish_reason in finish_reasons
     }
-    print_table(
+    emit_metric_table(
         "Finish Reason Statistics",
         [
             ["Finish reason", "Requests", "Percentage"],
@@ -283,6 +330,9 @@ def handle_outputs(
             ],
         ],
     )
+
+    if metrics_path:
+        dump_metric_tables(metric_tables, metrics_path)
 
     # dump completion tokens
     if completion_tokens_output_path and completion_tokens_list:

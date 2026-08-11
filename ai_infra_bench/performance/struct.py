@@ -1,8 +1,15 @@
 import time
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any, Dict, List, Mapping, Optional
 
 from ai_infra_bench.utils.req import extract_response_metrics
+
+
+class TextType(Enum):
+    REASONING = auto()
+    CONTENT = auto()
+    TOOL_CALLS = auto()
 
 
 @dataclass
@@ -11,7 +18,9 @@ class OutputMetric:
     ttft_ms: float = 0.0
     latency_ms: float = 0.0
     success: bool = False
-    out_text: str = ""
+    content: str = ""
+    reasoning_content: str = ""
+    tool_calls: str = ""
     error_message: Optional[str] = None
     finish_reason: Optional[str] = None
 
@@ -33,13 +42,19 @@ class OutputMetric:
     spec_verify_ct: int = 0
     spec_correct_drafts_histogram: List[int] = field(default_factory=list)
 
-    def update_stream_output(self, text: str, start_time: float):
+    def update_stream_output(self, text: str, start_time: float, text_type: TextType):
         if not text:
             return
 
-        self.out_text += text
         if self.ttft_ms == 0.0:
             self.ttft_ms = (time.perf_counter() - start_time) * 1000
+
+        if text_type is TextType.REASONING:
+            self.reasoning_content += text
+        elif text_type is TextType.CONTENT:
+            self.content += text
+        elif text_type is TextType.TOOL_CALLS:
+            self.tool_calls += text
 
     def update_response_metrics(self, response: Mapping[str, Any]) -> None:
         metrics = extract_response_metrics(response)
@@ -70,10 +85,3 @@ class OutputMetric:
 
     def handle_sglext_data(self, sglext: Mapping[str, Any]) -> None:
         self.update_response_metrics({"sglext": sglext})
-
-    def stream_text_or_empty(self, value) -> str:
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        return str(value)

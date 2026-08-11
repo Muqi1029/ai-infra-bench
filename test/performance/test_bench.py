@@ -1,6 +1,7 @@
 import asyncio
 import json
 from argparse import Namespace
+from dataclasses import asdict
 
 import pytest
 
@@ -215,7 +216,71 @@ def test_handle_outputs_supports_zero_cached_tokens():
     handle_outputs([output], duration_s=1, max_concurrency=1, request_rate=1)
 
 
-def test_benchmark_summary_includes_total_output_tokens(monkeypatch):
+def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
+    outputs = [
+        OutputMetric(
+            payload={"request_id": 1},
+            success=False,
+            content="完整回答",
+            reasoning_content="reasoning",
+            tool_calls='{"name":"tool"}',
+            error_message="failed",
+        ),
+        OutputMetric(
+            payload={"request_id": 2},
+            success=False,
+            error_message="failed again",
+        ),
+    ]
+    dump_path = tmp_path / "all_outputs"
+    metrics_path = tmp_path / "failed_metrics.json"
+
+    handle_outputs(
+        outputs,
+        duration_s=1,
+        max_concurrency=1,
+        request_rate=1,
+        dump_path=str(dump_path),
+        metrics_path=str(metrics_path),
+    )
+
+    dumped_path = tmp_path / "all_outputs.jsonl"
+    dumped_text = dumped_path.read_text(encoding="utf-8")
+    dumped_outputs = [json.loads(line) for line in dumped_text.splitlines()]
+    assert dumped_outputs == [asdict(output) for output in outputs]
+    assert "完整回答" in dumped_text
+    failed_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert failed_metrics == {
+        "Benchmark Results": [
+            {"Metric": "Total requests", "Value": "2"},
+            {"Metric": "Successful requests", "Value": "0"},
+            {"Metric": "Failed requests", "Value": "2"},
+            {"Metric": "Status", "Value": "No successful requests"},
+        ]
+    }
+
+
+def test_dump_metric_tables_writes_json_and_appends_jsonl(tmp_path):
+    first_metrics = {"Benchmark Summary": [{"Metric": "run", "Value": "1"}]}
+    second_metrics = {"Benchmark Summary": [{"Metric": "run", "Value": "2"}]}
+
+    json_path = tmp_path / "metrics.json"
+    json_path.write_text('{"stale": true}', encoding="utf-8")
+    bench_utils.dump_metric_tables(first_metrics, str(json_path))
+    assert json.loads(json_path.read_text(encoding="utf-8")) == first_metrics
+
+    jsonl_path = tmp_path / "metrics.jsonl"
+    bench_utils.dump_metric_tables(first_metrics, str(jsonl_path))
+    bench_utils.dump_metric_tables(second_metrics, str(jsonl_path))
+    assert [
+        json.loads(line) for line in jsonl_path.read_text(encoding="utf-8").splitlines()
+    ] == [first_metrics, second_metrics]
+
+    with pytest.raises(ValueError, match=r"\.json or \.jsonl"):
+        bench_utils.dump_metric_tables(first_metrics, str(tmp_path / "metrics.txt"))
+
+
+def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
     tables = []
     monkeypatch.setattr(
         bench_utils,
@@ -248,13 +313,29 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch):
         ),
     ]
 
-    handle_outputs(outputs, duration_s=2, max_concurrency=1, request_rate=1)
+    metrics_path = tmp_path / "metrics.json"
+    handle_outputs(
+        outputs,
+        duration_s=2,
+        max_concurrency=1,
+        request_rate=1,
+        metrics_path=str(metrics_path),
+    )
 
     summary_rows = next(rows for title, rows in tables if title == "Benchmark Summary")
     assert ["Device info", "Test GPU"] in summary_rows
     assert ["Device memory", "81920 MiB"] in summary_rows
     assert ["Total completion tokens", "30 tokens"] in summary_rows
     assert ["Total reasoning tokens", "10 tokens"] in summary_rows
+
+    metric_tables = json.loads(metrics_path.read_text(encoding="utf-8"))
+    summary_metrics = {
+        row["Metric"]: row["Value"] for row in metric_tables["Benchmark Summary"]
+    }
+    assert summary_metrics["Total completion tokens"] == "30 tokens"
+    assert summary_metrics["Total reasoning tokens"] == "10 tokens"
+    assert "Latency & Token Metrics" in metric_tables
+    assert "Finish Reason Statistics" in metric_tables
 
 
 def test_format_histogram_percentages():

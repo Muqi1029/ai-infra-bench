@@ -15,7 +15,7 @@ def add_common_args(parser: Namespace):
     )
     parser.add_argument("--model", type=str, help="The model to benchmark")
 
-    parser.add_argument("--override-payload", type=str)
+    parser.add_argument("--override-payload", type=str, help="Override the payload")
 
     parser.add_argument("--seed", type=int, default=42, help="The seed for random")
 
@@ -40,6 +40,13 @@ def add_common_args(parser: Namespace):
         type=str,
         default=None,
         help="Optional path to dump outputs whose finish_reason is 'length'",
+    )
+
+    parser.add_argument("--dump-path", help="The dump path, jsonl format")
+
+    parser.add_argument(
+        "--metrics-path",
+        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
     )
 
     parser.add_argument("--debug", action="store_true", help="Debug mode")

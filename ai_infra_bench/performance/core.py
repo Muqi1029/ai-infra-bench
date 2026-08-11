@@ -5,14 +5,13 @@ import logging
 import sys
 import time
 import traceback
-from argparse import Namespace
 from contextlib import nullcontext
 from typing import AsyncIterator, Dict, Optional
 
 import aiohttp
 from tqdm import tqdm
 
-from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.performance.struct import OutputMetric, TextType
 from ai_infra_bench.utils.req import STREAM_RETURN_PAYLOAD
 
 logger = logging.getLogger(__name__)
@@ -75,12 +74,10 @@ async def request_func(
                         # count them like content.
                         delta = choice.get("delta") or {}
                         output.update_stream_output(
-                            delta.get("reasoning_content", ""),
-                            st,
+                            delta.get("reasoning_content", ""), st, TextType.REASONING
                         )
                         output.update_stream_output(
-                            delta.get("content", ""),
-                            st,
+                            delta.get("content", ""), st, TextType.CONTENT
                         )
 
                         if tool_calls := delta.get("tool_calls"):
@@ -95,8 +92,7 @@ async def request_func(
                                 if func_arg := function.get("arguments"):
                                     tool_text_parts.append(func_arg)
                             output.update_stream_output(
-                                "".join(tool_text_parts),
-                                st,
+                                "".join(tool_text_parts), st, TextType.TOOL_CALLS
                             )
 
                     output.latency_ms = (time.perf_counter() - st) * 1000

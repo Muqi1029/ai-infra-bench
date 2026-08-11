@@ -172,7 +172,7 @@ async def run_benchmark(args: Namespace) -> None:
         formal_requests = requests[args.num_warmup_requests :]
         with tqdm(total=len(formal_requests), desc="Formally Running") as progress:
             benchmark_start_time = time.perf_counter()
-            outputs = await run_requests(
+            outputs: List[OutputMetric] = await run_requests(
                 session,
                 request_url,
                 formal_requests,
@@ -192,6 +192,8 @@ async def run_benchmark(args: Namespace) -> None:
         request_rate=args.request_rate,
         completion_tokens_output_path=args.completion_tokens_output_path,
         finish_reason_length_output_path=args.finish_reason_length_output_path,
+        dump_path=args.dump_path,
+        metrics_path=args.metrics_path,
     )
 
 
