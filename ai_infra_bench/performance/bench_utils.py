@@ -3,6 +3,7 @@ import json
 import logging
 import random
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -92,8 +93,7 @@ def handle_outputs(
         dump_outputs(outputs, dump_path)
 
     metric_tables: Dict[str, List[Dict[str, Any]]] = {}
-    if label:
-        metric_tables["label"] = label
+    metric_tables["label"] = label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
         print_table(title, rows)
