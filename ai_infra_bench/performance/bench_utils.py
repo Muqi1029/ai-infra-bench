@@ -92,8 +92,9 @@ def handle_outputs(
     if dump_path:
         dump_outputs(outputs, dump_path)
 
-    metric_tables: Dict[str, List[Dict[str, Any]]] = {}
-    metric_tables["label"] = label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    metric_tables: Dict[str, str | List[Dict[str, Any]]] = {
+        "label": label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
         print_table(title, rows)
