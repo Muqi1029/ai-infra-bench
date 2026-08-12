@@ -86,7 +86,6 @@ async def request_func(
                                 function = tool_call.get("function") or {}
                                 if func_name := function.get("name"):
                                     tool_text_parts.append(
-                                        "\n\n[Tool Call Detected]: "
                                         f"Function={func_name}\nArgument:"
                                     )
                                 if func_arg := function.get("arguments"):

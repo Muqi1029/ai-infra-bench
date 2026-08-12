@@ -197,6 +197,7 @@ async def run_benchmark(args: Namespace) -> None:
         completion_tokens_output_path=args.completion_tokens_output_path,
         finish_reason_length_output_path=args.finish_reason_length_output_path,
         dump_path=args.dump_path,
+        dump_content=args.dump_content,
         metrics_path=args.metrics_path,
         label=args.label,
     )

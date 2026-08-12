@@ -48,7 +48,9 @@ def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
     return filtered_outputs
 
 
-def dump_outputs(outputs: List[OutputMetric], dump_path: str) -> None:
+def dump_outputs(
+    outputs: List[OutputMetric], dump_path: str, dump_content: str
+) -> None:
     if not dump_path.endswith(".jsonl"):
         logger.warning(
             "Dump path only supports jsonl format; appending the .jsonl suffix"
@@ -58,7 +60,12 @@ def dump_outputs(outputs: List[OutputMetric], dump_path: str) -> None:
     logger.info(f"Dumping all {len(outputs)} outputs to {dump_path}")
     with open(dump_path, "w", encoding="utf-8") as f:
         for output in outputs:
-            f.write(json.dumps(asdict(output), ensure_ascii=False) + "\n")
+            if dump_content == "all":
+                f.write(json.dumps(asdict(output), ensure_ascii=False) + "\n")
+            elif dump_content == "msg":
+                msg = output.payload["messages"]
+                msg.append({"role": "assistant", "content": output.content})
+                f.write(json.dumps(msg, ensure_ascii=False) + "\n")
 
 
 def dump_metric_tables(
@@ -86,11 +93,12 @@ def handle_outputs(
     completion_tokens_output_path: Optional[str] = None,
     finish_reason_length_output_path: Optional[str] = None,
     dump_path: Optional[str] = None,
+    dump_content: Optional[str] = None,
     metrics_path: Optional[str] = None,
     label: Optional[str] = None,
 ):
     if dump_path:
-        dump_outputs(outputs, dump_path)
+        dump_outputs(outputs, dump_path, dump_content)
 
     metric_tables: Dict[str, str | List[Dict[str, Any]]] = {
         "label": label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")

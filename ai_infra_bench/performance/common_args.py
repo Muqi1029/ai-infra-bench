@@ -45,6 +45,12 @@ def add_common_args(parser: Namespace):
     parser.add_argument("--label", help="Label used for discribe this benchmark")
 
     parser.add_argument("--dump-path", help="The dump path, jsonl format")
+    parser.add_argument(
+        "--dump-content",
+        default="all",
+        choices=["all", "msg"],
+        help="The dump Content, jsonl format",
+    )
 
     parser.add_argument(
         "--metrics-path",
