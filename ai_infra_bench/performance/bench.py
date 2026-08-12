@@ -37,7 +37,7 @@ def tool_filter_request(request: Mapping[str, Any]) -> bool:
     return not bool(request.get("response_format"))
 
 
-def read_requests_with_ts(payload_regex_path: str, args: Namespace) -> List[Dict]:
+def read_requests_with_ts(payload_regex_path: str) -> List[Dict]:
     timestamped_requests = []
     for file_path in sorted(glob(payload_regex_path, recursive=True)):
         logger.info(f"Reading {file_path}")
@@ -45,13 +45,6 @@ def read_requests_with_ts(payload_regex_path: str, args: Namespace) -> List[Dict
 
     timestamped_requests.sort(key=lambda item: datetime.strptime(item[0], DATE_FORMAT))
     requests = [json.loads(content) for _, content in timestamped_requests]
-    if args.filter_constrained_grammar_requests:
-        filtered_requests = [
-            request for request in requests if tool_filter_request(request)
-        ]
-        num_filtered_requests = len(requests) - len(filtered_requests)
-        logger.info(f"Filter {num_filtered_requests} due to constrained decoding")
-        requests = filtered_requests
     logger.info(f"Read {len(requests)} requests")
     return requests
 
@@ -71,9 +64,20 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
 
 
 def load_requests(args: Namespace) -> List[Dict]:
+    requests = []
     if args.with_ts:
-        return read_requests_with_ts(args.payload_regex_path, args)
-    return read_requests(args.payload_regex_path)
+        requests = read_requests_with_ts(args.payload_regex_path)
+    else:
+        requests = read_requests(args.payload_regex_path)
+
+    if args.filter_constrained_grammar_requests:
+        filtered_requests = [
+            request for request in requests if tool_filter_request(request)
+        ]
+        num_filtered_requests = len(requests) - len(filtered_requests)
+        logger.info(f"Filter {num_filtered_requests} due to constrained decoding")
+        requests = filtered_requests
+    return requests
 
 
 def validate_args(args: Namespace) -> None:

@@ -405,7 +405,7 @@ def main(argv=None):
         parser.error("--input-len and --output-len must be used together")
     if args.input_len is not None and args.input_len < 1:
         parser.error("--input-len must be at least 1")
-    if args.output_len is not None and args.output_len < 1:
+    if args.output_len is not None and args.output_len < 0:
         parser.error("--output-len must be at least 1")
     http_request(args)
 
