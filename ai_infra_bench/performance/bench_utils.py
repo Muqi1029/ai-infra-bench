@@ -49,8 +49,11 @@ def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
 
 
 def dump_outputs(
-    outputs: List[OutputMetric], dump_path: str, dump_content: str
+    outputs: List[OutputMetric], dump_path: Optional[str], dump_content: str
 ) -> None:
+    if not dump_path:
+        return
+
     if not dump_path.endswith(".jsonl"):
         logger.warning(
             "Dump path only supports jsonl format; appending the .jsonl suffix"
@@ -96,8 +99,7 @@ def handle_outputs(
     metrics_path: Optional[str] = None,
     label: Optional[str] = None,
 ):
-    if dump_path:
-        dump_outputs(outputs, dump_path, dump_content)
+    dump_outputs(outputs, dump_path, dump_content)
 
     metric_tables: Dict[str, str | List[Dict[str, Any]]] = {
         "label": label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
