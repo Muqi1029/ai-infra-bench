@@ -72,19 +72,19 @@ def dump_outputs(
 
 
 def dump_metric_tables(
-    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: str
+    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: Optional[str]
 ) -> None:
+    if not metrics_path:
+        return
     normalized_path = metrics_path.lower()
     if normalized_path.endswith(".json"):
         logger.info(f"Writing metrics to {metrics_path}")
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(metric_tables, f, ensure_ascii=False, indent=2)
-        return
     elif normalized_path.endswith(".jsonl"):
         logger.info(f"Appending metrics to {metrics_path}")
         with open(metrics_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(metric_tables, ensure_ascii=False) + "\n")
-        return
 
 
 def handle_outputs(
@@ -132,8 +132,7 @@ def handle_outputs(
                 ["Status", "No successful requests"],
             ],
         )
-        if metrics_path:
-            dump_metric_tables(metric_tables, metrics_path)
+        dump_metric_tables(metric_tables, metrics_path)
         return
 
     ttft_ms_list = [output.ttft_ms for output in filtered_outputs]
@@ -344,8 +343,7 @@ def handle_outputs(
         ],
     )
 
-    if metrics_path:
-        dump_metric_tables(metric_tables, metrics_path)
+    dump_metric_tables(metric_tables, metrics_path)
 
     # dump completion tokens
     if completion_tokens_output_path and completion_tokens_list:
