@@ -77,12 +77,11 @@ def dump_metric_tables(
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(metric_tables, f, ensure_ascii=False, indent=2)
         return
-    if normalized_path.endswith(".jsonl"):
+    elif normalized_path.endswith(".jsonl"):
         logger.info(f"Appending metrics to {metrics_path}")
         with open(metrics_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(metric_tables, ensure_ascii=False) + "\n")
         return
-    raise ValueError("--metrics-path must end with .json or .jsonl")
 
 
 def handle_outputs(

@@ -90,6 +90,11 @@ def validate_args(args: Namespace) -> None:
     if args.num_requests is not None and args.num_requests < 1:
         raise ValueError("--num-requests must be >= 1")
 
+    if (metrics_path := args.metrics_path) and not (
+        any(metrics_path.endswith(suffix) for suffix in [".json", ".jsonl"])
+    ):
+        raise ValueError("--metrics-path must end with .json or .jsonl")
+
 
 async def run_requests(
     session,

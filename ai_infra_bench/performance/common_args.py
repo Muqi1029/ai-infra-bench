@@ -6,7 +6,7 @@ from ai_infra_bench.utils.req import sanitize_url
 def add_common_args(parser: Namespace):
     parser.add_argument(
         "--base-url",
-        default="http://127.0.0.1:8888",
+        default="127.0.0.1:8888",
         type=sanitize_url,
         help="The base URL of the router",
     )
@@ -54,6 +54,7 @@ def add_common_args(parser: Namespace):
 
     parser.add_argument(
         "--metrics-path",
+        type=str,
         help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
     )
 
