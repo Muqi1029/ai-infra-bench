@@ -281,6 +281,7 @@ def handle_outputs(
         [output.spec_num_proposed_drafts for output in filtered_outputs]
     )
     if total_spec_num_proposed_drafts != 0:
+        # compute avg spec accept rate
         total_spec_num_correct_drafts = sum(
             [output.spec_num_correct_drafts for output in filtered_outputs]
         )
@@ -299,6 +300,7 @@ def handle_outputs(
             else "N/A"
         )
 
+        # compute histogram
         max_length_hist = max(
             [len(output.spec_correct_drafts_histogram) for output in filtered_outputs]
         )
