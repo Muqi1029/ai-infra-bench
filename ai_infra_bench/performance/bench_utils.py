@@ -284,12 +284,19 @@ def handle_outputs(
         total_spec_num_correct_drafts = sum(
             [output.spec_num_correct_drafts for output in filtered_outputs]
         )
-        total_spec_accept_rate = (
+        avg_spec_accept_rate = (
             total_spec_num_correct_drafts / total_spec_num_proposed_drafts
         )
-        spec_accept_length_list = [
-            output.spec_accept_length for output in filtered_outputs
-        ]
+
+        total_spec_verify_ct = sum(output.spec_verify_ct for output in filtered_outputs)
+        total_spec_completion_tokens = sum(
+            output.completion_tokens for output in filtered_outputs
+        )
+        avg_spec_accept_length = (
+            f"{total_spec_completion_tokens / total_spec_verify_ct:.2f}"
+            if total_spec_verify_ct
+            else "N/A"
+        )
 
         max_length_hist = max(
             [len(output.spec_correct_drafts_histogram) for output in filtered_outputs]
@@ -307,8 +314,8 @@ def handle_outputs(
             "Spec Tokens Statistics",
             [
                 ["Metric", "Value"],
-                ["Avg Spec Accept Rate", f"{total_spec_accept_rate:.2%}"],
-                ["Avg Spec Accept Length", format_mean(spec_accept_length_list)],
+                ["Avg Spec Accept Rate", f"{avg_spec_accept_rate:.2%}"],
+                ["Avg Spec Accept Length", avg_spec_accept_length],
                 [
                     "Total Spec Correct Drafts Histogram",
                     total_spec_correct_drafts_histogram,
