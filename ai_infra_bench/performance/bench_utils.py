@@ -288,6 +288,7 @@ def handle_outputs(
             total_spec_num_correct_drafts / total_spec_num_proposed_drafts
         )
 
+        # compute avg spec accept length
         total_spec_verify_ct = sum(output.spec_verify_ct for output in filtered_outputs)
         total_spec_completion_tokens = sum(
             output.completion_tokens for output in filtered_outputs

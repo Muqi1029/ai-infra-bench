@@ -338,6 +338,56 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
     assert "Finish Reason Statistics" in metric_tables
 
 
+def test_spec_accept_length_is_weighted_by_verify_ct(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "get_first_gpu_info",
+        lambda: ("Test GPU", "81920 MiB"),
+    )
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+    outputs = [
+        OutputMetric(
+            success=True,
+            prompt_tokens=2,
+            completion_tokens=10,
+            spec_num_proposed_drafts=10,
+            spec_num_correct_drafts=0,
+            spec_verify_ct=10,
+            spec_accept_length=1.0,
+            spec_correct_drafts_histogram=[10],
+        ),
+        OutputMetric(
+            success=True,
+            prompt_tokens=2,
+            completion_tokens=100,
+            spec_num_proposed_drafts=80,
+            spec_num_correct_drafts=80,
+            spec_verify_ct=20,
+            spec_accept_length=5.0,
+            spec_correct_drafts_histogram=[0, 0, 0, 0, 20],
+        ),
+        OutputMetric(
+            success=True,
+            prompt_tokens=2,
+            completion_tokens=50,
+        ),
+    ]
+
+    handle_outputs(outputs, duration_s=1, max_concurrency=1, request_rate=1)
+
+    spec_rows = next(
+        rows for title, rows in tables if title == "Spec Tokens Statistics"
+    )
+    spec_metrics = {row[0]: row[1] for row in spec_rows[1:]}
+    assert spec_metrics["Avg Spec Accept Length"] == "3.67"
+    assert spec_metrics["Avg Spec Accept Rate"] == "88.89%"
+
+
 def test_format_histogram_percentages():
     assert format_histogram_percentages([1, 2, 1]) == "[25.00%, 50.00%, 25.00%]"
     assert format_histogram_percentages([0, 0]) == "[]"
