@@ -3,10 +3,14 @@ import json
 import logging
 import random
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import requests
 
+from ai_infra_bench.performance.bench_utils import handle_outputs
+from ai_infra_bench.performance.core import request_func
+from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.utils.client import _create_bench_client_session
 from ai_infra_bench.utils.device import get_first_gpu_info
 from ai_infra_bench.utils.draw import (
     Color,
@@ -15,7 +19,6 @@ from ai_infra_bench.utils.draw import (
     format_histogram_percentages,
     print_table,
 )
-from ai_infra_bench.utils.ori import read_json
 from ai_infra_bench.utils.req import (
     CACHED_METRIC_KEYS,
     NO_STREAM_RETURN_PAYLOAD,
@@ -262,107 +265,38 @@ def _handle_non_stream_request(url, headers, payload) -> None:
     print_metrics(start_time, end_time, metrics=metrics)
 
 
-def _render_delta(delta: Dict[str, Any]) -> bool:
-    rendered_token = False
-    for key, color in (
-        ("reasoning_content", Color.LIGHT_CYAN),
-        ("content", Color.LIGHT_GREEN),
-    ):
-        if text := delta.get(key):
-            color_print(text, color)
-            rendered_token = True
-
-    for tool_call in delta.get("tool_calls") or []:
-        function = tool_call.get("function") or {}
-        if func_name := function.get("name"):
-            color_print(
-                f"\n\n[Tool Call Detected]: Function={func_name}\nArgument:",
-                Color.LIGHT_YELLOW,
-            )
-            rendered_token = True
-        if func_arg := function.get("arguments"):
-            color_print(func_arg, Color.LIGHT_YELLOW)
-            rendered_token = True
-    return rendered_token
-
-
-def _render_stream_choice(choice: Dict[str, Any], raw: bool) -> bool:
-    if "text" in choice:
-        text = choice.get("text") or ""
-        if text and not raw:
-            color_print(text, Color.LIGHT_GREEN)
-        return bool(text)
-
-    delta = choice.get("delta") or {}
-    has_token = bool(
-        delta.get("reasoning_content")
-        or delta.get("content")
-        or delta.get("tool_calls")
-    )
-    if not raw:
-        has_token = _render_delta(delta)
-    return has_token
-
-
-def _handle_stream_request(url, headers, payload, raw: bool) -> None:
+async def _handle_stream_request(url, headers, payload, raw: bool) -> None:
     start_time = time.perf_counter()
-    first_token_time: Optional[float] = None
-    metrics: Dict[str, Any] = {}
 
-    try:
-        response = requests.post(url=url, headers=headers, json=payload, stream=True)
-        response.raise_for_status()
-        for line in response.iter_lines():
-            if not line:
-                continue
-            decoded_line = line.decode("utf-8")
-            if raw:
-                print(decoded_line)
-            if not decoded_line.startswith("data:"):
-                continue
-
-            data_str = decoded_line[len("data:") :].lstrip()
-            if data_str.strip() == "[DONE]":
-                break
-
-            try:
-                chunk = json.loads(data_str)
-            except json.JSONDecodeError:
-                continue
-
-            update_metrics(metrics, extract_response_metrics(chunk))
-            choices = chunk.get("choices") or []
-            received_at = time.perf_counter()
-            has_token = _render_stream_choice(choices[0], raw) if choices else False
-            if has_token and first_token_time is None:
-                first_token_time = received_at
-
-        end_time = time.perf_counter()
-        print_metrics(start_time, end_time, first_token_time, metrics)
-    except requests.HTTPError as error:
-        response = error.response
-        body = response.text if response is not None else ""
-        color_print(
-            f"Request Error, Status Code="
-            f"{getattr(response, 'status_code', 'N/A')}, Reason: {body}",
-            Color.RED,
+    async with _create_bench_client_session() as session:
+        output_metric = await request_func(
+            session,
+            request_url=url,
+            payload=payload,
+            headers=headers,
+            raw=raw,
+            render_content=True,
         )
-        raise
-    except Exception as error:
-        color_print(f"Request Error: {error}", Color.RED)
-        raise
+    duration_s = time.perf_counter() - start_time
+    handle_outputs(
+        outputs=[output_metric],
+        duration_s=duration_s,
+        max_concurrency=1,
+        request_rate=float("inf"),
+    )
 
 
 def http_request(args):
     url, payload = build_request(args)
     headers = {"Authorization": f"Bearer {args.api_key}"}
+    output_metric = OutputMetric(payload=payload)
 
     if args.verbose:
         info_print(headers, payload, url)
     if args.disable_stream:
-        _handle_non_stream_request(url, headers, payload)
+        _handle_non_stream_request(url, headers, payload, output_metric)
     else:
-        _handle_stream_request(url, headers, payload, args.raw)
+        _handle_stream_request(url, headers, payload, args.raw, output_metric)
 
 
 def main(argv=None):

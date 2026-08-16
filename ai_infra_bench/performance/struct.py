@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, List, Mapping
 
+from ai_infra_bench.utils.draw import Color, color_print
 from ai_infra_bench.utils.req import extract_response_metrics
 
 
@@ -52,19 +53,44 @@ class OutputMetric:
     spec_verify_ct: int = 0
     spec_correct_drafts_histogram: List[int] = field(default_factory=list)
 
-    def update_stream_output(self, text: str, start_time: float, text_type: TextType):
-        if not text:
+    def update_stream_output(
+        self,
+        text_or_tool_calls: str,
+        start_time: float,
+        text_type: TextType,
+        render_content: bool = False,
+    ):
+        if not text_or_tool_calls:
             return
 
         if self.ttft_ms == 0.0:
             self.ttft_ms = (time.perf_counter() - start_time) * 1000
 
         if text_type is TextType.REASONING:
-            self.reasoning_content += text
+            self.reasoning_content += text_or_tool_calls
+            if render_content:
+                color_print(text_or_tool_calls, Color.LIGHT_CYAN)
         elif text_type is TextType.CONTENT:
-            self.content += text
+            self.content += text_or_tool_calls
+            if render_content:
+                color_print(text_or_tool_calls, Color.LIGHT_GREEN)
+
         elif text_type is TextType.TOOL_CALLS:
-            self.tool_calls += text
+            tool_text_parts = []
+            for tool_call in text_or_tool_calls:
+                function = tool_call.get("function") or {}
+                if func_name := function.get("name"):
+                    tool_text_parts.append(f"Function={func_name}\nArgument:")
+                    if render_content:
+                        color_print(
+                            f"\n\n[Tool Call Detected]: Function={func_name}\nArgument:",
+                            Color.LIGHT_YELLOW,
+                        )
+                if func_arg := function.get("arguments"):
+                    tool_text_parts.append(func_arg)
+                    if render_content:
+                        color_print(func_arg, Color.LIGHT_YELLOW)
+            self.tool_calls += "".join(tool_text_parts)
 
     def update_response_metrics(self, response: Mapping[str, Any]) -> None:
         metrics = extract_response_metrics(response)

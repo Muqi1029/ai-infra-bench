@@ -6,7 +6,7 @@ import sys
 import time
 import traceback
 from contextlib import nullcontext
-from typing import AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 
 import aiohttp
 from tqdm import tqdm
@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 FLUSH_CACHE_TRIES = 10
 
 
-async def iter_sse_data(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
+async def iter_sse_data(
+    response: aiohttp.ClientResponse, raw: bool = False
+) -> AsyncIterator[str]:
     decoder = codecs.getincrementaldecoder("utf-8")()
     buffer = ""
 
@@ -30,11 +32,15 @@ async def iter_sse_data(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
             line = line.strip()
             if not line or line.startswith(":"):
                 continue
+            if raw:
+                print(line)
             if line.startswith("data:"):
                 yield line[len("data:") :].lstrip()
 
     buffer += decoder.decode(b"", final=True)
     line = buffer.strip()
+    if raw:
+        print(line)
     if line and line.startswith("data:"):
         yield line[len("data:") :].lstrip()
 
@@ -43,20 +49,26 @@ async def request_func(
     session: aiohttp.ClientSession,
     request_url: str,
     payload: Dict,
+    headers: Dict | None = None,
+    raw: bool = False,
+    render_content: bool = False,
     sem: Optional[asyncio.Semaphore] = None,
     pbar: Optional[tqdm] = None,
-):
+) -> OutputMetric:
     payload.update(STREAM_RETURN_PAYLOAD)
 
+    render_content = not raw
     output = OutputMetric(payload=payload)
     st = 0.0
 
     try:
         async with sem or nullcontext():
             st = time.perf_counter()
-            async with session.post(url=request_url, json=payload) as response:
+            async with session.post(
+                url=request_url, headers=headers, json=payload
+            ) as response:
                 if response.status == 200:
-                    async for chunk in iter_sse_data(response):
+                    async for chunk in iter_sse_data(response, raw=raw):
                         if chunk == "[DONE]":
                             continue
 
@@ -76,24 +88,21 @@ async def request_func(
                         # count them like content.
                         delta = choice.get("delta") or {}
                         output.update_stream_output(
-                            delta.get("reasoning_content", ""), st, TextType.REASONING
+                            delta.get("reasoning_content", ""),
+                            st,
+                            TextType.REASONING,
+                            render_content,
                         )
                         output.update_stream_output(
-                            delta.get("content", ""), st, TextType.CONTENT
+                            delta.get("content", ""),
+                            st,
+                            TextType.CONTENT,
+                            render_content,
                         )
 
                         if tool_calls := delta.get("tool_calls"):
-                            tool_text_parts = []
-                            for tool_call in tool_calls:
-                                function = tool_call.get("function") or {}
-                                if func_name := function.get("name"):
-                                    tool_text_parts.append(
-                                        f"Function={func_name}\nArgument:"
-                                    )
-                                if func_arg := function.get("arguments"):
-                                    tool_text_parts.append(func_arg)
                             output.update_stream_output(
-                                "".join(tool_text_parts), st, TextType.TOOL_CALLS
+                                tool_calls, st, TextType.TOOL_CALLS, render_content
                             )
 
                     output.latency_ms = (time.perf_counter() - st) * 1000
@@ -101,7 +110,10 @@ async def request_func(
                 else:
                     output.latency_ms = (time.perf_counter() - st) * 1000
                     output.error_message = await response.text()
-                    logger.error(output.error_message)
+                    logger.error(
+                        f"Request Error, Status Code="
+                        f"{getattr(response, 'status', 'N/A')}, Reason: {output.error_message}",
+                    )
                     output.success = False
     except Exception:
         exc_info = sys.exc_info()

@@ -186,6 +186,10 @@ def handle_outputs(
 
     # filter failed requests
     filtered_outputs = filter_outputs(outputs)
+    if len(outputs) == 1 and outputs[0].success and not filtered_outputs:
+        # ``req`` also uses this formatter. A compatible endpoint may return a
+        # successful response without token usage, which must not hide latency.
+        filtered_outputs = outputs
     num_total_requests = len(outputs)
     num_success_requests = len(filtered_outputs)
     num_failed_requests = num_total_requests - num_success_requests
@@ -207,7 +211,9 @@ def handle_outputs(
         return
 
     # latency
-    ttft_ms_list = [output.ttft_ms for output in filtered_outputs]
+    ttft_ms_list = [
+        output.ttft_ms for output in filtered_outputs if output.ttft_ms > 0.0
+    ]
     tpot_ms_list = [
         tpot_ms
         for output in filtered_outputs
@@ -303,41 +309,30 @@ def handle_outputs(
             format_percentile(numeric_metrics, 99),
         ]
 
-    # latency
-    emit_metric_table(
-        "Latency & Token Metrics",
-        [
+    metric_series = [
+        ("TTFT", ttft_ms_list, "ms"),
+        ("TPOT(ecl the ttft)", tpot_ms_list, "ms"),
+        ("Latency", latency_ms_list, "ms"),
+        ("Prompt tokens", prompt_tokens_list, "tokens"),
+        ("Reasoning tokens", reasoning_tokens_list, "tokens"),
+        ("Cached tokens", cached_tokens_list, "tokens"),
+        ("Completion tokens", completion_tokens_list, "tokens"),
+    ]
+    if num_success_requests == 1:
+        latency_token_rows = [
+            ["Metric", "Value", "Unit"],
+            *[
+                [metric, format_mean(numeric_metrics), unit]
+                for metric, numeric_metrics, unit in metric_series
+            ],
+            ["Cached token ratio", f"{cached_tokens_ratio_list[0]:.2%}", "ratio"],
+        ]
+    else:
+        latency_token_rows = [
             ["Metric", "Mean", "P50", "P95", "P99", "Unit"],
-            [
-                "TTFT",
-                *compute_metrics(ttft_ms_list),
-                "ms",
-            ],
-            [
-                "TPOT(ecl the ttft)",
-                *compute_metrics(tpot_ms_list),
-                "ms",
-            ],
-            [
-                "Latency",
-                *compute_metrics(latency_ms_list),
-                "ms",
-            ],
-            [
-                "Prompt tokens",
-                *compute_metrics(prompt_tokens_list),
-                "tokens",
-            ],
-            ["Reasoning tokens", *compute_metrics(reasoning_tokens_list), "tokens"],
-            [
-                "Cached tokens",
-                *compute_metrics(cached_tokens_list),
-                "tokens",
-            ],
-            [
-                "Completion tokens",
-                *compute_metrics(completion_tokens_list),
-                "tokens",
+            *[
+                [metric, *compute_metrics(numeric_metrics), unit]
+                for metric, numeric_metrics, unit in metric_series
             ],
             [
                 "Cached token ratio",
@@ -347,8 +342,9 @@ def handle_outputs(
                 f"{np.percentile(cached_tokens_ratio_list, 99):.2%}",
                 "ratio",
             ],
-        ],
-    )
+        ]
+
+    emit_metric_table("Latency & Token Metrics", latency_token_rows)
 
     # spec tokens
     total_spec_num_proposed_drafts = sum(
