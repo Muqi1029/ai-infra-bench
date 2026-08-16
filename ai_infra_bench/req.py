@@ -8,7 +8,13 @@ from typing import Any, Dict, Optional, Tuple
 import requests
 
 from ai_infra_bench.utils.device import get_first_gpu_info
-from ai_infra_bench.utils.draw import Color, color_print, fmt, print_table
+from ai_infra_bench.utils.draw import (
+    Color,
+    color_print,
+    fmt,
+    format_histogram_percentages,
+    print_table,
+)
 from ai_infra_bench.utils.ori import read_json
 from ai_infra_bench.utils.req import (
     CACHED_METRIC_KEYS,
@@ -19,7 +25,6 @@ from ai_infra_bench.utils.req import (
     add_common_args,
     api_url,
     extract_response_metrics,
-    format_histogram_percentages,
     prepare_payload,
     update_metrics,
 )

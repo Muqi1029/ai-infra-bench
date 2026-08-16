@@ -34,6 +34,19 @@ SPEC_METRIC_KEYS = (
 )
 
 
+def tool_filter_request(payload: Mapping[str, Any]) -> bool:
+    """Return whether a request can run without constrained decoding."""
+    tool_choice = payload.get("tool_choice", payload.get("tool_choices"))
+    if tool_choice == "required" or isinstance(tool_choice, dict):
+        return False
+    if any(
+        tool.get("strict") or (tool.get("function") or {}).get("strict")
+        for tool in payload.get("tools") or []
+    ):
+        return False
+    return not bool(payload.get("response_format"))
+
+
 def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Align recorded SGLang request bodies with router/OpenAI expectations."""
     if payload.get("min_tokens") is not None and payload["min_tokens"] < 1:
@@ -80,14 +93,6 @@ def sanitize_url(url: str) -> str:
 
 def api_url(base_url: str, endpoint: str) -> str:
     return f"{sanitize_url(base_url)}/{endpoint.lstrip('/')}"
-
-
-def format_histogram_percentages(histogram: Sequence[int]) -> str:
-    total = sum(histogram)
-    if total == 0:
-        return "[]"
-    percentages = (f"{count / total:.2%}" for count in histogram)
-    return f"[{', '.join(percentages)}]"
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:
@@ -151,10 +156,10 @@ def add_common_args(parser: Namespace):
         "--base-url",
         default="127.0.0.1:30000",
         type=sanitize_url,
-        help="The base URL of the router",
+        help="The base URL of the endpoint service",
     )
     parser.add_argument(
-        "--api-key", default="JustKeepMe", help="The API key of the router"
+        "--api-key", default="JustKeepMe", help="The API key of the endpoint service"
     )
     parser.add_argument("--model", type=str, help="The model to benchmark")
 

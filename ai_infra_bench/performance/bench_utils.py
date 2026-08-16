@@ -2,21 +2,136 @@ import asyncio
 import json
 import logging
 import random
+from argparse import ArgumentParser, Namespace
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Sequence
 
 import numpy as np
 
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.utils.device import get_first_gpu_info
-from ai_infra_bench.utils.draw import print_table
-from ai_infra_bench.utils.req import format_histogram_percentages
+from ai_infra_bench.utils.draw import (
+    format_histogram_percentages,
+    format_mean,
+    format_percentile,
+    print_table,
+)
+from ai_infra_bench.utils.req import add_common_args
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_itl_ms(output: OutputMetric) -> Optional[float]:
+def parse_args(args: Sequence[str] | None = None) -> Namespace:
+    parser = ArgumentParser(description="Benchmark router")
+    add_common_args(parser)
+
+    parser.add_argument(
+        "--num-requests",
+        default=None,
+        type=int,
+        nargs="+",
+        help="The number of requests to benchmark",
+    )
+    parser.add_argument(
+        "--num-warmup-requests",
+        default=10,
+        type=int,
+        help="The number of requests to warmup",
+    )
+
+    parser.add_argument(
+        "--filter-constrained-grammar-requests",
+        action="store_true",
+        help="Filter constrained grammar requests",
+    )
+
+    parser.add_argument(
+        "--max-concurrency",
+        default=[32],
+        type=int,
+        nargs="+",
+        help="The max concurrency",
+    )
+    parser.add_argument(
+        "--request-rate", default=float("inf"), type=float, help="Request rate"
+    )
+
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="Repeat Count for each concurrency benchmark",
+    )
+
+    parser.add_argument(
+        "--payload-regex-path", type=str, help="The path of requests", required=True
+    )
+
+    parser.add_argument(
+        "--completion-tokens-output-path",
+        type=str,
+        default=None,
+        help="Optional path to dump the full completion_tokens list",
+    )
+    parser.add_argument(
+        "--finish-reason-length-output-path",
+        type=str,
+        default=None,
+        help="Optional path to dump outputs whose finish_reason is 'length'",
+    )
+
+    parser.add_argument("--label", help="Label used for discribe this benchmark")
+
+    parser.add_argument("--with-ts", action="store_true")
+    parser.add_argument("--dump-path", help="The dump path, jsonl format")
+    parser.add_argument(
+        "--dump-content",
+        default="all",
+        choices=["all", "msg"],
+        help="The dump Content, jsonl format",
+    )
+
+    parser.add_argument(
+        "--metrics-path",
+        type=str,
+        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
+    )
+
+    parser.add_argument("--debug", action="store_true", help="Debug mode")
+
+    parser.add_argument(
+        "--disable-flush-cache",
+        action="store_true",
+        help="Whether to disable send a flush_cache before a benchmark",
+    )
+
+    return parser.parse_args(args)
+
+
+def validate_args(args: Namespace) -> None:
+    for max_concurrency in args.max_concurrency:
+        if max_concurrency < 1:
+            raise ValueError("--max-concurrency must be >= 1")
+    if args.request_rate <= 0:
+        raise ValueError("--request-rate must be > 0")
+    if args.num_warmup_requests < 0:
+        raise ValueError("--num-warmup-requests must be >= 0")
+    if args.num_requests is not None and args.num_requests < 1:
+        raise ValueError("--num-requests must be >= 1")
+
+    if (metrics_path := args.metrics_path) and not (
+        any(metrics_path.endswith(suffix) for suffix in [".json", ".jsonl"])
+    ):
+        raise ValueError("--metrics-path must end with .json or .jsonl")
+
+    if (dump_path := args.dump_path) and not dump_path.endswith(".jsonl"):
+        logger.warning(
+            "Dump path only supports jsonl format; appending the .jsonl suffix"
+        )
+        args.dump_path = f"{dump_path}.jsonl"
+
+
+def calculate_tpot_ms(output: OutputMetric) -> float | None:
     if output.completion_tokens <= 1 or output.ttft_ms <= 0.0:
         return None
 
@@ -24,20 +139,6 @@ def calculate_itl_ms(output: OutputMetric) -> Optional[float]:
     if generation_time_ms < 0.0:
         return None
     return generation_time_ms / (output.completion_tokens - 1)
-
-
-def format_mean(values: List[float], precision: int = 2) -> str:
-    if not values:
-        return "N/A"
-    return f"{np.mean(values):.{precision}f}"
-
-
-def format_percentile(
-    values: List[float], percentile: float, precision: int = 2
-) -> str:
-    if not values:
-        return "N/A"
-    return f"{np.percentile(values, percentile):.{precision}f}"
 
 
 def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
@@ -48,17 +149,11 @@ def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
     return filtered_outputs
 
 
-def dump_outputs(
-    outputs: List[OutputMetric], dump_path: Optional[str], dump_content: str
+def maybe_dump_outputs(
+    outputs: List[OutputMetric], dump_path: str | None, dump_content: str
 ) -> None:
     if not dump_path:
         return
-
-    if not dump_path.endswith(".jsonl"):
-        logger.warning(
-            "Dump path only supports jsonl format; appending the .jsonl suffix"
-        )
-        dump_path += ".jsonl"
 
     logger.info(f"Dumping all {len(outputs)} outputs to {dump_path}")
     with open(dump_path, "w", encoding="utf-8") as f:
@@ -71,8 +166,8 @@ def dump_outputs(
                 f.write(json.dumps(msg, ensure_ascii=False) + "\n")
 
 
-def dump_metric_tables(
-    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: Optional[str]
+def maybe_dump_metric_tables(
+    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: str | None
 ) -> None:
     if not metrics_path:
         return
@@ -92,17 +187,18 @@ def handle_outputs(
     duration_s: float,
     max_concurrency: int,
     request_rate: float,
-    completion_tokens_output_path: Optional[str] = None,
-    finish_reason_length_output_path: Optional[str] = None,
-    dump_path: Optional[str] = None,
-    dump_content: Optional[str] = None,
-    metrics_path: Optional[str] = None,
-    label: Optional[str] = None,
-):
-    dump_outputs(outputs, dump_path, dump_content)
+    completion_tokens_output_path: str | None = None,
+    finish_reason_length_output_path: str | None = None,
+    dump_path: str | None = None,
+    dump_content: str | None = None,
+    metrics_path: str | None = None,
+    label: str | None = None,
+) -> Dict:
+    maybe_dump_outputs(outputs, dump_path, dump_content)
 
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     metric_tables: Dict[str, str | List[Dict[str, Any]]] = {
-        "label": label or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "label": f"{label}({now})" if label else now
     }
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
@@ -132,24 +228,25 @@ def handle_outputs(
                 ["Status", "No successful requests"],
             ],
         )
-        dump_metric_tables(metric_tables, metrics_path)
+        maybe_dump_metric_tables(metric_tables, metrics_path)
         return
 
+    # latency
     ttft_ms_list = [output.ttft_ms for output in filtered_outputs]
-    itl_ms_list = [
-        itl_ms
+    tpot_ms_list = [
+        tpot_ms
         for output in filtered_outputs
-        if (itl_ms := calculate_itl_ms(output)) is not None
+        if (tpot_ms := calculate_tpot_ms(output)) is not None
     ]
     latency_ms_list = [output.latency_ms for output in filtered_outputs]
 
+    # token usage
     prompt_tokens_list = [output.prompt_tokens for output in filtered_outputs]
-    total_prompt_tokens = sum(prompt_tokens_list)
-
-    completion_tokens_list = [output.completion_tokens for output in filtered_outputs]
     reasoning_tokens_list = [output.reasoning_tokens for output in filtered_outputs]
-    total_completion_tokens = sum(completion_tokens_list)
+    completion_tokens_list = [output.completion_tokens for output in filtered_outputs]
+    total_prompt_tokens = sum(prompt_tokens_list)
     total_reasoning_tokens = sum(reasoning_tokens_list)
+    total_completion_tokens = sum(completion_tokens_list)
 
     # cached tokens
     cached_tokens_list = [output.cached_tokens for output in filtered_outputs]
@@ -180,20 +277,22 @@ def handle_outputs(
         else 0.0
     )
 
+    # basic info
     duration_s = max(duration_s, 1e-9)
     finished_requests_per_second = num_success_requests / duration_s
     output_throughput = total_completion_tokens / duration_s
     request_rate_display = (
         "unlimited" if request_rate == float("inf") else f"{request_rate:g} req/s"
     )
-    device_name, device_memory = get_first_gpu_info()
+
+    # device_name, device_memory = get_first_gpu_info()
 
     emit_metric_table(
         "Benchmark Summary",
         [
             ["Metric", "Value"],
-            ["Device info", device_name],
-            ["Device memory", device_memory],
+            # ["Device info", device_name],
+            # ["Device memory", device_memory],
             ["Total requests", str(num_total_requests)],
             ["Successful requests", str(num_success_requests)],
             ["Failed requests", str(num_failed_requests)],
@@ -240,8 +339,8 @@ def handle_outputs(
                 "ms",
             ],
             [
-                "ITL",
-                *compute_metrics(itl_ms_list),
+                "TPOT(ecl the ttft)",
+                *compute_metrics(tpot_ms_list),
                 "ms",
             ],
             [
@@ -254,15 +353,15 @@ def handle_outputs(
                 *compute_metrics(prompt_tokens_list),
                 "tokens",
             ],
-            [
-                "Completion tokens",
-                *compute_metrics(completion_tokens_list),
-                "tokens",
-            ],
             ["Reasoning tokens", *compute_metrics(reasoning_tokens_list), "tokens"],
             [
                 "Cached tokens",
                 *compute_metrics(cached_tokens_list),
+                "tokens",
+            ],
+            [
+                "Completion tokens",
+                *compute_metrics(completion_tokens_list),
                 "tokens",
             ],
             [
@@ -353,7 +452,7 @@ def handle_outputs(
         ],
     )
 
-    dump_metric_tables(metric_tables, metrics_path)
+    maybe_dump_metric_tables(metric_tables, metrics_path)
 
     # dump completion tokens
     if completion_tokens_output_path and completion_tokens_list:
@@ -380,6 +479,7 @@ def handle_outputs(
                 ensure_ascii=False,
                 indent=2,
             )
+    return metric_tables
 
 
 async def wait_for_request_interval(request_rate: float) -> None:

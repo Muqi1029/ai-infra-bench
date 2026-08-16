@@ -1,6 +1,8 @@
 import json
 from enum import Enum, auto
-from typing import List
+from typing import List, Sequence
+
+import numpy as np
 
 
 class Color(Enum):
@@ -64,3 +66,25 @@ def fmt(value, fmt: str = ".2f", suffix: str = "") -> str:
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
+
+
+def format_histogram_percentages(histogram: Sequence[int]) -> str:
+    total = sum(histogram)
+    if total == 0:
+        return "[]"
+    percentages = (f"{count / total:.2%}" for count in histogram)
+    return f"[{', '.join(percentages)}]"
+
+
+def format_mean(values: List[float], precision: int = 2) -> str:
+    if not values:
+        return "N/A"
+    return f"{np.mean(values):.{precision}f}"
+
+
+def format_percentile(
+    values: List[float], percentile: float, precision: int = 2
+) -> str:
+    if not values:
+        return "N/A"
+    return f"{np.percentile(values, percentile):.{precision}f}"
