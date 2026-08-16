@@ -14,15 +14,24 @@ class TextType(Enum):
 
 @dataclass
 class OutputMetric:
+    # input payload
     payload: Dict = field(default_factory=dict)
+
+    # latency
     ttft_ms: float = 0.0
     latency_ms: float = 0.0
+
+    # status
     success: bool = False
+    error_message: Optional[str] = None
+
+    # finish_reason
+    finish_reason: Optional[str] = None
+
+    # messages
     content: str = ""
     reasoning_content: str = ""
     tool_calls: str = ""
-    error_message: Optional[str] = None
-    finish_reason: Optional[str] = None
 
     # usage
     prompt_tokens: int = 0
