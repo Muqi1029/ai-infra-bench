@@ -303,7 +303,7 @@ async def run_benchmark(args: Namespace) -> None:
 
                 # flush cache
                 if not args.disable_flush_cache:
-                    flush_cache(session, flush_cache_endpoint)
+                    await flush_cache(session, flush_cache_endpoint)
                     formal_requests = requests
                 else:
                     formal_requests = requests[args.num_warmup_requests :]

@@ -149,7 +149,7 @@ async def flush_cache(session: aiohttp.ClientSession, flush_cache_endpoint: str)
         try:
             await asyncio.sleep(0.2)
             res = await session.post(flush_cache_endpoint)
-            if res.status_code != 200:
+            if res.status != 200:
                 error_message = await res.text()
                 logger.warning(
                     f"Failed to send a flush_cache request in {i+1}/{FLUSH_CACHE_TRIES} tries."
