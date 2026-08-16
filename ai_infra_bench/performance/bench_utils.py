@@ -118,16 +118,6 @@ def validate_args(args: Namespace) -> None:
         args.dump_path = f"{dump_path}.jsonl"
 
 
-def calculate_tpot_ms(output: OutputMetric) -> float | None:
-    if output.completion_tokens <= 1 or output.ttft_ms <= 0.0:
-        return None
-
-    generation_time_ms = output.latency_ms - output.ttft_ms
-    if generation_time_ms < 0.0:
-        return None
-    return generation_time_ms / (output.completion_tokens - 1)
-
-
 def filter_outputs(outputs: List[OutputMetric]) -> List[OutputMetric]:
     filtered_outputs = []
     for output in outputs:
@@ -174,8 +164,6 @@ def handle_outputs(
     duration_s: float,
     max_concurrency: int,
     request_rate: float,
-    completion_tokens_output_path: str | None = None,
-    finish_reason_length_output_path: str | None = None,
     dump_path: str | None = None,
     dump_content: str | None = None,
     metrics_path: str | None = None,
@@ -223,7 +211,7 @@ def handle_outputs(
     tpot_ms_list = [
         tpot_ms
         for output in filtered_outputs
-        if (tpot_ms := calculate_tpot_ms(output)) is not None
+        if (tpot_ms := output.calculate_tpot_ms()) is not None
     ]
     latency_ms_list = [output.latency_ms for output in filtered_outputs]
 

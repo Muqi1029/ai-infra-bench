@@ -20,6 +20,7 @@ class OutputMetric:
     # latency
     ttft_ms: float = 0.0
     latency_ms: float = 0.0
+    tpot_ms: float = 0.0
 
     # status
     success: bool = False
@@ -94,3 +95,13 @@ class OutputMetric:
 
     def handle_sglext_data(self, sglext: Mapping[str, Any]) -> None:
         self.update_response_metrics({"sglext": sglext})
+
+    def calculate_tpot_ms(self):
+        if self.completion_tokens <= 1 or self.ttft_ms <= 0.0:
+            return None
+
+        generation_time_ms = self.latency_ms - self.ttft_ms
+        if generation_time_ms < 0.0:
+            return None
+        self.tpot_ms = generation_time_ms / (self.completion_tokens - 1)
+        return self.tpot_ms
