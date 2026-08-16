@@ -11,12 +11,11 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 from tqdm import tqdm
 
 from ai_infra_bench.performance.bench_utils import get_request, handle_outputs, set_seed
-from ai_infra_bench.performance.common_args import add_common_args
-from ai_infra_bench.performance.core import request_func
+from ai_infra_bench.performance.core import flush_cache, request_func
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.client import _create_bench_client_session
 from ai_infra_bench.utils.io import _read_json, _read_jsonl
-from ai_infra_bench.utils.req import api_url, prepare_payload
+from ai_infra_bench.utils.req import add_common_args, api_url, prepare_payload
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +101,10 @@ async def run_requests(
     requests: Iterable[Mapping[str, Any]],
     model: str,
     override_payload: str,
-    semaphore: asyncio.Semaphore,
-    progress: Optional[tqdm],
+    semaphore: asyncio.Semaphore | None = None,
+    pbar: tqdm | None = None,
     request_rate: float = float("inf"),
-    benchmark_start_time: Optional[float] = None,
+    benchmark_start_time: float | None = None,
 ) -> List[OutputMetric]:
     tasks = []
     completion_tokens_sum = 0
@@ -120,24 +119,18 @@ async def run_requests(
             semaphore,
             None,
         )
-        if progress is not None:
-            progress.update(1)
-            if benchmark_start_time is not None:
-                if output.success:
-                    completion_tokens_sum += output.completion_tokens
+        if pbar is not None:
+            pbar.update(1)
+            if benchmark_start_time is not None and output.success:
+                completion_tokens_sum += output.completion_tokens
                 elapsed_s = max(time.perf_counter() - benchmark_start_time, 1e-9)
-                progress.set_postfix(
+                pbar.set_postfix(
                     {"TPS": (f"{completion_tokens_sum / elapsed_s:.2f} tokens/s")}
                 )
         return output
 
-    async for request in get_request(requests, request_rate):
-        payload = prepare_payload(request, model)
-        if override_payload:
-            try:
-                payload.update(json.loads(override_payload))
-            except json.JSONDecodeError:
-                logger.error(f"Failed to decode {override_payload=}")
+    async for payload in get_request(requests, request_rate):
+        payload = prepare_payload(payload, model, override_payload)
         tasks.append(asyncio.create_task(run_request(payload)))
     return await asyncio.gather(*tasks)
 
@@ -146,6 +139,7 @@ async def run_benchmark(args: Namespace) -> None:
     validate_args(args)
     requests = load_requests(args)
     request_url = api_url(args.base_url, "/v1/chat/completions")
+    flush_cache_endpoint = f"{args.base_url}/flush_cache"
 
     if args.debug:
         args.num_requests = 10
@@ -163,23 +157,29 @@ async def run_benchmark(args: Namespace) -> None:
     async with _create_bench_client_session(
         args.max_concurrency, args.api_key
     ) as session:
+
+        # warmup first
         warmup_requests = requests[: args.num_warmup_requests]
         if warmup_requests:
             logger.info(f"Warming up {len(warmup_requests)} requests")
-            with tqdm(total=len(warmup_requests), desc="Warmup") as progress:
+            with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
                 await run_requests(
                     session,
                     request_url,
                     warmup_requests,
                     args.model,
                     args.override_payload,
-                    semaphore,
-                    progress,
+                    semaphore=None,  # not set concurrency for warmup stage
+                    pbar=pbar,
                 )
             logger.info("Warming up done")
 
+        # flush cache
+        if not args.disable_flush_cache:
+            flush_cache(session, flush_cache_endpoint)
+
         formal_requests = requests[args.num_warmup_requests :]
-        with tqdm(total=len(formal_requests), desc="Formally Running") as progress:
+        with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:
             benchmark_start_time = time.perf_counter()
             outputs: List[OutputMetric] = await run_requests(
                 session,
@@ -188,7 +188,7 @@ async def run_benchmark(args: Namespace) -> None:
                 args.model,
                 args.override_payload,
                 semaphore,
-                progress,
+                pbar,
                 args.request_rate,
                 benchmark_start_time,
             )
@@ -229,7 +229,58 @@ def parse_args(args: Optional[Sequence[str]] = None) -> Namespace:
         help="Filter constrained grammar requests",
     )
 
+    parser.add_argument(
+        "--max-concurrency",
+        default=[32],
+        type=int,
+        nargs="+",
+        help="The max concurrency",
+    )
+    parser.add_argument(
+        "--request-rate", default=float("inf"), type=float, help="Request rate"
+    )
+
+    parser.add_argument(
+        "--payload-regex-path", type=str, help="The path of requests", required=True
+    )
+
+    parser.add_argument(
+        "--completion-tokens-output-path",
+        type=str,
+        default=None,
+        help="Optional path to dump the full completion_tokens list",
+    )
+    parser.add_argument(
+        "--finish-reason-length-output-path",
+        type=str,
+        default=None,
+        help="Optional path to dump outputs whose finish_reason is 'length'",
+    )
+
+    parser.add_argument("--label", help="Label used for discribe this benchmark")
+
     parser.add_argument("--with-ts", action="store_true")
+    parser.add_argument("--dump-path", help="The dump path, jsonl format")
+    parser.add_argument(
+        "--dump-content",
+        default="all",
+        choices=["all", "msg"],
+        help="The dump Content, jsonl format",
+    )
+
+    parser.add_argument(
+        "--metrics-path",
+        type=str,
+        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
+    )
+
+    parser.add_argument("--debug", action="store_true", help="Debug mode")
+
+    parser.add_argument(
+        "--disable-flush-cache",
+        action="store_true",
+        help="Whether to disable send a flush_cache before a benchmark",
+    )
     add_common_args(parser)
 
     return parser.parse_args(args)

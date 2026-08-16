@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import random
 import time
 from typing import Any, Dict, Optional, Tuple
@@ -15,13 +16,15 @@ from ai_infra_bench.utils.req import (
     SPEC_METRIC_KEYS,
     STREAM_RETURN_PAYLOAD,
     USAGE_METRIC_KEYS,
+    add_common_args,
     api_url,
     extract_response_metrics,
     format_histogram_percentages,
     prepare_payload,
-    sanitize_url,
     update_metrics,
 )
+
+logger = logging.getLogger(__name__)
 
 RANDOM_TOKEN_UPPER_BOUND = 10_000
 json_schema_response_format = {
@@ -205,6 +208,24 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         payload["chat_template_kwargs"] = {"enable_thinking": False, "thinking": False}
         payload["thinking"] = {"type": "disabled"}
 
+    # override_payload
+    if args.override_payload:
+        try:
+            override_payload = json.loads(args.override_payload)
+            payload.update(override_payload)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to decode {args.override_payload=}")
+
+    # model
+    if model := args.model:
+        payload["model"] = model
+
+    # extra payload for extra metrics (ONLY for SGLANG)
+    payload_extra = (
+        NO_STREAM_RETURN_PAYLOAD if args.disable_stream else STREAM_RETURN_PAYLOAD
+    )
+    payload.update(payload_extra)
+
     return url, prepare_payload(payload, args.model)
 
 
@@ -217,7 +238,6 @@ def _print_request_error(response, error: Exception) -> None:
 
 
 def _handle_non_stream_request(url, headers, payload) -> None:
-    payload.update(NO_STREAM_RETURN_PAYLOAD)
     start_time = time.perf_counter()
     response = requests.post(url=url, headers=headers, json=payload)
     end_time = time.perf_counter()
@@ -280,7 +300,6 @@ def _render_stream_choice(choice: Dict[str, Any], raw: bool) -> bool:
 
 
 def _handle_stream_request(url, headers, payload, raw: bool) -> None:
-    payload.update(STREAM_RETURN_PAYLOAD)
     start_time = time.perf_counter()
     first_token_time: Optional[float] = None
     metrics: Dict[str, Any] = {}
@@ -343,16 +362,12 @@ def http_request(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser("")
-    parser.add_argument("--base-url", type=sanitize_url, default="localhost:30000")
-    parser.add_argument("--api-key", type=str, default="EMPTY")
-    parser.add_argument(
-        "--model", type=str, help="override the model field in the payload"
-    )
+    add_common_args(parser)
+
     parser.add_argument("-v", "--verbose", action="store_true")
 
     parser.add_argument("--disable-stream", action="store_true")
     parser.add_argument("--prompt", type=str, default="Who are you")
-    parser.add_argument("--seed", type=int, default=42, help="Random token seed")
     parser.add_argument(
         "--output-len",
         type=int,
@@ -384,6 +399,11 @@ def main(argv=None):
 
     mutex_group = parser.add_mutually_exclusive_group()
     mutex_group.add_argument(
+        "--input-len",
+        type=int,
+        help="Generate this many random input token IDs",
+    )
+    mutex_group.add_argument(
         "--ebnf", action="store_true", help="Constrained Decoding for EBNF format"
     )
     mutex_group.add_argument(
@@ -394,11 +414,6 @@ def main(argv=None):
     mutex_group.add_argument("--tools", action="store_true", help="Add tool")
     mutex_group.add_argument("--payload-path", type=str, help="The path of payload")
     mutex_group.add_argument("--input-ids-path", type=str, help="The path of input_ids")
-    mutex_group.add_argument(
-        "--input-len",
-        type=int,
-        help="Generate this many random input token IDs",
-    )
 
     args = parser.parse_args(argv)
     if (args.input_len is None) != (args.output_len is None):
@@ -407,6 +422,12 @@ def main(argv=None):
         parser.error("--input-len must be at least 1")
     if args.output_len is not None and args.output_len < 0:
         parser.error("--output-len must be at least 1")
+    if args.override_payload is not None:
+        try:
+            json.loads(args.override_payload)
+        except json.JSONDecodeError:
+            parser.error(f"failed to loads {args.override_payload=}")
+
     http_request(args)
 
 

@@ -16,6 +16,8 @@ from ai_infra_bench.utils.req import STREAM_RETURN_PAYLOAD
 
 logger = logging.getLogger(__name__)
 
+FLUSH_CACHE_TRIES = 10
+
 
 async def iter_sse_data(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
     decoder = codecs.getincrementaldecoder("utf-8")()
@@ -99,7 +101,7 @@ async def request_func(
                 else:
                     output.latency_ms = (time.perf_counter() - st) * 1000
                     output.error_message = await response.text()
-                    print(output.error_message)
+                    logger.error(output.error_message)
                     output.success = False
     except Exception:
         exc_info = sys.exc_info()
@@ -114,3 +116,20 @@ async def request_func(
             pbar.update(1)
 
     return output
+
+
+async def flush_cache(session: aiohttp.ClientSession, flush_cache_endpoint: str):
+    for i in range(FLUSH_CACHE_TRIES):
+        try:
+            await asyncio.sleep(0.2)
+            res = await session.post(flush_cache_endpoint)
+            if res.status_code != 200:
+                error_message = await res.text()
+                logger.warning(
+                    f"Failed to send a flush_cache request in {i+1}/{FLUSH_CACHE_TRIES} tries."
+                    f"Error Message: {error_message}"
+                )
+        except Exception:
+            exc_info = sys.exc_info()
+            error_message = "".join(traceback.format_exception(*exc_info))
+            logger.error(error_message)

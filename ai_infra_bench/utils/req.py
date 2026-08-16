@@ -1,5 +1,10 @@
+import json
+import logging
+from argparse import Namespace
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
+
+logger = logging.getLogger(__name__)
 
 STREAM_RETURN_PAYLOAD = {
     "stream": True,
@@ -47,11 +52,19 @@ def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def prepare_payload(
-    payload: Mapping[str, Any], model: Optional[str] = None
+    payload: Mapping[str, Any],
+    model: Optional[str] = None,
+    override_payload: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Copy and normalize a payload before request-specific fields are added."""
     prepared = normalize_payload(deepcopy(dict(payload)))
+    if override_payload:
+        try:
+            payload.update(json.loads(override_payload))
+        except json.JSONDecodeError:
+            logger.error(f"Failed to decode {override_payload=}")
     if model:
+        # model prioritize override_payload
         prepared["model"] = model
     return prepared
 
@@ -131,3 +144,19 @@ def update_metrics(metrics: Dict[str, Any], new_metrics: Mapping[str, Any]) -> N
     metrics.update(
         {key: value for key, value in new_metrics.items() if value is not None}
     )
+
+
+def add_common_args(parser: Namespace):
+    parser.add_argument(
+        "--base-url",
+        default="127.0.0.1:30000",
+        type=sanitize_url,
+        help="The base URL of the router",
+    )
+    parser.add_argument(
+        "--api-key", default="JustKeepMe", help="The API key of the router"
+    )
+    parser.add_argument("--model", type=str, help="The model to benchmark")
+
+    parser.add_argument("--override-payload", type=str, help="Override the payload")
+    parser.add_argument("--seed", type=int, default=42, help="The seed for random")
