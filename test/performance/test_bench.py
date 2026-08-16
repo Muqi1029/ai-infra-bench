@@ -7,6 +7,8 @@ import pytest
 
 from ai_infra_bench.performance import bench_utils
 from ai_infra_bench.performance.bench import (
+    generate_random_requests,
+    get_request_url,
     read_requests_with_ts,
     run_requests,
     tool_filter_request,
@@ -15,7 +17,7 @@ from ai_infra_bench.performance.bench import (
 from ai_infra_bench.performance.bench_utils import handle_outputs
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils import device
-from ai_infra_bench.utils.req import format_histogram_percentages
+from ai_infra_bench.utils.draw import format_histogram_percentages
 
 
 def test_get_first_gpu_info_uses_first_gpu(monkeypatch):
@@ -30,7 +32,7 @@ def test_get_first_gpu_info_uses_first_gpu(monkeypatch):
 
     monkeypatch.setattr(device.subprocess, "run", run)
 
-    assert bench_utils.get_first_gpu_info() == ("GPU 0", "81920 MiB")
+    assert device.get_first_gpu_info() == ("GPU 0", "81920 MiB")
 
 
 def test_tool_filter_request_supports_openai_tool_shape():
@@ -88,6 +90,50 @@ def test_validate_args(overrides, message):
         validate_args(Namespace(**values))
 
 
+def test_random_dataset_arguments_parse_num_requests_as_integer():
+    args = bench_utils.parse_args(
+        [
+            "--dataset",
+            "random",
+            "--input-len",
+            "4",
+            "--output-len",
+            "8",
+            "--num-requests",
+            "3",
+        ]
+    )
+
+    validate_args(args)
+
+    assert args.num_requests == 3
+
+
+def test_generate_random_requests_uses_requested_lengths():
+    bench_utils.set_seed(7)
+
+    requests = generate_random_requests(
+        input_len=4,
+        output_len=8,
+        num_requests=3,
+    )
+
+    assert len(requests) == 3
+    for payload in requests:
+        assert len(payload["prompt"]) == 4
+        assert all(isinstance(token_id, int) for token_id in payload["prompt"])
+        assert all(0 <= token_id < 10_000 for token_id in payload["prompt"])
+        assert payload["max_tokens"] == 8
+        assert payload["ignore_eos"] is True
+
+
+def test_random_dataset_uses_completions_api():
+    assert (
+        get_request_url("http://localhost:8888", "random")
+        == "http://localhost:8888/v1/completions"
+    )
+
+
 def test_get_request_waits_only_between_requests(monkeypatch):
     waits = []
 
@@ -107,7 +153,7 @@ def test_run_requests_prepares_copied_payloads(monkeypatch):
     captured = []
     original = {"min_tokens": 0, "model": "recorded-model"}
 
-    async def record_request(session, request_url, payload, semaphore, progress):
+    async def record_request(session, request_url, payload, sem=None):
         captured.append(payload)
         return OutputMetric(payload=payload)
 
@@ -121,7 +167,7 @@ def test_run_requests_prepares_copied_payloads(monkeypatch):
             model="benchmark-model",
             override_payload=None,
             semaphore=asyncio.Semaphore(1),
-            progress=None,
+            pbar=None,
         )
     )
 
@@ -142,8 +188,8 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
         def set_postfix(self, values):
             self.postfixes.append(values)
 
-    async def return_output(session, request_url, payload, semaphore, progress):
-        assert progress is None
+    async def return_output(session, request_url, payload, sem=None):
+        assert sem is not None
         return OutputMetric(
             success=True,
             completion_tokens=payload["completion_tokens"],
@@ -164,7 +210,7 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
             model=None,
             override_payload=None,
             semaphore=asyncio.Semaphore(1),
-            progress=progress,
+            pbar=progress,
             benchmark_start_time=10.0,
         )
     )
@@ -216,6 +262,83 @@ def test_handle_outputs_supports_zero_cached_tokens():
     handle_outputs([output], duration_s=1, max_concurrency=1, request_rate=1)
 
 
+def test_handle_outputs_supports_single_request_without_usage(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+    output = OutputMetric(
+        success=True,
+        latency_ms=12.5,
+    )
+
+    handle_outputs(
+        [output],
+        duration_s=0.0125,
+        max_concurrency=1,
+        request_rate=float("inf"),
+        benchmark_mode=False,
+    )
+
+    result_rows = next(rows for title, rows in tables if title == "Request Result")
+    assert ["Status", "Success"] in result_rows
+    assert ["Finish reason", "N/A"] in result_rows
+    assert not any(title == "Benchmark Summary" for title, _ in tables)
+    assert not any(title == "Finish Reason Statistics" for title, _ in tables)
+
+    latency_rows = next(
+        rows for title, rows in tables if title == "Latency & Token Metrics"
+    )
+    assert latency_rows[0] == ["Metric", "Value", "Unit"]
+    latency_metrics = {row[0]: row[1:] for row in latency_rows[1:]}
+    assert latency_metrics["TTFT"] == ["N/A", "ms"]
+    assert latency_metrics["TPOT(ecl the ttft)"] == ["N/A", "ms"]
+    assert latency_metrics["Latency"] == ["12.50", "ms"]
+
+
+def test_handle_outputs_keeps_percentiles_for_multiple_requests(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+    outputs = [
+        OutputMetric(success=True, prompt_tokens=1, latency_ms=10),
+        OutputMetric(success=True, prompt_tokens=1, latency_ms=20),
+    ]
+
+    handle_outputs(outputs, duration_s=0.02, max_concurrency=2, request_rate=1)
+
+    latency_rows = next(
+        rows for title, rows in tables if title == "Latency & Token Metrics"
+    )
+    assert latency_rows[0] == ["Metric", "Mean", "P50", "P95", "P99", "Unit"]
+
+
+def test_handle_outputs_keeps_percentiles_for_single_benchmark_request(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+
+    handle_outputs(
+        [OutputMetric(success=True, latency_ms=10)],
+        duration_s=0.01,
+        max_concurrency=1,
+        request_rate=1,
+    )
+
+    latency_rows = next(
+        rows for title, rows in tables if title == "Latency & Token Metrics"
+    )
+    assert latency_rows[0] == ["Metric", "Mean", "P50", "P95", "P99", "Unit"]
+
+
 def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
     outputs = [
         OutputMetric(
@@ -250,14 +373,12 @@ def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
     assert dumped_outputs == [asdict(output) for output in outputs]
     assert "完整回答" in dumped_text
     failed_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-    assert failed_metrics == {
-        "Benchmark Results": [
-            {"Metric": "Total requests", "Value": "2"},
-            {"Metric": "Successful requests", "Value": "0"},
-            {"Metric": "Failed requests", "Value": "2"},
-            {"Metric": "Status", "Value": "No successful requests"},
-        ]
-    }
+    assert failed_metrics["Benchmark Results"] == [
+        {"Metric": "Total requests", "Value": "2"},
+        {"Metric": "Successful requests", "Value": "0"},
+        {"Metric": "Failed requests", "Value": "2"},
+        {"Metric": "Status", "Value": "No successful requests"},
+    ]
 
 
 def test_dump_metric_tables_writes_json_and_appends_jsonl(tmp_path):
@@ -266,27 +387,24 @@ def test_dump_metric_tables_writes_json_and_appends_jsonl(tmp_path):
 
     json_path = tmp_path / "metrics.json"
     json_path.write_text('{"stale": true}', encoding="utf-8")
-    bench_utils.dump_metric_tables(first_metrics, str(json_path))
+    bench_utils.maybe_dump_metric_tables(first_metrics, str(json_path))
     assert json.loads(json_path.read_text(encoding="utf-8")) == first_metrics
 
     jsonl_path = tmp_path / "metrics.jsonl"
-    bench_utils.dump_metric_tables(first_metrics, str(jsonl_path))
-    bench_utils.dump_metric_tables(second_metrics, str(jsonl_path))
+    bench_utils.maybe_dump_metric_tables(first_metrics, str(jsonl_path))
+    bench_utils.maybe_dump_metric_tables(second_metrics, str(jsonl_path))
     assert [
         json.loads(line) for line in jsonl_path.read_text(encoding="utf-8").splitlines()
     ] == [first_metrics, second_metrics]
 
     with pytest.raises(ValueError, match=r"\.json or \.jsonl"):
-        bench_utils.dump_metric_tables(first_metrics, str(tmp_path / "metrics.txt"))
+        bench_utils.maybe_dump_metric_tables(
+            first_metrics, str(tmp_path / "metrics.txt")
+        )
 
 
 def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
     tables = []
-    monkeypatch.setattr(
-        bench_utils,
-        "get_first_gpu_info",
-        lambda: ("Test GPU", "81920 MiB"),
-    )
     monkeypatch.setattr(
         bench_utils,
         "print_table",
@@ -323,8 +441,6 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
     )
 
     summary_rows = next(rows for title, rows in tables if title == "Benchmark Summary")
-    assert ["Device info", "Test GPU"] in summary_rows
-    assert ["Device memory", "81920 MiB"] in summary_rows
     assert ["Total completion tokens", "30 tokens"] in summary_rows
     assert ["Total reasoning tokens", "10 tokens"] in summary_rows
 
@@ -340,11 +456,6 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
 
 def test_spec_accept_length_is_weighted_by_verify_ct(monkeypatch):
     tables = []
-    monkeypatch.setattr(
-        bench_utils,
-        "get_first_gpu_info",
-        lambda: ("Test GPU", "81920 MiB"),
-    )
     monkeypatch.setattr(
         bench_utils,
         "print_table",

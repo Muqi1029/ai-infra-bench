@@ -1,10 +1,7 @@
 import json
-import logging
 from argparse import Namespace
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
-
-logger = logging.getLogger(__name__)
 
 STREAM_RETURN_PAYLOAD = {
     "stream": True,
@@ -64,21 +61,43 @@ def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+def parse_override_payload(override_payload: str) -> Dict[str, Any]:
+    try:
+        override = json.loads(override_payload)
+    except json.JSONDecodeError as error:
+        raise ValueError("--override-payload must be valid JSON") from error
+    if not isinstance(override, dict):
+        raise ValueError("--override-payload must be a JSON object")
+    return override
+
+
 def prepare_payload(
     payload: Mapping[str, Any],
     model: Optional[str] = None,
     override_payload: Optional[str] = None,
+    stream: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Copy and normalize a payload before request-specific fields are added."""
     prepared = normalize_payload(deepcopy(dict(payload)))
-    if override_payload:
-        try:
-            payload.update(json.loads(override_payload))
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode {override_payload=}")
     if model:
-        # model prioritize override_payload
         prepared["model"] = model
+
+    if override_payload is not None:
+        prepared.update(parse_override_payload(override_payload))
+
+    if stream is not None:
+        if stream:
+            prepared.pop("return_meta_info", None)
+            payload_extra = STREAM_RETURN_PAYLOAD
+        else:
+            for key in (
+                "stream_options",
+                "return_cached_tokens_details",
+                "return_spec_tokens_details",
+            ):
+                prepared.pop(key, None)
+            payload_extra = NO_STREAM_RETURN_PAYLOAD
+        prepared.update(deepcopy(payload_extra))
     return prepared
 
 
@@ -161,7 +180,13 @@ def add_common_args(parser: Namespace):
     parser.add_argument(
         "--api-key", default="JustKeepMe", help="The API key of the endpoint service"
     )
-    parser.add_argument("--model", type=str, help="The model to benchmark")
+    parser.add_argument("--model", type=str, help="The model to request")
 
-    parser.add_argument("--override-payload", type=str, help="Override the payload")
-    parser.add_argument("--seed", type=int, default=42, help="The seed for random")
+    parser.add_argument(
+        "--override-payload",
+        type=str,
+        help="Override request fields with a JSON object",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random request generation seed"
+    )

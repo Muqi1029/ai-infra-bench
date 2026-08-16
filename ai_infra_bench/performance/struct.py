@@ -53,18 +53,14 @@ class OutputMetric:
     spec_verify_ct: int = 0
     spec_correct_drafts_histogram: List[int] = field(default_factory=list)
 
-    def update_stream_output(
+    def update_output(
         self,
-        text_or_tool_calls: str,
-        start_time: float,
+        text_or_tool_calls: Any,
         text_type: TextType,
         render_content: bool = False,
-    ):
+    ) -> None:
         if not text_or_tool_calls:
             return
-
-        if self.ttft_ms == 0.0:
-            self.ttft_ms = (time.perf_counter() - start_time) * 1000
 
         if text_type is TextType.REASONING:
             self.reasoning_content += text_or_tool_calls
@@ -91,6 +87,47 @@ class OutputMetric:
                     if render_content:
                         color_print(func_arg, Color.LIGHT_YELLOW)
             self.tool_calls += "".join(tool_text_parts)
+
+    def update_stream_output(
+        self,
+        text_or_tool_calls: Any,
+        start_time: float,
+        text_type: TextType,
+        render_content: bool = False,
+    ) -> None:
+        if not text_or_tool_calls:
+            return
+
+        if self.ttft_ms == 0.0:
+            self.ttft_ms = (time.perf_counter() - start_time) * 1000
+        self.update_output(text_or_tool_calls, text_type, render_content)
+
+    def update_non_stream_response(
+        self, response: Mapping[str, Any], render_content: bool = False
+    ) -> None:
+        self.update_response_metrics(response)
+
+        choices = response.get("choices") or []
+        if not choices:
+            return
+
+        choice = choices[0]
+        if finish_reason := choice.get("finish_reason"):
+            self.finish_reason = finish_reason
+
+        if "text" in choice:
+            self.update_output(choice.get("text", ""), TextType.CONTENT, render_content)
+            return
+
+        message = choice.get("message") or {}
+        self.update_output(
+            message.get("reasoning_content", ""),
+            TextType.REASONING,
+            render_content,
+        )
+        self.update_output(message.get("content", ""), TextType.CONTENT, render_content)
+        if tool_calls := message.get("tool_calls"):
+            self.update_output(tool_calls, TextType.TOOL_CALLS, render_content)
 
     def update_response_metrics(self, response: Mapping[str, Any]) -> None:
         metrics = extract_response_metrics(response)

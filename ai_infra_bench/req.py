@@ -1,38 +1,25 @@
 import argparse
+import asyncio
 import json
-import logging
 import random
 import time
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Mapping, Tuple
 
 import requests
 
+from ai_infra_bench.performance.bench import read_packaged_requests
 from ai_infra_bench.performance.bench_utils import handle_outputs
 from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.device import get_first_gpu_info
-from ai_infra_bench.utils.draw import (
-    Color,
-    color_print,
-    fmt,
-    format_histogram_percentages,
-    print_table,
-)
+from ai_infra_bench.utils.draw import Color, color_print
+from ai_infra_bench.utils.io import _read_json
 from ai_infra_bench.utils.req import (
-    CACHED_METRIC_KEYS,
-    NO_STREAM_RETURN_PAYLOAD,
-    SPEC_METRIC_KEYS,
-    STREAM_RETURN_PAYLOAD,
-    USAGE_METRIC_KEYS,
     add_common_args,
     api_url,
-    extract_response_metrics,
+    parse_override_payload,
     prepare_payload,
-    update_metrics,
 )
-
-logger = logging.getLogger(__name__)
 
 RANDOM_TOKEN_UPPER_BOUND = 10_000
 json_schema_response_format = {
@@ -107,75 +94,27 @@ def info_print(headers, payload, url):
     print(f"payload={json.dumps(payload, indent=2, ensure_ascii=False)}")
 
 
-def print_metrics(start_time, end_time, first_token_time=None, metrics=None):
-    e2e = end_time - start_time
-    ttft = first_token_time - start_time if first_token_time is not None else None
-    e2e_ms = e2e * 1000
-    ttft_ms = ttft * 1000 if ttft is not None else None
-
-    metrics = metrics or {}
-    completion_tokens = metrics.get("completion_tokens")
-
-    token_per_sec = None
-    if completion_tokens and e2e > 0:
-        token_per_sec = completion_tokens / e2e
-
-    tpot_ms = None
-    if completion_tokens and completion_tokens > 1 and ttft_ms is not None:
-        tpot_ms = (e2e_ms - ttft_ms) / (completion_tokens - 1)
-
-    cached_tokens = metrics.get("cached_tokens") or 0
-    prompt_tokens = metrics.get("prompt_tokens") or 0
-    cached_tokens_ratio = (
-        cached_tokens / (prompt_tokens - 1) if prompt_tokens > 0 else 0.0
-    )
-    device_name, device_memory = get_first_gpu_info()
-
-    rows = [
-        ("Metric", "Value", "Unit"),
-        ("device info", device_name, ""),
-        ("device memory", device_memory, ""),
-        ("ttft", fmt(ttft_ms), "ms"),
-        ("e2e latency", fmt(e2e_ms), "ms"),
-        ("tpot", fmt(tpot_ms), "ms"),
-        ("tps", fmt(token_per_sec), "tokens"),
-        *[(key, fmt(metrics.get(key)), "tokens") for key in USAGE_METRIC_KEYS],
-        ("cached_tokens", fmt(cached_tokens), "tokens"),
-        ("cached_tokens_ratio", fmt(cached_tokens_ratio * 100), "%"),
-    ]
-
-    print_table(title="Single Request Benchmark", rows=rows)
-
-    if cached_tokens:
-        print_table(
-            title="Cached Token Metrics",
-            rows=[
-                ("Metric", "Value"),
-                *[(key, fmt(metrics.get(key))) for key in CACHED_METRIC_KEYS],
-            ],
-        )
-
-    if metrics.get("spec_num_proposed_drafts"):
-        print_table(
-            title="Spec Token Metrics",
-            rows=[
-                ("Metric", "Value"),
-                *[(key, fmt(metrics.get(key))) for key in SPEC_METRIC_KEYS],
-                (
-                    "spec_correct_drafts_histogram_percentages",
-                    format_histogram_percentages(
-                        metrics.get("spec_correct_drafts_histogram") or []
-                    ),
-                ),
-            ],
-        )
+def _select_dataset_request(dataset: str, seed: int) -> Dict[str, Any]:
+    requests = read_packaged_requests(dataset)
+    if not requests:
+        raise ValueError(f"Dataset {dataset!r} does not contain any requests")
+    payload = random.Random(seed).choice(requests)
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Dataset {dataset!r} contains an invalid payload")
+    return dict(payload)
 
 
 def build_request(args) -> Tuple[str, Dict[str, Any]]:
     url = api_url(args.base_url, "/v1/chat/completions")
 
-    if args.payload_path:
-        payload = read_json(args.payload_path)
+    if args.dataset:
+        payload = _select_dataset_request(args.dataset, args.seed)
+    elif args.payload_path:
+        payload = _read_json(args.payload_path)
+        if not isinstance(payload, Mapping):
+            raise ValueError("--payload-path must contain a JSON object")
+        if "prompt" in payload and "messages" not in payload:
+            url = api_url(args.base_url, "/v1/completions")
     elif args.input_len is not None:
         input_ids = random.Random(args.seed).choices(
             range(RANDOM_TOKEN_UPPER_BOUND), k=args.input_len
@@ -187,7 +126,7 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         }
         url = api_url(args.base_url, "/v1/completions")
     elif args.input_ids_path:
-        input_ids = read_json(args.input_ids_path)
+        input_ids = _read_json(args.input_ids_path)
         payload = {"prompt": input_ids}
         url = api_url(args.base_url, "/v1/completions")
     else:
@@ -216,25 +155,12 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         payload["chat_template_kwargs"] = {"enable_thinking": False, "thinking": False}
         payload["thinking"] = {"type": "disabled"}
 
-    # override_payload
-    if args.override_payload:
-        try:
-            override_payload = json.loads(args.override_payload)
-            payload.update(override_payload)
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode {args.override_payload=}")
-
-    # model
-    if model := args.model:
-        payload["model"] = model
-
-    # extra payload for extra metrics (ONLY for SGLANG)
-    payload_extra = (
-        NO_STREAM_RETURN_PAYLOAD if args.disable_stream else STREAM_RETURN_PAYLOAD
+    prepared = prepare_payload(
+        payload, args.model, args.override_payload, stream=not args.disable_stream
     )
-    payload.update(payload_extra)
-
-    return url, prepare_payload(payload, args.model)
+    if "prompt" in prepared and "messages" not in prepared:
+        url = api_url(args.base_url, "/v1/completions")
+    return url, prepared
 
 
 def _print_request_error(response, error: Exception) -> None:
@@ -245,24 +171,44 @@ def _print_request_error(response, error: Exception) -> None:
     )
 
 
+def _handle_request_output(output_metric: OutputMetric, duration_s: float) -> None:
+    handle_outputs(
+        outputs=[output_metric],
+        duration_s=duration_s,
+        max_concurrency=1,
+        request_rate=float("inf"),
+        benchmark_mode=False,
+    )
+
+
 def _handle_non_stream_request(url, headers, payload) -> None:
+    output_metric = OutputMetric(payload=payload)
     start_time = time.perf_counter()
-    response = requests.post(url=url, headers=headers, json=payload)
-    end_time = time.perf_counter()
+    response = None
 
     try:
+        response = requests.post(url=url, headers=headers, json=payload)
         response.raise_for_status()
         response_json = response.json()
         color_print(
             json.dumps(response_json, indent=2, ensure_ascii=False),
             Color.LIGHT_GREEN,
         )
-        metrics = extract_response_metrics(response_json)
+        output_metric.update_non_stream_response(response_json)
+        output_metric.success = True
     except Exception as error:
-        _print_request_error(response, error)
-        metrics = None
+        if response is not None:
+            _print_request_error(response, error)
+            output_metric.error_message = (
+                f"Status Code={response.status_code}, Reason: {response.text}; {error}"
+            )
+        else:
+            color_print(f"Request Error: {error}", Color.RED)
+            output_metric.error_message = str(error)
 
-    print_metrics(start_time, end_time, metrics=metrics)
+    duration_s = time.perf_counter() - start_time
+    output_metric.latency_ms = duration_s * 1000
+    _handle_request_output(output_metric, duration_s)
 
 
 async def _handle_stream_request(url, headers, payload, raw: bool) -> None:
@@ -278,39 +224,39 @@ async def _handle_stream_request(url, headers, payload, raw: bool) -> None:
             render_content=True,
         )
     duration_s = time.perf_counter() - start_time
-    handle_outputs(
-        outputs=[output_metric],
-        duration_s=duration_s,
-        max_concurrency=1,
-        request_rate=float("inf"),
-    )
+    _handle_request_output(output_metric, duration_s)
 
 
 def http_request(args):
     url, payload = build_request(args)
     headers = {"Authorization": f"Bearer {args.api_key}"}
-    output_metric = OutputMetric(payload=payload)
 
     if args.verbose:
         info_print(headers, payload, url)
     if args.disable_stream:
-        _handle_non_stream_request(url, headers, payload, output_metric)
+        _handle_non_stream_request(url, headers, payload)
     else:
-        _handle_stream_request(url, headers, payload, args.raw, output_metric)
+        asyncio.run(_handle_stream_request(url, headers, payload, args.raw))
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser("")
+    parser = argparse.ArgumentParser(
+        prog="aib req", description="Send a single inference request"
+    )
     add_common_args(parser)
 
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print request details"
+    )
 
-    parser.add_argument("--disable-stream", action="store_true")
-    parser.add_argument("--prompt", type=str, default="Who are you")
+    parser.add_argument(
+        "--disable-stream", action="store_true", help="Disable streaming"
+    )
+    parser.add_argument("--prompt", type=str, default="Who are you", help="User prompt")
     parser.add_argument(
         "--output-len",
         type=int,
-        help="Force this many output tokens with ignore_eos",
+        help="Target output token length for a random-token request",
     )
 
     # extra kwargs in the payload
@@ -338,9 +284,14 @@ def main(argv=None):
 
     mutex_group = parser.add_mutually_exclusive_group()
     mutex_group.add_argument(
+        "--dataset",
+        choices=["gsm8k", "sharegpt"],
+        help="Randomly select one request from a packaged dataset",
+    )
+    mutex_group.add_argument(
         "--input-len",
         type=int,
-        help="Generate this many random input token IDs",
+        help="Target input token length for a random-token request",
     )
     mutex_group.add_argument(
         "--ebnf", action="store_true", help="Constrained Decoding for EBNF format"
@@ -351,23 +302,30 @@ def main(argv=None):
         help="JSON Schema Response Format",
     )
     mutex_group.add_argument("--tools", action="store_true", help="Add tool")
-    mutex_group.add_argument("--payload-path", type=str, help="The path of payload")
-    mutex_group.add_argument("--input-ids-path", type=str, help="The path of input_ids")
+    mutex_group.add_argument(
+        "--payload-path", type=str, help="Path to one JSON request payload"
+    )
+    mutex_group.add_argument(
+        "--input-ids-path", type=str, help="Path to a JSON input token ID array"
+    )
 
     args = parser.parse_args(argv)
     if (args.input_len is None) != (args.output_len is None):
         parser.error("--input-len and --output-len must be used together")
     if args.input_len is not None and args.input_len < 1:
         parser.error("--input-len must be at least 1")
-    if args.output_len is not None and args.output_len < 0:
+    if args.output_len is not None and args.output_len < 1:
         parser.error("--output-len must be at least 1")
     if args.override_payload is not None:
         try:
-            json.loads(args.override_payload)
-        except json.JSONDecodeError:
-            parser.error(f"failed to loads {args.override_payload=}")
+            parse_override_payload(args.override_payload)
+        except ValueError as error:
+            parser.error(str(error))
 
-    http_request(args)
+    try:
+        http_request(args)
+    except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
+        parser.error(str(error))
 
 
 if __name__ == "__main__":

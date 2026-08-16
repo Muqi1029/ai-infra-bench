@@ -2,10 +2,13 @@
 import asyncio
 import json
 import logging
+import random
 import time
 from argparse import Namespace
 from datetime import datetime
 from glob import glob
+from importlib import resources
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from tqdm import tqdm
@@ -27,9 +30,12 @@ logger = logging.getLogger(__name__)
 
 
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
+RANDOM_TOKEN_UPPER_BOUND = 10_000
 
 
-def read_requests_with_ts(payload_regex_path: str) -> List[Dict]:
+def read_requests_with_ts(
+    payload_regex_path: str, args: Namespace | None = None
+) -> List[Dict]:
     timestamped_requests = []
     for file_path in sorted(glob(payload_regex_path, recursive=True)):
         logger.info(f"Reading {file_path}")
@@ -55,9 +61,151 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
     return requests
 
 
-def load_requests(args: Namespace) -> List[Dict]:
+def generate_random_requests(
+    input_len: int, output_len: int, num_requests: int
+) -> List[Dict]:
+    return [
+        {
+            "prompt": random.choices(
+                range(RANDOM_TOKEN_UPPER_BOUND),
+                k=input_len,
+            ),
+            "max_tokens": output_len,
+            "ignore_eos": True,
+        }
+        for _ in range(num_requests)
+    ]
+
+
+def get_request_url(base_url: str, dataset: str | None) -> str:
+    endpoint = "/v1/completions" if dataset == "random" else "/v1/chat/completions"
+    return api_url(base_url, endpoint)
+
+
+def read_packaged_requests(dataset: str) -> List[Dict]:
+    try:
+        data_package = resources.files("ai_infra_bench_dataset")
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "The packaged datasets are unavailable; install ai-infra-bench[data]"
+        ) from error
+
+    data_directory = data_package.joinpath("data", dataset)
+    if not data_directory.is_dir():
+        raise FileNotFoundError(
+            f"Payload dataset {dataset!r} is not included in ai-infra-bench-dataset"
+        )
+
+    payload_resource = data_directory.joinpath("payload.jsonl")
+    shard_resources = sorted(
+        (
+            resource
+            for resource in data_directory.iterdir()
+            if resource.is_file()
+            and resource.name.startswith("payload-")
+            and resource.name.endswith(".jsonl")
+            and resource.name[len("payload-") : -len(".jsonl")].isdigit()
+        ),
+        key=lambda resource: resource.name,
+    )
+    payload_resources = shard_resources or (
+        [payload_resource] if payload_resource.is_file() else []
+    )
+    if not payload_resources:
+        raise FileNotFoundError(
+            f"Payload dataset {dataset!r} is not included in ai-infra-bench-dataset"
+        )
+
     requests = []
-    if args.with_ts:
+    for payload_resource in payload_resources:
+        with resources.as_file(payload_resource) as payload_path:
+            requests.extend(read_requests(str(Path(payload_path))))
+    return requests
+
+
+def load_tokenizer(tokenizer_id: str):
+    try:
+        from transformers import AutoTokenizer
+    except ImportError as error:
+        raise RuntimeError(
+            "ShareGPT length settings require transformers; "
+            "install ai-infra-bench[data]"
+        ) from error
+    return AutoTokenizer.from_pretrained(tokenizer_id)
+
+
+def resize_sharegpt_requests(
+    requests: List[Dict],
+    input_len: int,
+    output_len: int,
+    tokenizer,
+    num_requests: int | None = None,
+) -> List[Dict]:
+    requests = list(requests)
+    random.shuffle(requests)
+
+    num_special_tokens = int(tokenizer.num_special_tokens_to_add())
+    target_content_len = max(1, input_len - num_special_tokens)
+    resized_requests = []
+    for payload in requests:
+        if num_requests is not None and len(resized_requests) >= num_requests:
+            break
+
+        messages = payload.get("messages") or []
+        if not messages:
+            continue
+        content = messages[0].get("content")
+        if not isinstance(content, str):
+            continue
+
+        prompt_token_ids = tokenizer.encode(content)
+        prompt_len = len(prompt_token_ids)
+        if prompt_len == 0:
+            continue
+        if prompt_len > target_content_len:
+            input_ids = prompt_token_ids[:target_content_len]
+        else:
+            repeat_count = (target_content_len + prompt_len - 1) // prompt_len
+            input_ids = (prompt_token_ids * repeat_count)[:target_content_len]
+
+        resized_payload = dict(payload)
+        resized_payload["messages"] = [
+            {"role": "user", "content": tokenizer.decode(input_ids)}
+        ]
+        resized_payload["max_tokens"] = output_len
+        resized_payload["ignore_eos"] = True
+        resized_requests.append(resized_payload)
+
+    return resized_requests
+
+
+def load_requests(args: Namespace) -> List[Dict]:
+    if getattr(args, "dataset", None) == "random":
+        requests = generate_random_requests(
+            input_len=args.input_len,
+            output_len=args.output_len,
+            num_requests=args.num_requests,
+        )
+        logger.info(f"Generated {len(requests)} random requests")
+    elif getattr(args, "dataset", None) in {"gsm8k", "sharegpt"}:
+        requests = read_packaged_requests(args.dataset)
+        logger.info(f"Loaded {len(requests)} {args.dataset} payloads")
+        if args.dataset == "sharegpt" and getattr(args, "input_len", None) is not None:
+            tokenizer = load_tokenizer(
+                getattr(args, "tokenizer", None) or getattr(args, "model", None)
+            )
+            requests = resize_sharegpt_requests(
+                requests=requests,
+                input_len=args.input_len,
+                output_len=args.output_len,
+                tokenizer=tokenizer,
+                num_requests=args.num_requests,
+            )
+            logger.info(
+                f"Prepared {len(requests)} ShareGPT requests with "
+                f"input_len={args.input_len}, output_len={args.output_len}"
+            )
+    elif args.with_ts:
         requests = read_requests_with_ts(args.payload_regex_path)
     else:
         requests = read_requests(args.payload_regex_path)
@@ -93,8 +241,7 @@ async def run_requests(
             session,
             request_url,
             payload,
-            semaphore,
-            None,
+            sem=semaphore,
         )
         if pbar is not None:
             pbar.update(1)
@@ -114,7 +261,10 @@ async def run_requests(
 
 async def run_benchmark(args: Namespace) -> None:
     requests = load_requests(args)
-    request_url = api_url(args.base_url, "/v1/chat/completions")
+    request_url = get_request_url(
+        args.base_url,
+        getattr(args, "dataset", None),
+    )
     flush_cache_endpoint = f"{args.base_url}/flush_cache"
 
     if args.debug:

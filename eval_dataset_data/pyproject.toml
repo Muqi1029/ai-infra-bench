@@ -20,4 +20,5 @@ include = ["ai_infra_bench_dataset*"]
   "data/AIME2025/*.jsonl",
   "data/AIME2025/README.md",
   "data/gsm8k/*.jsonl",
+  "data/gsm8k/README.md",
 ]

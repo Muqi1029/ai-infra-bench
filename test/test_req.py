@@ -1,13 +1,9 @@
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ai_infra_bench.req import (
-    SPEC_METRIC_KEYS,
-    extract_response_metrics,
-    main,
-    print_metrics,
-)
+from ai_infra_bench.req import main
+from ai_infra_bench.utils.req import SPEC_METRIC_KEYS, extract_response_metrics
 
 SPEC_METRICS = {
     "spec_accept_rate": 0.2987012987012987,
@@ -49,63 +45,125 @@ def test_extract_response_metrics_from_choice_meta_info():
 def test_http_request_enables_meta_info():
     response = Mock(status_code=200, text="")
     response.raise_for_status.return_value = None
-    response.json.return_value = {"usage": {"completion_tokens": 1}}
+    response.json.return_value = {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "reasoning_content": "reasoning",
+                    "content": "answer",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "lookup",
+                                "arguments": '{"query":"test"}',
+                            }
+                        }
+                    ],
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 4,
+            "completion_tokens": 2,
+            "reasoning_tokens": 1,
+        },
+    }
 
-    with patch("ai_infra_bench.req.requests.post", return_value=response) as post:
+    with (
+        patch("ai_infra_bench.req.requests.post", return_value=response) as post,
+        patch("ai_infra_bench.req.handle_outputs") as handle_outputs,
+    ):
         main(["--disable-stream"])
 
     assert post.call_args.kwargs["json"]["return_meta_info"] is True
+    output = handle_outputs.call_args.kwargs["outputs"][0]
+    assert output.success is True
+    assert output.latency_ms >= 0
+    assert output.finish_reason == "stop"
+    assert output.content == "answer"
+    assert output.reasoning_content == "reasoning"
+    assert output.tool_calls == 'Function=lookup\nArgument:{"query":"test"}'
+    assert output.prompt_tokens == 4
+    assert output.completion_tokens == 2
+    assert output.reasoning_tokens == 1
+    assert handle_outputs.call_args.kwargs["duration_s"] == pytest.approx(
+        output.latency_ms / 1000
+    )
+    assert handle_outputs.call_args.kwargs["max_concurrency"] == 1
+    assert handle_outputs.call_args.kwargs["benchmark_mode"] is False
+
+
+def test_http_non_stream_completions_response_uses_output_metric():
+    response = Mock(status_code=200, text="")
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "choices": [{"finish_reason": "length", "text": "completion"}],
+        "usage": {"prompt_tokens": 4, "completion_tokens": 1},
+    }
+
+    with (
+        patch("ai_infra_bench.req.requests.post", return_value=response),
+        patch("ai_infra_bench.req.handle_outputs") as handle_outputs,
+    ):
+        main(
+            [
+                "--disable-stream",
+                "--input-len",
+                "4",
+                "--output-len",
+                "1",
+            ]
+        )
+
+    output = handle_outputs.call_args.kwargs["outputs"][0]
+    assert output.success is True
+    assert output.finish_reason == "length"
+    assert output.content == "completion"
+    assert output.prompt_tokens == 4
+    assert output.completion_tokens == 1
+
+
+def test_http_non_stream_error_uses_failed_output_metric():
+    response = Mock(status_code=500, text="server error")
+    response.raise_for_status.side_effect = RuntimeError("request failed")
+
+    with (
+        patch("ai_infra_bench.req.requests.post", return_value=response),
+        patch("ai_infra_bench.req.handle_outputs") as handle_outputs,
+    ):
+        main(["--disable-stream"])
+
+    output = handle_outputs.call_args.kwargs["outputs"][0]
+    assert output.success is False
+    assert output.latency_ms >= 0
+    assert "Status Code=500" in output.error_message
+    assert "server error" in output.error_message
 
 
 def test_http_streaming_request_disables_meta_info():
-    response = Mock(status_code=200, text="")
-    response.raise_for_status.return_value = None
-    response.iter_lines.return_value = [b"data: [DONE]"]
-
-    with patch("ai_infra_bench.req.requests.post", return_value=response) as post:
+    with patch(
+        "ai_infra_bench.req._handle_stream_request", new_callable=AsyncMock
+    ) as handle_stream:
         main([])
 
-    assert "return_meta_info" not in post.call_args.kwargs["json"]
-
-
-def test_print_metrics_includes_spec_histogram_percentages():
-    with (
-        patch("ai_infra_bench.req.print_table") as print_table,
-        patch(
-            "ai_infra_bench.req.get_first_gpu_info",
-            return_value=("Test GPU", "81920 MiB"),
-        ),
-    ):
-        print_metrics(
-            0,
-            1,
-            metrics={
-                "spec_num_proposed_drafts": 1,
-                "spec_correct_drafts_histogram": [1, 2, 1],
-            },
-        )
-
-    spec_rows = print_table.call_args_list[-1].kwargs["rows"]
-    assert (
-        "spec_correct_drafts_histogram_percentages",
-        "[25.00%, 50.00%, 25.00%]",
-    ) in spec_rows
-
-    summary_rows = print_table.call_args_list[0].kwargs["rows"]
-    assert ("device info", "Test GPU", "") in summary_rows
-    assert ("device memory", "81920 MiB", "") in summary_rows
+    handle_stream.assert_awaited_once()
+    url, headers, payload, raw = handle_stream.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert headers == {"Authorization": "Bearer JustKeepMe"}
+    assert payload["stream"] is True
+    assert "return_meta_info" not in payload
+    assert raw is False
 
 
 def test_length_request_uses_random_input_ids_and_completions_api():
-    response = Mock(status_code=200, text="")
-    response.raise_for_status.return_value = None
-    response.iter_lines.return_value = [b"data: [DONE]"]
-
-    with patch("ai_infra_bench.req.requests.post", return_value=response) as post:
+    with patch(
+        "ai_infra_bench.req._handle_stream_request", new_callable=AsyncMock
+    ) as handle_stream:
         main(["--input-len", "4", "--output-len", "8", "--seed", "7"])
 
-    payload = post.call_args.kwargs["json"]
-    assert post.call_args.kwargs["url"] == "http://localhost:8888/v1/completions"
+    url, _, payload, _ = handle_stream.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/completions"
     assert len(payload["prompt"]) == 4
     assert all(isinstance(token_id, int) for token_id in payload["prompt"])
     assert all(0 <= token_id < 10_000 for token_id in payload["prompt"])
@@ -114,16 +172,14 @@ def test_length_request_uses_random_input_ids_and_completions_api():
 
 
 def test_length_request_is_reproducible():
-    response = Mock(status_code=200, text="")
-    response.raise_for_status.return_value = None
-    response.iter_lines.return_value = [b"data: [DONE]"]
-
-    with patch("ai_infra_bench.req.requests.post", return_value=response) as post:
+    with patch(
+        "ai_infra_bench.req._handle_stream_request", new_callable=AsyncMock
+    ) as handle_stream:
         main(["--input-len", "4", "--output-len", "8", "--seed", "7"])
         main(["--input-len", "4", "--output-len", "8", "--seed", "7"])
 
-    assert post.call_args_list[0].kwargs["json"]["prompt"] == (
-        post.call_args_list[1].kwargs["json"]["prompt"]
+    assert handle_stream.await_args_list[0].args[2]["prompt"] == (
+        handle_stream.await_args_list[1].args[2]["prompt"]
     )
 
 
@@ -135,6 +191,8 @@ def test_length_request_is_reproducible():
         ["--input-len", "0", "--output-len", "8"],
         ["--input-len", "4", "--output-len", "0"],
         ["--input-len", "4", "--output-len", "8", "--tools"],
+        ["--dataset", "gsm8k", "--input-len", "4", "--output-len", "8"],
+        ["--override-payload", "[]"],
     ],
 )
 def test_length_request_validates_arguments(argv):
@@ -142,18 +200,47 @@ def test_length_request_validates_arguments(argv):
         main(argv)
 
 
-def test_completions_stream_text_sets_first_token_time():
-    response = Mock(status_code=200, text="")
-    response.raise_for_status.return_value = None
-    response.iter_lines.return_value = [
-        b'data: {"choices":[{"text":"hello"}]}',
-        b"data: [DONE]",
+def test_payload_prompt_uses_completions_api(tmp_path):
+    payload_path = tmp_path / "payload.json"
+    payload_path.write_text('{"prompt": "hello"}', encoding="utf-8")
+
+    with patch(
+        "ai_infra_bench.req._handle_stream_request", new_callable=AsyncMock
+    ) as handle_stream:
+        main(["--payload-path", str(payload_path)])
+
+    url, _, payload, _ = handle_stream.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/completions"
+    assert payload["prompt"] == "hello"
+
+
+@pytest.mark.parametrize("dataset", ["gsm8k", "sharegpt"])
+def test_dataset_selects_one_packaged_request_deterministically(dataset):
+    dataset_requests = [
+        {"messages": [{"role": "user", "content": "first"}]},
+        {"messages": [{"role": "user", "content": "second"}]},
     ]
 
     with (
-        patch("ai_infra_bench.req.requests.post", return_value=response),
-        patch("ai_infra_bench.req.print_metrics") as print_metrics,
+        patch(
+            "ai_infra_bench.req.read_packaged_requests",
+            return_value=dataset_requests,
+        ),
+        patch(
+            "ai_infra_bench.req._handle_stream_request", new_callable=AsyncMock
+        ) as handle_stream,
     ):
-        main(["--input-len", "4", "--output-len", "8"])
+        main(["--dataset", dataset, "--seed", "7"])
+        main(["--dataset", dataset, "--seed", "7"])
 
-    assert print_metrics.call_args.args[2] is not None
+    first_url, _, first_payload, _ = handle_stream.await_args_list[0].args
+    second_url, _, second_payload, _ = handle_stream.await_args_list[1].args
+    assert first_url == second_url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert first_payload["messages"] == second_payload["messages"]
+    assert first_payload["stream"] is True
+
+
+def test_dataset_rejects_empty_packaged_requests():
+    with patch("ai_infra_bench.req.read_packaged_requests", return_value=[]):
+        with pytest.raises(SystemExit):
+            main(["--dataset", "gsm8k"])

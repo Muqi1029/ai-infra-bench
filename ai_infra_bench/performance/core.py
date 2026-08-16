@@ -6,6 +6,7 @@ import sys
 import time
 import traceback
 from contextlib import nullcontext
+from copy import deepcopy
 from typing import Any, AsyncIterator, Dict, Optional
 
 import aiohttp
@@ -55,9 +56,11 @@ async def request_func(
     sem: Optional[asyncio.Semaphore] = None,
     pbar: Optional[tqdm] = None,
 ) -> OutputMetric:
+    payload = deepcopy(payload)
+    payload.pop("return_meta_info", None)
     payload.update(STREAM_RETURN_PAYLOAD)
 
-    render_content = not raw
+    render_content = render_content and not raw
     output = OutputMetric(payload=payload)
     st = 0.0
 
@@ -83,6 +86,17 @@ async def request_func(
                         choice = choices[0]
                         if finish_reason := choice.get("finish_reason"):
                             output.finish_reason = finish_reason
+
+                        # The legacy completions API streams generated text at
+                        # choices[].text instead of choices[].delta.content.
+                        if "text" in choice:
+                            output.update_stream_output(
+                                choice.get("text", ""),
+                                st,
+                                TextType.CONTENT,
+                                render_content,
+                            )
+                            continue
 
                         # Reasoning models stream thoughts via `reasoning_content`;
                         # count them like content.
