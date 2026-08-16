@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping
 
 from ai_infra_bench.utils.req import extract_response_metrics
 
@@ -24,10 +24,10 @@ class OutputMetric:
 
     # status
     success: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     # finish_reason
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
 
     # messages
     content: str = ""
