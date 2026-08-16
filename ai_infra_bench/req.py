@@ -343,7 +343,7 @@ def http_request(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser("")
-    parser.add_argument("--base-url", type=sanitize_url, default="localhost:8888")
+    parser.add_argument("--base-url", type=sanitize_url, default="localhost:30000")
     parser.add_argument("--api-key", type=str, default="EMPTY")
     parser.add_argument(
         "--model", type=str, help="override the model field in the payload"
