@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args(args: Sequence[str] | None = None) -> Namespace:
-    parser = ArgumentParser(description="Benchmark router")
+    parser = ArgumentParser(description="Benchmark")
     add_common_args(parser)
 
     parser.add_argument(
@@ -65,19 +65,6 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
 
     parser.add_argument(
         "--payload-regex-path", type=str, help="The path of requests", required=True
-    )
-
-    parser.add_argument(
-        "--completion-tokens-output-path",
-        type=str,
-        default=None,
-        help="Optional path to dump the full completion_tokens list",
-    )
-    parser.add_argument(
-        "--finish-reason-length-output-path",
-        type=str,
-        default=None,
-        help="Optional path to dump outputs whose finish_reason is 'length'",
     )
 
     parser.add_argument("--label", help="Label used for discribe this benchmark")
@@ -454,31 +441,6 @@ def handle_outputs(
 
     maybe_dump_metric_tables(metric_tables, metrics_path)
 
-    # dump completion tokens
-    if completion_tokens_output_path and completion_tokens_list:
-        logger.info(
-            f"Dumping {len(completion_tokens_list)} completion tokens to "
-            f"{completion_tokens_output_path}"
-        )
-        with open(completion_tokens_output_path, mode="w", encoding="utf-8") as f:
-            json.dump(completion_tokens_list, f, ensure_ascii=False, indent=2)
-
-    # dump finish length requests
-    finish_reason_length_list = [
-        output for output in filtered_outputs if output.finish_reason == "length"
-    ]
-    if finish_reason_length_output_path and finish_reason_length_list:
-        logger.info(
-            f"Dumping {len(finish_reason_length_list)} finish reason 'length' to "
-            f"{finish_reason_length_output_path}"
-        )
-        with open(finish_reason_length_output_path, mode="w", encoding="utf-8") as f:
-            json.dump(
-                [asdict(output) for output in finish_reason_length_list],
-                f,
-                ensure_ascii=False,
-                indent=2,
-            )
     return metric_tables
 
 

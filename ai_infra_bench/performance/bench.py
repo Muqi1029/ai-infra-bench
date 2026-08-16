@@ -154,9 +154,11 @@ async def run_benchmark(args: Namespace) -> None:
                 # flush cache
                 if not args.disable_flush_cache:
                     flush_cache(session, flush_cache_endpoint)
+                    formal_requests = requests
+                else:
+                    formal_requests = requests[args.num_warmup_requests :]
 
                 # formal run
-                formal_requests = requests[args.num_warmup_requests :]
                 with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:
                     benchmark_start_time = time.perf_counter()
                     outputs: List[OutputMetric] = await run_requests(
