@@ -7,6 +7,9 @@ def main(argv: Optional[Sequence[str]] = None):
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
     subparsers.add_parser("req", help="Send a simple request", add_help=False)
     subparsers.add_parser("bench", help="Bench request", add_help=False)
+    subparsers.add_parser(
+        "plot-metrics", help="Export benchmark metrics to HTML", add_help=False
+    )
     subparsers.add_parser("eval-dataset", help="Eval Dataset", add_help=False)
     subparsers.add_parser("eval-logits", help="Eval Logits", add_help=False)
     subparsers.add_parser(
@@ -21,6 +24,10 @@ def main(argv: Optional[Sequence[str]] = None):
         return main(extra_argv)
     elif args.subcommand == "bench":
         from ai_infra_bench.performance.bench import main
+
+        return main(extra_argv)
+    elif args.subcommand == "plot-metrics":
+        from ai_infra_bench.utils.draw import main
 
         return main(extra_argv)
     elif args.subcommand == "eval-dataset":

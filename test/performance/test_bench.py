@@ -339,6 +339,22 @@ def test_handle_outputs_keeps_percentiles_for_single_benchmark_request(monkeypat
     assert latency_rows[0] == ["Metric", "Mean", "P50", "P95", "P99", "Unit"]
 
 
+def test_handle_outputs_keeps_stable_plot_metadata(monkeypatch):
+    monkeypatch.setattr(bench_utils, "print_table", lambda *_: None)
+
+    metric_tables = handle_outputs(
+        [OutputMetric(success=True, latency_ms=10)],
+        duration_s=0.01,
+        max_concurrency=8,
+        request_rate=1,
+        label="server-a",
+    )
+
+    assert metric_tables["label"] == "server-a"
+    assert metric_tables["max_concurrency"] == 8
+    assert metric_tables["timestamp"]
+
+
 def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
     outputs = [
         OutputMetric(

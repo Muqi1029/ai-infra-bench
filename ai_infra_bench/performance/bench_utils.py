@@ -530,8 +530,10 @@ def handle_outputs(
     maybe_dump_outputs(outputs, dump_path, dump_content)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    metric_tables: Dict[str, str | List[Dict[str, Any]]] = {
-        "label": f"{label}({now})" if label else now
+    metric_tables: Dict[str, Any] = {
+        "label": label or "benchmark",
+        "timestamp": now,
+        "max_concurrency": max_concurrency,
     }
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
