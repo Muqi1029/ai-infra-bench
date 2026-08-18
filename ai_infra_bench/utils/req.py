@@ -45,7 +45,7 @@ def tool_filter_request(payload: Mapping[str, Any]) -> bool:
 
 
 def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Align recorded SGLang request bodies with router/OpenAI expectations."""
+    """Align recorded request bodies with the OpenAI request shape."""
     if payload.get("min_tokens") is not None and payload["min_tokens"] < 1:
         payload.pop("min_tokens")
 
@@ -55,7 +55,7 @@ def normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     json_schema = response_format.get("json_schema")
     if not isinstance(json_schema, dict):
         return payload
-    # SGLang logs use schema_; router deserializer requires schema (OpenAI shape).
+    # Some recorded payloads use schema_; routers expect the OpenAI ``schema`` key.
     if "schema" not in json_schema and "schema_" in json_schema:
         json_schema["schema"] = json_schema.pop("schema_")
     return payload
@@ -128,7 +128,7 @@ def _first_value(keys: Sequence[str], sources: Iterable[Mapping[str, Any]]) -> A
 
 
 def extract_response_metrics(response: Any) -> Dict[str, Any]:
-    """Extract OpenAI and SGLang metrics from a response or stream chunk."""
+    """Extract standard and extension metrics from a response or stream chunk."""
     data = response.model_dump() if hasattr(response, "model_dump") else response
     if not isinstance(data, Mapping):
         return {}

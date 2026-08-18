@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Sequence
 
-from ai_infra_bench.monitoring.config import (
+from ai_infra_bench.monitor.config import (
     ConfigurationError,
     ScrapeTarget,
     parse_targets,

@@ -6,7 +6,7 @@ on:
     paths:
       - "ai_infra_bench/**"
       - ".github/workflows/test.yml"
-      - "test/**"
+      - "tests/**"
   pull_request:
   workflow_dispatch:
 
@@ -26,9 +26,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -U pip setuptools wheel
-          pip install -e .
+          pip install -e . pytest
 
       - name: Run tests
         run: |
-          cd test/modes
-          python3 -m unittest
+          pytest -q

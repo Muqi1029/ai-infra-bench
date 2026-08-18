@@ -336,7 +336,7 @@ def write_runtime_config(
         json.dumps(dashboard_provider, indent=2) + "\n", encoding="utf-8"
     )
 
-    dashboard_resource = resources.files("ai_infra_bench.monitoring").joinpath(
+    dashboard_resource = resources.files("ai_infra_bench.monitor").joinpath(
         "assets", "sglang-dashboard.json"
     )
     layout.dashboard_path.write_text(

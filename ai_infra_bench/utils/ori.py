@@ -9,10 +9,9 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import psutil
@@ -20,28 +19,7 @@ import requests
 
 from ai_infra_bench.constants import WARMUP_FILE, demo_output
 
-
-@dataclass
-class ServerAccessInfo:
-    base_url: str
-    api_key: Optional[str] = None
-    label: Optional[str] = None
-
-
 logger = logging.getLogger(__name__)
-
-
-def cmp_preprocess_client_cmds(
-    client_cmds: List[str], server_access_info: ServerAccessInfo
-) -> List[str]:
-    api_key = server_access_info.api_key
-    if api_key is not None:
-        if api_key.startswith("Bearer"):
-            os.environ["OPENAI_API_KEY"] = api_key
-        else:
-            os.environ["API_KEY"] = api_key
-
-    return [cmd + f" --base-url {server_access_info.base_url}" for cmd in client_cmds]
 
 
 def enter_decorate(title: str, filename: str | None = None):

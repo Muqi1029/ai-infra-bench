@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from ai_infra_bench.cli_new import main as cli_main
+from ai_infra_bench.cli import main as cli_main
 from ai_infra_bench.utils import draw
 from ai_infra_bench.utils.draw import export_metric_tables_html
 

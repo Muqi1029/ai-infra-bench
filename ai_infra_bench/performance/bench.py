@@ -1,4 +1,4 @@
-# adapted from https://github.com/sgl-project/sglang/blob/main/python/sglang/bench_serving.py
+# Async benchmark runner for OpenAI-compatible endpoints.
 import asyncio
 import json
 import logging
