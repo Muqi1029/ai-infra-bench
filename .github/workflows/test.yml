@@ -26,6 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -U pip setuptools wheel
+          cd eval_dataset_data && pip install -e .
           pip install -e . pytest
 
       - name: Run tests
