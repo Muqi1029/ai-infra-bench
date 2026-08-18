@@ -6,14 +6,14 @@ import tarfile
 
 import pytest
 
-from ai_infra_bench.monitoring.binaries import (
+from ai_infra_bench.monitor.binaries import (
     ArchiveSpec,
     BinaryError,
     _download,
     _validate_archive,
 )
-from ai_infra_bench.monitoring.cli import _display_host, main
-from ai_infra_bench.monitoring.config import (
+from ai_infra_bench.monitor.cli import _display_host, main
+from ai_infra_bench.monitor.config import (
     ConfigurationError,
     _datasource_host,
     build_prometheus_config,
@@ -21,12 +21,12 @@ from ai_infra_bench.monitoring.config import (
     parse_targets,
     write_runtime_config,
 )
-from ai_infra_bench.monitoring.process import (
+from ai_infra_bench.monitor.process import (
     ProcessError,
     ensure_port_available,
     prometheus_command,
 )
-from ai_infra_bench.monitoring.shell import (
+from ai_infra_bench.monitor.shell import (
     MonitorShell,
     ReloadError,
     TargetRegistry,
@@ -155,7 +155,7 @@ def test_download_wraps_network_timeout(tmp_path, monkeypatch):
 
 
 def test_monitoring_stack_waits_for_and_stops_real_process(tmp_path):
-    from ai_infra_bench.monitoring.process import MonitoringStack
+    from ai_infra_bench.monitor.process import MonitoringStack
 
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

@@ -1,64 +1,42 @@
+"""Command-line entry point for AI Infra Bench."""
+
 import argparse
-import shutil
-from importlib import resources
-from pathlib import Path
-
-import ai_infra_bench
+from typing import Sequence
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        prog="ai-infra-bench-cli",
-        description="Generate example templates for SGL or client benchmarking.",
+def main(argv: Sequence[str] | None = None):
+    parser = argparse.ArgumentParser(prog="aib")
+    subparsers = parser.add_subparsers(dest="subcommand", required=True)
+    subparsers.add_parser("req", help="Send a simple request", add_help=False)
+    subparsers.add_parser("bench", help="Benchmark requests", add_help=False)
+    subparsers.add_parser("slo", help="Run a YAML-driven SLO search", add_help=False)
+    subparsers.add_parser(
+        "plot-metrics", help="Export benchmark metrics to HTML", add_help=False
+    )
+    subparsers.add_parser("eval-dataset", help="Evaluate a dataset", add_help=False)
+    subparsers.add_parser("eval-logits", help="Evaluate logits", add_help=False)
+    subparsers.add_parser(
+        "eval-hidden-states", help="Evaluate hidden states", add_help=False
+    )
+    subparsers.add_parser(
+        "monitor", help="Monitor Prometheus targets locally", add_help=False
     )
 
-    parser.add_argument(
-        "mode", choices=["sgl", "client"], help="Select mode: sgl or client."
-    )
-    parser.add_argument(
-        "command", choices=["gen", "cmp", "slo"], help="Benchmark type."
-    )
-    parser.add_argument(
-        "target",
-        nargs="?",
-        default=".",
-        help="Destination path (default: current dir).",
-    )
-
-    args = parser.parse_args()
-
-    example_dir = resources.files(ai_infra_bench) / "examples"
-    target = Path(args.target)
-    target.mkdir(parents=True, exist_ok=True)
-
-    def copy_example(filename: str):
-        """Copy a single example file from package data to the target directory."""
-        src = example_dir / filename
-        dst = target / filename
-        if not src.exists():
-            print(f"❌ Example file not found: {src}")
-            return
-        shutil.copy(src, dst)
-        print(f"✅ Copied to {dst}")
-
-    if args.mode == "sgl":
-        print("🔧 SGL mode")
-        if args.command == "gen":
-            copy_example("gen_bench.py")
-        elif args.command == "slo":
-            copy_example("slo_bench.py")
-        elif args.command == "cmp":
-            copy_example("cmp_bench.py")
-
-    elif args.mode == "client":
-        print("🔧 Client mode")
-        if args.command == "gen":
-            copy_example("client_gen.py")
-        elif args.command == "slo":
-            copy_example("client_slo.py")
-        elif args.command == "cmp":
-            copy_example("client_cmp.py")
+    args, extra_argv = parser.parse_known_args(argv)
+    commands = {
+        "req": ("ai_infra_bench.req", "main"),
+        "bench": ("ai_infra_bench.performance.bench", "main"),
+        "slo": ("ai_infra_bench.slo", "main"),
+        "plot-metrics": ("ai_infra_bench.utils.draw", "main"),
+        "eval-dataset": ("ai_infra_bench.correctness.eval_dataset.main", "main"),
+        "eval-logits": ("ai_infra_bench.correctness.logits", "main"),
+        "eval-hidden-states": ("ai_infra_bench.correctness.hidden_states", "main"),
+        "monitor": ("ai_infra_bench.monitor.cli", "main"),
+    }
+    module_name, function_name = commands[args.subcommand]
+    module = __import__(module_name, fromlist=[function_name])
+    return getattr(module, function_name)(extra_argv)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

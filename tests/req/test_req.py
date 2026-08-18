@@ -5,7 +5,12 @@ import pytest
 from ai_infra_bench.performance.bench_utils import handle_outputs
 from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.req import main
-from ai_infra_bench.utils.req import extract_response_metrics
+from ai_infra_bench.utils.req import (
+    api_url,
+    extract_response_metrics,
+    prepare_payload,
+    sanitize_url,
+)
 
 SPEC_METRICS = {
     "spec_accept_rate": 0.2987012987012987,
@@ -229,3 +234,83 @@ def test_dataset_rejects_empty_requests():
         pytest.raises(SystemExit),
     ):
         main(["--dataset", "gsm8k"])
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("localhost:8881/v1/", "http://localhost:8881"),
+        ("https://example.test/v1", "https://example.test"),
+    ],
+)
+def test_sanitize_url(url, expected):
+    assert sanitize_url(url) == expected
+
+
+def test_api_url_normalizes_base_url():
+    assert api_url("localhost:8888/v1", "/v1/models") == (
+        "http://localhost:8888/v1/models"
+    )
+
+
+def test_prepare_payload_isolated_and_normalized():
+    original = {
+        "min_tokens": 0,
+        "response_format": {"json_schema": {"schema_": {"type": "object"}}},
+    }
+
+    assert prepare_payload(original, "model-name") == {
+        "model": "model-name",
+        "response_format": {"json_schema": {"schema": {"type": "object"}}},
+    }
+    assert original["min_tokens"] == 0
+    assert "schema_" in original["response_format"]["json_schema"]
+
+
+def test_prepare_payload_override_and_stream_mode():
+    prepared = prepare_payload(
+        {"model": "recorded", "stream": False},
+        model="cli-model",
+        override_payload='{"model": "override-model", "temperature": 0}',
+        stream=True,
+    )
+
+    assert prepared["model"] == "override-model"
+    assert prepared["temperature"] == 0
+    assert prepared["stream"] is True
+    assert prepared["stream_options"]["include_usage"] is True
+
+
+def test_prepare_payload_non_stream_mode():
+    assert prepare_payload(
+        {
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "return_cached_tokens_details": True,
+            "return_spec_tokens_details": True,
+        },
+        stream=False,
+    ) == {"stream": False, "return_meta_info": True}
+
+
+@pytest.mark.parametrize("override", ["not-json", "[]", '"value"'])
+def test_prepare_payload_rejects_invalid_override(override):
+    with pytest.raises(ValueError, match="--override-payload"):
+        prepare_payload({}, override_payload=override)
+
+
+def test_extract_response_metrics_prefers_standard_usage_fields():
+    metrics = extract_response_metrics(
+        {
+            "usage": {
+                "prompt_tokens": 10,
+                "prompt_tokens_details": {"cached_tokens": 6},
+            },
+            "choices": [{"meta_info": {"prompt_tokens": 9, "cached_tokens": 5}}],
+            "sglext": {"spec_tokens_details": {"spec_num_proposed_drafts": 4}},
+        }
+    )
+
+    assert metrics["prompt_tokens"] == 10
+    assert metrics["cached_tokens"] == 6
+    assert metrics["spec_num_proposed_drafts"] == 4

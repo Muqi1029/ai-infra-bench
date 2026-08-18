@@ -25,11 +25,11 @@ jobs:
       - name: Bake version from ai_infra_bench/version.py
         run: |
           VERSION=$(python -c "from ai_infra_bench.version import __version__; print(__version__)")
-          echo "__version__ = \"${VERSION}\"" > eval_dataset_data/ai_infra_bench_dataset/version.py
+          echo "__version__ = \"${VERSION}\"" > aib-dataset/ai_infra_bench_dataset/version.py
           echo "dataset version=${VERSION}"
 
       - name: Build and upload dataset package
-        working-directory: eval_dataset_data
+        working-directory: aib-dataset
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}

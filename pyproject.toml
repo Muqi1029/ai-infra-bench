@@ -13,9 +13,9 @@ dependencies = [
     "openai",
     "plotly",
     "numpy",
-    "prometheus-client",
     "psutil",
     "requests",
+    "PyYAML",
     "tqdm",
     "hydra-core",
 ]
@@ -32,12 +32,10 @@ where = ["."]
 include = ["ai_infra_bench*"]
 
 [project.scripts]
-ai-infra-bench = "ai_infra_bench.cli:main"
-aib = "ai_infra_bench.cli_new:main"
+aib = "ai_infra_bench.cli:main"
 
 [tool.setuptools.package-data]
 "ai_infra_bench" = [
-    "examples/*.py",
     "correctness/eval_dataset/configs/*.yaml",
-    "monitoring/assets/*.json",
+    "monitor/assets/*.json",
 ]

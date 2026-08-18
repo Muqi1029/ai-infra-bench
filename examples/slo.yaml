@@ -1,0 +1,30 @@
+endpoint:
+  base_url: http://127.0.0.1:30000
+  api_key: EMPTY
+  model: null
+
+request:
+  payload:
+    messages:
+      - role: user
+        content: hello
+
+benchmark:
+  num_requests: 100
+  warmup_requests: 5
+  max_concurrency: 32
+  request_rate: inf
+  seed: 42
+
+search:
+  parameter: max_concurrency
+  min: 1
+  max: 64
+
+conditions:
+  - metric: success_rate
+    operator: ">="
+    value: 0.99
+  - metric: p99_latency_ms
+    operator: "<"
+    value: 3000

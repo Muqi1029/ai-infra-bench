@@ -10,8 +10,8 @@ import webbrowser
 from pathlib import Path
 from typing import Optional, Sequence
 
-from ai_infra_bench.monitoring.binaries import BinaryError, resolve_binary
-from ai_infra_bench.monitoring.config import (
+from ai_infra_bench.monitor.binaries import BinaryError, resolve_binary
+from ai_infra_bench.monitor.config import (
     ConfigurationError,
     ScrapeTarget,
     create_runtime_layout,
@@ -20,14 +20,14 @@ from ai_infra_bench.monitoring.config import (
     validate_duration,
     write_runtime_config,
 )
-from ai_infra_bench.monitoring.process import (
+from ai_infra_bench.monitor.process import (
     MonitoringStack,
     ProcessError,
     ensure_port_available,
     grafana_command,
     prometheus_command,
 )
-from ai_infra_bench.monitoring.shell import MonitorShell, TargetRegistry
+from ai_infra_bench.monitor.shell import MonitorShell, TargetRegistry
 
 logger = logging.getLogger(__name__)
 
