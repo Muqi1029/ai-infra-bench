@@ -2,6 +2,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from ai_infra_bench.performance.bench_utils import handle_outputs
+from ai_infra_bench.performance.struct import OutputMetric
 from ai_infra_bench.req import main
 from ai_infra_bench.utils.req import SPEC_METRIC_KEYS, extract_response_metrics
 
@@ -13,6 +15,22 @@ SPEC_METRICS = {
     "spec_verify_ct": 33,
     "spec_correct_drafts_histogram": [4, 10, 7, 7, 3, 1, 0, 1],
 }
+
+
+def test_request_metrics_include_tps():
+    metrics = handle_outputs(
+        [OutputMetric(success=True, completion_tokens=20)],
+        duration_s=2,
+        max_concurrency=1,
+        request_rate=float("inf"),
+        benchmark_mode=False,
+    )
+
+    rows = {row["Metric"]: row for row in metrics["Request Result"]}
+    assert rows["TPS"] == {
+        "Metric": "TPS",
+        "Value": "10.00 tokens/s",
+    }
 
 
 def test_extract_response_metrics_from_choice_meta_info():

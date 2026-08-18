@@ -16,7 +16,7 @@ def main(argv: Optional[Sequence[str]] = None):
         "eval-hidden-states", help="Eval Hidden States", add_help=False
     )
     subparsers.add_parser(
-        "metrics", help="Scrape Prometheus /metrics endpoints", add_help=False
+        "monitor", help="Monitor SGLang with Prometheus and Grafana", add_help=False
     )
 
     args, extra_argv = parser.parse_known_args(argv)
@@ -47,9 +47,14 @@ def main(argv: Optional[Sequence[str]] = None):
         from ai_infra_bench.correctness.hidden_states import main
 
         return main(extra_argv)
+    elif args.subcommand == "monitor":
+        # from ai_infra_bench.monitoring.cli import main
+
+        # return main(extra_argv)
+        pass
 
     elif args.subcommand == "metrics":
-        from ai_infra_bench.metrics import main
+        from ai_infra_bench.monitor import main
 
         return main(extra_argv)
 

@@ -195,7 +195,7 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
             completion_tokens=payload["completion_tokens"],
         )
 
-    times = iter([12.0, 14.0])
+    times = iter([12.0, 14.0, 20.0])
     progress = Progress()
     monkeypatch.setattr("ai_infra_bench.performance.bench.request_func", return_output)
     monkeypatch.setattr(
@@ -206,7 +206,11 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
         run_requests(
             session=None,
             request_url="http://localhost/v1/chat/completions",
-            requests=[{"completion_tokens": 10}, {"completion_tokens": 20}],
+            requests=[
+                {"completion_tokens": 10},
+                {"completion_tokens": 20},
+                {"completion_tokens": 1},
+            ],
             model=None,
             override_payload=None,
             semaphore=asyncio.Semaphore(1),
@@ -215,10 +219,11 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
         )
     )
 
-    assert progress.updates == 2
+    assert progress.updates == 3
     assert progress.postfixes == [
-        {"TPS": "5.00 tokens/s"},
-        {"TPS": "7.50 tokens/s"},
+        {"TPS": "5.00 tokens/s", "Peak TPS": "5.00 tokens/s"},
+        {"TPS": "10.00 tokens/s", "Peak TPS": "10.00 tokens/s"},
+        {"TPS": "0.17 tokens/s", "Peak TPS": "10.00 tokens/s"},
     ]
 
 

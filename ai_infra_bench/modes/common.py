@@ -40,23 +40,6 @@ def export_md_table(data, input_features, metrics, labels, output_dir):
     logger.info("Writing table DONE")
 
 
-def export_csv(data, input_features, metrics, output_dir):
-    csv_path = os.path.join(output_dir, "data.csv")
-
-    logger.info(f"Writing CSV to {csv_path}")
-    with open(csv_path, "w", encoding="utf-8") as f:
-        # Write header
-        f.write(",".join(input_features + metrics) + "\n")
-        for item_list in data:
-            for input_feature in input_features:
-                f.write(f"{item_list[0][input_feature]:.2f},")
-            for metric in metrics:
-                f.write(f"{avg_std_strf(metric, item_list, precision=2)},")
-            f.write("\n")
-
-    logger.info("Writing CSV DONE")
-
-
 def export_csv(data: List[Dict], output_dir):
     csv_path = os.path.join(output_dir, "full_data.csv")
 

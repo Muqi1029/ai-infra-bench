@@ -36,4 +36,8 @@ ai-infra-bench = "ai_infra_bench.cli:main"
 aib = "ai_infra_bench.cli_new:main"
 
 [tool.setuptools.package-data]
-"ai_infra_bench" = ["examples/*.py", "correctness/eval_dataset/configs/*.yaml"]
+"ai_infra_bench" = [
+    "examples/*.py",
+    "correctness/eval_dataset/configs/*.yaml",
+    "monitoring/assets/*.json",
+]

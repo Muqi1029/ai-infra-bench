@@ -354,6 +354,7 @@ def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
             )
         ]
 
+    total_completion_tokens = sum(output.completion_tokens for output in stats.outputs)
     tables = [
         (
             "Request Result",
@@ -361,6 +362,10 @@ def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
                 ["Metric", "Value"],
                 ["Status", "Success"],
                 ["Finish reason", stats.outputs[0].finish_reason or "N/A"],
+                [
+                    "TPS",
+                    f"{total_completion_tokens / stats.duration_s:.2f} tokens/s",
+                ],
             ],
         ),
         (
