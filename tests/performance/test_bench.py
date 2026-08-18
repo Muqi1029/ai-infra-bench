@@ -176,7 +176,7 @@ def test_run_requests_prepares_copied_payloads(monkeypatch):
     assert original == {"min_tokens": 0, "model": "recorded-model"}
 
 
-def test_run_requests_updates_live_output_throughput(monkeypatch):
+def test_run_requests_updates_average_output_throughput(monkeypatch):
     class Progress:
         def __init__(self):
             self.updates = 0
@@ -195,7 +195,9 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
             completion_tokens=payload["completion_tokens"],
         )
 
-    times = iter([12.0, 14.0, 20.0])
+    # Concurrent requests can complete in the same event-loop tick. The running
+    # average must use total benchmark time, not the tiny gap between callbacks.
+    times = iter([12.0, 12.0001, 20.0])
     progress = Progress()
     monkeypatch.setattr("ai_infra_bench.performance.bench.request_func", return_output)
     monkeypatch.setattr(
@@ -221,9 +223,9 @@ def test_run_requests_updates_live_output_throughput(monkeypatch):
 
     assert progress.updates == 3
     assert progress.postfixes == [
-        {"TPS": "5.00 tokens/s", "Peak TPS": "5.00 tokens/s"},
-        {"TPS": "10.00 tokens/s", "Peak TPS": "10.00 tokens/s"},
-        {"TPS": "0.17 tokens/s", "Peak TPS": "10.00 tokens/s"},
+        {"Avg TPS": "5.00 tokens/s"},
+        {"Avg TPS": "15.00 tokens/s"},
+        {"Avg TPS": "3.10 tokens/s"},
     ]
 
 

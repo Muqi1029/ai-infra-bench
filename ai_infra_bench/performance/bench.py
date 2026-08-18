@@ -233,13 +233,9 @@ async def run_requests(
 ) -> List[OutputMetric]:
     tasks = []
     completion_tokens_sum = 0
-    peak_tps = 0.0
-    last_tps_update_time = benchmark_start_time
-    last_tps_completion_tokens = 0
 
     async def run_request(payload: Dict[str, Any]) -> OutputMetric:
-        nonlocal completion_tokens_sum, peak_tps, last_tps_update_time
-        nonlocal last_tps_completion_tokens
+        nonlocal completion_tokens_sum
 
         output = await request_func(
             session,
@@ -251,21 +247,9 @@ async def run_requests(
             pbar.update(1)
             if benchmark_start_time is not None and output.success:
                 completion_tokens_sum += output.completion_tokens
-                current_time = time.perf_counter()
-                interval_s = max(current_time - last_tps_update_time, 1e-9)
-                interval_completion_tokens = (
-                    completion_tokens_sum - last_tps_completion_tokens
-                )
-                current_tps = interval_completion_tokens / interval_s
-                peak_tps = max(peak_tps, current_tps)
-                last_tps_update_time = current_time
-                last_tps_completion_tokens = completion_tokens_sum
-                pbar.set_postfix(
-                    {
-                        "TPS": f"{current_tps:.2f} tokens/s",
-                        "Peak TPS": f"{peak_tps:.2f} tokens/s",
-                    }
-                )
+                elapsed_s = max(time.perf_counter() - benchmark_start_time, 1e-9)
+                average_tps = completion_tokens_sum / elapsed_s
+                pbar.set_postfix({"Avg TPS": f"{average_tps:.2f} tokens/s"})
         return output
 
     async for payload in get_request(requests, request_rate):
