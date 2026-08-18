@@ -13,7 +13,6 @@ dependencies = [
     "openai",
     "plotly",
     "numpy",
-    "prometheus-client",
     "psutil",
     "requests",
     "PyYAML",
