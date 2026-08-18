@@ -47,13 +47,8 @@ def main(argv: Optional[Sequence[str]] = None):
         from ai_infra_bench.correctness.hidden_states import main
 
         return main(extra_argv)
+
     elif args.subcommand == "monitor":
-        # from ai_infra_bench.monitoring.cli import main
-
-        # return main(extra_argv)
-        pass
-
-    elif args.subcommand == "metrics":
         from ai_infra_bench.monitor import main
 
         return main(extra_argv)
