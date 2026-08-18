@@ -131,6 +131,123 @@ pip install ai-infra-bench
 
 Concrete usage examples and argument configurations can be found in the [examples subdirectory](./examples)
 
+## Eval Dataset
+
+`aib eval-dataset` evaluates correctness against an OpenAI-compatible endpoint.
+The built-in HTTP datasets are GSM8K, AIME 2025, and constrained decoding.
+Install the packaged datasets and run all HTTP evaluations with:
+
+```bash
+pip install 'ai-infra-bench[data]'
+aib eval-dataset \
+  --evals all \
+  --base-url http://localhost:9090 \
+  --api-key EMPTY \
+  --model your-model \
+  --max-concurrency 32
+```
+
+Use `--num-questions` for a smaller smoke test, `--repeat` for repeated rounds,
+and `--override-payload` for JSON request overrides. A custom dataset YAML or
+dataset path can be used when exactly one HTTP evaluation is selected.
+
+### DeepSWE
+
+DeepSWE is a long-horizon coding-agent benchmark. Unlike the question-answer
+datasets, it runs each task in an isolated repository environment and grades the
+agent's committed patch with the benchmark's program-based verifier. AIB uses
+the official [Pier](https://github.com/datacurve-ai/pier) runner for this path.
+
+Install the runner and clone the benchmark tasks:
+
+```bash
+pip install ai-infra-bench
+uv tool install --python 3.12 datacurve-pier
+git clone https://github.com/datacurve-ai/deep-swe
+```
+
+Pier 0.3.0 requires Python 3.12 and either Docker or a configured Modal account;
+installing it as a tool keeps AIB compatible with Python 3.10+. When AIB already
+runs on Python 3.12, `pip install 'ai-infra-bench[deepswe]'` is also supported.
+
+Run a deterministic ten-task sample against an OpenAI-compatible endpoint:
+
+```bash
+aib eval-dataset \
+  --evals deepswe \
+  --dataset-path ./deep-swe/tasks \
+  --model openai/your-model \
+  --base-url http://localhost:9090 \
+  --api-key EMPTY \
+  --max-concurrency 1 \
+  --num-questions 10 \
+  --deepswe-jobs-dir ./deepswe-jobs
+```
+
+`--repeat` maps to Pier attempts per task. `--max-concurrency` controls concurrent
+sandbox trials, and `--num-questions` selects a deterministic subset (seed 0 by
+default). Use `--deepswe-environment modal` for Modal instead of local Docker,
+or `--config` to pass a full Pier job configuration. DeepSWE is intentionally
+excluded from `--evals all` because it launches long-running sandbox jobs.
+
+## Metrics Scraping
+
+`aib metrics` continuously polls the Prometheus-format `/metrics` endpoints of
+inference pods (e.g. SGLang launched with `--enable-metrics`), stores every
+sample locally, and draws interactive charts. New pod IPs can be added at any
+time without restarting. Everything runs in a single process -- no Docker, no
+external Prometheus.
+
+```bash
+# scrape two SGLang pods every second, store samples and render charts
+aib metrics --urls 10.0.0.5:30000 10.0.0.6:30000 --output-dir metrics_out
+
+# serve the live chart page AND an embedded Prometheus-compatible API
+aib metrics --urls 10.0.0.5:30000 --db metrics.db --serve
+```
+
+The embedded API speaks the Prometheus HTTP API (a small PromQL subset:
+selectors, `rate()`, `histogram_quantile()`, `sum/avg/min/max/count by`,
+arithmetic) over the scraped history:
+
+```bash
+curl -G http://127.0.0.1:8765/api/v1/query \
+  --data-urlencode 'query=rate(sglang:num_requests_total[2m])'
+curl -G http://127.0.0.1:8765/api/v1/query_range \
+  --data-urlencode 'query=histogram_quantile(0.99, sum by (le, instance) (rate(sglang:time_to_first_token_seconds_bucket[2m])))' \
+  --data-urlencode 'start=...' --data-urlencode 'end=...' --data-urlencode 'step=5'
+```
+
+While running in a terminal, pods are managed interactively:
+
+```
+add 10.0.0.7:30000 pod-c   # start scraping a new pod
+remove pod-c               # stop scraping it
+status                     # per-pod scrape health
+plot                       # re-render plot.html
+quit
+```
+
+The same works non-interactively by pointing `--targets-file` at a file
+(JSON array, or one URL per line) that is re-read whenever it changes.
+
+- **Storage**: samples are appended to `samples.jsonl` (or `--format csv`),
+  one line per sample with `ts / target / name / kind / labels / value`;
+  `--db metrics.db` additionally keeps the history in SQLite (stdlib
+  `sqlite3`, survives restarts, `--retention` prunes old samples).
+- **Charts**: `plot.html` / `--serve` render a plotly page with
+  SGLang-aware panels -- throughput, running/queued requests, cache hit
+  rate, token/request rates, and the latency histograms
+  (`time_to_first_token_seconds`, `e2e_request_latency_seconds`, ...)
+  drawn as estimated p50/p90/p99 per pod.
+- **Grafana (optional, no Docker)**: point any existing Grafana at the
+  embedded API -- add a "Prometheus" datasource with
+  `http://127.0.0.1:8765`, and import the ready-made SGLang dashboard.
+  `--grafana` writes provisioning + dashboard files under
+  `<output-dir>/grafana/` that can be dropped into a Grafana
+  provisioning directory. An existing pushgateway can still be used with
+  `--pushgateway` if you prefer the classic scrape setup.
+
 # Limitation
 
 The following limitations also represent the project's TODO items for improving usability:
