@@ -205,5 +205,5 @@ __marimo__/
 .streamlit/secrets.toml
 
 data
-!eval_dataset_data/ai_infra_bench_dataset/data/
-!eval_dataset_data/ai_infra_bench_dataset/data/**
+!aib-dataset/ai_infra_bench_dataset/data/
+!aib-dataset/ai_infra_bench_dataset/data/**

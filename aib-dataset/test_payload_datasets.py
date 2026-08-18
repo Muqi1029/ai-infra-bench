@@ -2,10 +2,7 @@ import json
 from argparse import Namespace
 from pathlib import Path
 
-from eval_dataset_data.scripts.build_payload_datasets import (
-    build_gsm8k_payloads,
-    build_sharegpt_payloads,
-)
+from scripts.build_payload_datasets import build_gsm8k_payloads, build_sharegpt_payloads
 
 
 def test_build_gsm8k_payloads(tmp_path):
