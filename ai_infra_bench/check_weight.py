@@ -187,7 +187,7 @@ def download_from_hub(
     print("-" * line_width)
 
 
-def parse_args():
+def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Inspect PyTorch or safetensors model weights."
     )
@@ -200,11 +200,11 @@ def parse_args():
         default=None,
         help="Only display tensor names matching this regular expression.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
     download_from_hub(
         args.model_path,
         cache_dir=args.cache_dir,
