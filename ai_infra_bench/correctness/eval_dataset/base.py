@@ -102,14 +102,14 @@ class EvalRuntime:
                         await asyncio.gather(*tasks)
 
                         correct_rate, wrong_rate, failed_rate = eval.summary()
-                        logger.info(
-                            "%s round %s: correct_rate=%.4f wrong_rate=%.4f failed_rate=%.4f",
-                            eval.name,
-                            i + 1,
-                            correct_rate,
-                            wrong_rate,
-                            failed_rate,
+                        summary = (
+                            f"{eval.name} round {i + 1}: "
+                            f"correct_rate={correct_rate:.4f} "
+                            f"wrong_rate={wrong_rate:.4f} "
+                            f"failed_rate={failed_rate:.4f}"
                         )
+                        pbar.write(summary)
+                        logger.info(summary)
         finally:
             pbar.close()
             self.session = None
