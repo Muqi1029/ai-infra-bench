@@ -75,11 +75,6 @@ jobs:
           print(f"pinned ai-infra-bench-dataset=={__version__}")
           PY
 
-      - name: Bundle example scripts into package data
-        run: |
-          mkdir -p ai_infra_bench/examples
-          cp examples/*.py ai_infra_bench/examples/
-
       - name: Build and upload main package
         env:
           TWINE_USERNAME: __token__
