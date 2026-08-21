@@ -11,6 +11,9 @@ def main(argv: Sequence[str] | None = None):
     subparsers.add_parser("bench", help="Benchmark requests", add_help=False)
     subparsers.add_parser("slo", help="Run a YAML-driven SLO search", add_help=False)
     subparsers.add_parser(
+        "reply", help="Reply Payloads for only Input Ids and Output Ids", add_help=False
+    )
+    subparsers.add_parser(
         "check-weight", help="Check model weights from safetensors", add_help=False
     )
     subparsers.add_parser(
@@ -30,6 +33,7 @@ def main(argv: Sequence[str] | None = None):
         "req": ("ai_infra_bench.req", "main"),
         "bench": ("ai_infra_bench.performance.bench", "main"),
         "slo": ("ai_infra_bench.slo", "main"),
+        "reply": ("ai_infra_bench.reply", "main"),
         "check-weight": ("ai_infra_bench.check_weight", "main"),
         "plot-metrics": ("ai_infra_bench.utils.draw", "main"),
         "eval-dataset": ("ai_infra_bench.correctness.eval_dataset.main", "main"),
