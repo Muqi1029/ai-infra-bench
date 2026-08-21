@@ -22,7 +22,13 @@ jobs:
   # Publish dataset first so the matching version exists when the main
   # package pins ai-infra-bench-dataset==<version>.
   publish-dataset:
-    if: github.repository == 'Muqi1029/ai-infra-bench' && (inputs.target_job == 'all' || inputs.target_job == 'dataset')
+    if: |
+      github.repository == 'Muqi1029/ai-infra-bench' &&
+      (
+        github.event_name != 'workflow_dispatch ||
+        inputs.target_job == 'all' ||
+        inputs.target_job == 'dataset'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
