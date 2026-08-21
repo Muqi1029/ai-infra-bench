@@ -2,6 +2,16 @@ name: Release PyPI
 
 on:
   workflow_dispatch:
+    inputs:
+      target_job:
+        description: "Select relase dataset or main package"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
+          - dataset
+          - main
   push:
     branches:
       - main
@@ -12,7 +22,7 @@ jobs:
   # Publish dataset first so the matching version exists when the main
   # package pins ai-infra-bench-dataset==<version>.
   publish-dataset:
-    if: github.repository == 'Muqi1029/ai-infra-bench'
+    if: github.repository == 'Muqi1029/ai-infra-bench' && (inputs.target_job == 'all' || inputs.target_job == 'dataset')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -41,7 +51,7 @@ jobs:
           python -m twine upload dist/*
 
   publish:
-    if: github.repository == 'Muqi1029/ai-infra-bench'
+    if: github.repository == 'Muqi1029/ai-infra-bench' && (inputs.target_job == 'all' || inputs.target_job == 'main')
     needs: publish-dataset
     runs-on: ubuntu-latest
     steps:
