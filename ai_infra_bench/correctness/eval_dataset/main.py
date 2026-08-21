@@ -9,11 +9,6 @@ from ai_infra_bench.correctness.eval_dataset.base import (
     EvalRuntime,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s(%(asctime)s):  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 logger = logging.getLogger(__name__)
 
 
