@@ -179,7 +179,7 @@ def resize_sharegpt_requests(
 
 def load_requests(args: Namespace) -> List[Dict]:
 
-    if args.payload_regex_path:
+    if hasattr(args, "payload_regex_path"):
         if args.with_ts:
             requests = read_requests_with_ts(args.payload_regex_path)
         else:
