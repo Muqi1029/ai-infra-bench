@@ -43,7 +43,6 @@ def read_requests_with_ts(
 
     timestamped_requests.sort(key=lambda item: datetime.strptime(item[0], DATE_FORMAT))
     requests = [json.loads(content) for _, content in timestamped_requests]
-    logger.info(f"Read {len(requests)} requests")
     return requests
 
 
@@ -57,7 +56,6 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
             requests.extend(_read_jsonl(file_path))
         else:
             logger.error(f"{file_path} cannot be read. Only support json/jsonl suffix")
-    logger.info(f"Read {len(requests)} requests")
     return requests
 
 
@@ -180,7 +178,19 @@ def resize_sharegpt_requests(
 
 
 def load_requests(args: Namespace) -> List[Dict]:
-    if getattr(args, "dataset", None) == "random":
+
+    if args.payload_regex_path:
+        if args.with_ts:
+            requests = read_requests_with_ts(args.payload_regex_path)
+        else:
+            requests = read_requests(args.payload_regex_path)
+        logger.info(f"Read {len(requests)} requests")
+        if len(requests) == 0:
+            logger.error(
+                f"Read 0 requests! Please check your --payload-regex-path ({args.payload_regex_path=})"
+            )
+
+    elif getattr(args, "dataset", None) == "random":
         requests = generate_random_requests(
             input_len=args.input_len,
             output_len=args.output_len,
@@ -205,10 +215,6 @@ def load_requests(args: Namespace) -> List[Dict]:
                 f"Prepared {len(requests)} ShareGPT requests with "
                 f"input_len={args.input_len}, output_len={args.output_len}"
             )
-    elif args.with_ts:
-        requests = read_requests_with_ts(args.payload_regex_path)
-    else:
-        requests = read_requests(args.payload_regex_path)
 
     if args.filter_constrained_grammar_requests:
         filtered_requests = [
