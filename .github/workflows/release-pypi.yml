@@ -51,7 +51,16 @@ jobs:
           python -m twine upload dist/*
 
   publish:
-    if: github.repository == 'Muqi1029/ai-infra-bench' && (inputs.target_job == 'all' || inputs.target_job == 'main')
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      github.repository == 'Muqi1029/ai-infra-bench' &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        inputs.target_job == 'all' ||
+        inputs.target_job == 'main'
+      )
     needs: publish-dataset
     runs-on: ubuntu-latest
     steps:
