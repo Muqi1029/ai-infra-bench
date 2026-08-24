@@ -96,19 +96,6 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser.add_argument("--label", help="Label used for discribe this benchmark")
 
     parser.add_argument("--with-ts", action="store_true")
-    parser.add_argument("--dump-path", help="The dump path, jsonl format")
-    parser.add_argument(
-        "--dump-content",
-        default="all",
-        choices=["all", "msg"],
-        help="The dump Content, jsonl format",
-    )
-
-    parser.add_argument(
-        "--metrics-path",
-        type=str,
-        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
-    )
 
     parser.add_argument("--debug", action="store_true", help="Debug mode")
 
