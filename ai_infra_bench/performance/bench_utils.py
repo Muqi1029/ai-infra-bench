@@ -66,11 +66,13 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser.add_argument(
         "--input-len",
         type=int,
+        default=8192,
         help="Target input token length for random or ShareGPT datasets",
     )
     parser.add_argument(
         "--output-len",
         type=int,
+        default=1024,
         help="Target output token length for random or ShareGPT datasets",
     )
     parser.add_argument(
