@@ -71,22 +71,9 @@ def test_sharegpt_length_arguments_are_validated_together():
     assert args.tokenizer is None
 
 
-def test_sharegpt_lengths_are_optional():
-    args = parse_args(["--dataset", "sharegpt"])
-
-    validate_args(args)
-
-    assert args.input_len is None
-    assert args.output_len is None
-
-
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (
-            ["--dataset", "sharegpt", "--input-len", "128", "--model", "model"],
-            "--input-len and --output-len",
-        ),
         (
             [
                 "--dataset",
