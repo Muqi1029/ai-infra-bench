@@ -138,31 +138,18 @@ def validate_args(args: Namespace) -> None:
         )
         args.dump_path = f"{dump_path}.jsonl"
 
-    if getattr(args, "dataset", None) == "random":
-        if (
-            args.input_len is None
-            or args.output_len is None
-            or args.num_requests is None
-        ):
-            raise ValueError(
-                "--input-len, --output-len, --num-requests must be provided if using random dataset"
-            )
-        if args.input_len < 1:
-            raise ValueError("--input-len must be >= 1")
-        if args.output_len < 1:
-            raise ValueError("--output-len must be >= 1")
+    if args.input_len < 1:
+        raise ValueError("--input-len must be >= 1")
+    if args.output_len < 1:
+        raise ValueError("--output-len must be >= 1")
 
-    if getattr(args, "dataset", None) == "sharegpt" and (
-        args.input_len is not None or args.output_len is not None
-    ):
-        if args.input_len is None or args.output_len is None:
+    if getattr(args, "dataset", None) in ["random", "sharegpt"]:
+        if args.num_requests is None:
             raise ValueError(
-                "--input-len and --output-len must be provided together for ShareGPT"
+                "--num-requests must be provided if using random or sharegpt dataset"
             )
-        if args.input_len < 1:
-            raise ValueError("--input-len must be >= 1")
-        if args.output_len < 1:
-            raise ValueError("--output-len must be >= 1")
+
+    if getattr(args, "dataset", None) == "sharegpt":
         if not getattr(args, "tokenizer", None) and not getattr(args, "model", None):
             raise ValueError(
                 "--tokenizer or --model must be provided when setting ShareGPT lengths"

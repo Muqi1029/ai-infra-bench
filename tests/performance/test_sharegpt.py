@@ -82,6 +82,8 @@ def test_sharegpt_length_arguments_are_validated_together():
                 "128",
                 "--output-len",
                 "32",
+                "--num-requests",
+                "1000",
             ],
             "--tokenizer or --model",
         ),
