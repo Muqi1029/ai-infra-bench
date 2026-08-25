@@ -326,7 +326,7 @@ class _OutputStats:
         )
 
         total_spec_num_cap_tokens = sum(
-            output.spec_num_cap_tokens for output in self.outputs
+            output.spec_cap_length * output.spec_verify_ct for output in self.outputs
         )
         total_cap_proposed_tokens = total_spec_num_cap_tokens - total_spec_verify_ct
         if not total_spec_num_cap_tokens:
