@@ -329,7 +329,7 @@ class _OutputStats:
         cap_info = [
             [
                 "Avg Cap Verify Len",
-                f"{total_spec_num_cap_tokens / total_spec_verify_ct:.2f}",
+                f"{total_spec_num_cap_tokens / total_spec_verify_ct:.2f} ({total_proposed_drafts / total_spec_verify_ct + 1})",
             ],
             [
                 "Avg Cap Spec Accept Rate",
