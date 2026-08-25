@@ -3,13 +3,13 @@ import json
 import logging
 import random
 from argparse import ArgumentParser, Namespace
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Dict, List, Sequence
 
 import numpy as np
 
-from ai_infra_bench.performance.struct import OutputMetric
+from ai_infra_bench.performance.struct import MetricTable, OutputMetric, _OutputStats
 from ai_infra_bench.utils.draw import (
     format_histogram_percentages,
     format_mean,
@@ -196,124 +196,6 @@ def maybe_dump_metric_tables(
         raise ValueError("--metrics-path must end with .json or .jsonl")
 
 
-MetricRows = List[List[Any]]
-MetricTable = tuple[str, MetricRows]
-
-
-@dataclass
-class _OutputStats:
-    all_outputs: List[OutputMetric]
-    duration_s: float
-    max_concurrency: int
-    request_rate: float
-    outputs: List[OutputMetric] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.outputs = [output for output in self.all_outputs if output.success]
-        self.duration_s = max(self.duration_s, 1e-9)
-
-    @property
-    def num_total_requests(self) -> int:
-        return len(self.all_outputs)
-
-    @property
-    def num_success_requests(self) -> int:
-        return len(self.outputs)
-
-    @property
-    def num_failed_requests(self) -> int:
-        return self.num_total_requests - self.num_success_requests
-
-    @property
-    def cached_token_ratios(self) -> List[float]:
-        return [
-            output.cached_tokens / max(output.prompt_tokens - 1, 1)
-            for output in self.outputs
-        ]
-
-    def metric_series(self) -> List[tuple[str, List[float | int], str]]:
-        return [
-            (
-                "TTFT",
-                [output.ttft_ms for output in self.outputs if output.ttft_ms],
-                "ms",
-            ),
-            (
-                "TPOT(ecl the ttft)",
-                [
-                    tpot_ms
-                    for output in self.outputs
-                    if (tpot_ms := output.calculate_tpot_ms()) is not None
-                ],
-                "ms",
-            ),
-            ("Latency", [output.latency_ms for output in self.outputs], "ms"),
-            (
-                "Prompt tokens",
-                [output.prompt_tokens for output in self.outputs],
-                "tokens",
-            ),
-            (
-                "Reasoning tokens",
-                [output.reasoning_tokens for output in self.outputs],
-                "tokens",
-            ),
-            (
-                "Cached tokens",
-                [output.cached_tokens for output in self.outputs],
-                "tokens",
-            ),
-            (
-                "Completion tokens",
-                [output.completion_tokens for output in self.outputs],
-                "tokens",
-            ),
-        ]
-
-
-def _build_spec_table(outputs: List[OutputMetric]) -> MetricTable | None:
-    total_proposed_drafts = sum(output.spec_num_proposed_drafts for output in outputs)
-    if not total_proposed_drafts:
-        return None
-
-    total_correct_drafts = sum(output.spec_num_correct_drafts for output in outputs)
-    spec_outputs = [output for output in outputs if output.spec_verify_ct]
-    total_verify_ct = sum(output.spec_verify_ct for output in spec_outputs)
-    total_completion_tokens = sum(output.completion_tokens for output in spec_outputs)
-    avg_accept_length = (
-        f"{total_completion_tokens / total_verify_ct:.2f}" if total_verify_ct else "N/A"
-    )
-
-    max_histogram_length = max(
-        (len(output.spec_correct_drafts_histogram) for output in outputs),
-        default=0,
-    )
-    total_histogram = [
-        sum(
-            output.spec_correct_drafts_histogram[index]
-            for output in outputs
-            if index < len(output.spec_correct_drafts_histogram)
-        )
-        for index in range(max_histogram_length)
-    ]
-    return (
-        "Spec Tokens Statistics",
-        [
-            ["Metric", "Value"],
-            [
-                "Avg Spec Accept Rate",
-                f"{total_correct_drafts / total_proposed_drafts:.2%}",
-            ],
-            ["Avg Spec Accept Length", avg_accept_length],
-            ["Total Spec Correct Drafts Histogram", total_histogram],
-            [
-                "Spec Correct Drafts Histogram Percentages",
-                format_histogram_percentages(total_histogram),
-            ],
-        ],
-    )
-
-
 def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
     if not stats.outputs:
         error_message = (
@@ -360,7 +242,7 @@ def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
             ],
         ),
     ]
-    if spec_table := _build_spec_table(stats.outputs):
+    if spec_table := stats.build_spec_table():
         tables.append(spec_table)
     return tables
 
@@ -380,120 +262,10 @@ def _build_benchmark_tables(stats: _OutputStats) -> List[MetricTable]:
             )
         ]
 
-    total_prompt_tokens = sum(output.prompt_tokens for output in stats.outputs)
-    total_completion_tokens = sum(output.completion_tokens for output in stats.outputs)
-    total_reasoning_tokens = sum(output.reasoning_tokens for output in stats.outputs)
-    total_cached_tokens = sum(output.cached_tokens for output in stats.outputs)
-    total_cached_tokens_device = sum(
-        output.cached_tokens_device for output in stats.outputs
-    )
-    total_cached_tokens_host = sum(
-        output.cached_tokens_host for output in stats.outputs
-    )
-    cached_tokens_device_ratio = (
-        total_cached_tokens_device / total_cached_tokens if total_cached_tokens else 0.0
-    )
-    cached_tokens_host_ratio = (
-        total_cached_tokens_host / total_cached_tokens if total_cached_tokens else 0.0
-    )
-    total_cacheable_prompt_tokens = total_prompt_tokens - stats.num_success_requests
-    global_cache_ratio = (
-        total_cached_tokens / total_cacheable_prompt_tokens
-        if total_cacheable_prompt_tokens > 0
-        else 0.0
-    )
-    request_rate_display = (
-        "unlimited"
-        if stats.request_rate == float("inf")
-        else f"{stats.request_rate:g} req/s"
-    )
-
-    def compute_metrics(values: List[float | int]) -> List[str]:
-        return [
-            format_mean(values),
-            format_percentile(values, 50),
-            format_percentile(values, 95),
-            format_percentile(values, 99),
-        ]
-
-    finish_reasons = ("stop", "length", "tool_calls", "abort")
-    finish_reason_counts = {
-        finish_reason: sum(
-            output.finish_reason == finish_reason for output in stats.outputs
-        )
-        for finish_reason in finish_reasons
-    }
-    tables = [
-        (
-            "Benchmark Summary",
-            [
-                ["Metric", "Value"],
-                ["Total requests", str(stats.num_total_requests)],
-                ["Successful requests", str(stats.num_success_requests)],
-                ["Failed requests", str(stats.num_failed_requests)],
-                ["Max concurrency", str(stats.max_concurrency)],
-                ["Request rate", request_rate_display],
-                [
-                    "Mean finished requests per second",
-                    f"{stats.num_success_requests / stats.duration_s:.2f} req/s",
-                ],
-                ["Duration", f"{stats.duration_s:.2f} s"],
-                [
-                    "Output throughput",
-                    f"{total_completion_tokens / stats.duration_s:.2f} tokens/s",
-                ],
-                ["Total prompt tokens", f"{total_prompt_tokens} tokens"],
-                ["Total completion tokens", f"{total_completion_tokens} tokens"],
-                ["Total reasoning tokens", f"{total_reasoning_tokens} tokens"],
-                ["Total cached tokens", f"{total_cached_tokens} tokens"],
-                [
-                    "Total cached tokens device",
-                    f"{total_cached_tokens_device} ({cached_tokens_device_ratio:.2%}) tokens",
-                ],
-                [
-                    "Total cached tokens host",
-                    f"{total_cached_tokens_host} ({cached_tokens_host_ratio:.2%}) tokens",
-                ],
-                ["Global cache ratio", f"{global_cache_ratio:.2%}"],
-            ],
-        ),
-        (
-            "Latency & Token Metrics",
-            [
-                ["Metric", "Mean", "P50", "P95", "P99", "Unit"],
-                *[
-                    [metric, *compute_metrics(values), unit]
-                    for metric, values, unit in stats.metric_series()
-                ],
-                [
-                    "Cached token ratio",
-                    f"{np.mean(stats.cached_token_ratios):.2%}",
-                    f"{np.percentile(stats.cached_token_ratios, 50):.2%}",
-                    f"{np.percentile(stats.cached_token_ratios, 95):.2%}",
-                    f"{np.percentile(stats.cached_token_ratios, 99):.2%}",
-                    "ratio",
-                ],
-            ],
-        ),
-    ]
-    if spec_table := _build_spec_table(stats.outputs):
+    tables = [stats.build_benchmark_summary_table(), stats.build_latency_token_table()]
+    if spec_table := stats.build_spec_table():
         tables.append(spec_table)
-    tables.append(
-        (
-            "Finish Reason Statistics",
-            [
-                ["Finish reason", "Requests", "Percentage"],
-                *[
-                    [
-                        finish_reason,
-                        str(count),
-                        f"{count / stats.num_success_requests:.2%}",
-                    ]
-                    for finish_reason, count in finish_reason_counts.items()
-                ],
-            ],
-        )
-    )
+    tables.append(stats.build_finish_reason_table())
     return tables
 
 

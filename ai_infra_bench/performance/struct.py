@@ -1,9 +1,17 @@
 import time
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 from typing import Any, Dict, List, Mapping
 
-from ai_infra_bench.utils.draw import Color, color_print
+import numpy as np
+
+from ai_infra_bench.utils.draw import (
+    Color,
+    color_print,
+    format_histogram_percentages,
+    format_mean,
+    format_percentile,
+)
 from ai_infra_bench.utils.req import extract_response_metrics
 
 
@@ -11,6 +19,13 @@ class TextType(Enum):
     REASONING = auto()
     CONTENT = auto()
     TOOL_CALLS = auto()
+
+
+class FinishReason(StrEnum):
+    STOP = "stop"
+    LENGTH = "length"
+    TOOL_CALLS = "tool_calls"
+    ABORT = "abort"
 
 
 @dataclass
@@ -48,6 +63,11 @@ class OutputMetric:
     # spec
     spec_num_proposed_drafts: int = 0
     spec_num_correct_drafts: int = 0
+
+    spec_cap_length: int = 0
+    spec_block_accept_length: int = 0
+    spec_cap_lens_histogram: List[int] = field(default_factory=list)
+
     spec_accept_rate: float = 0.0
     spec_accept_length: float = 0.0
     spec_verify_ct: int = 0
@@ -168,3 +188,247 @@ class OutputMetric:
             return None
         self.tpot_ms = generation_time_ms / (self.completion_tokens - 1)
         return self.tpot_ms
+
+
+MetricRows = List[List[Any]]
+MetricTable = tuple[str, MetricRows]
+
+
+@dataclass
+class _OutputStats:
+    all_outputs: List[OutputMetric]
+    duration_s: float
+    max_concurrency: int
+    request_rate: float
+    outputs: List[OutputMetric] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.outputs = [output for output in self.all_outputs if output.success]
+        self.duration_s = max(self.duration_s, 1e-9)
+
+    @property
+    def num_total_requests(self) -> int:
+        return len(self.all_outputs)
+
+    @property
+    def num_success_requests(self) -> int:
+        return len(self.outputs)
+
+    @property
+    def num_failed_requests(self) -> int:
+        return self.num_total_requests - self.num_success_requests
+
+    @property
+    def cached_token_ratios(self) -> List[float]:
+        return [
+            output.cached_tokens / max(output.prompt_tokens - 1, 1)
+            for output in self.outputs
+        ]
+
+    def metric_series(self) -> List[tuple[str, List[float | int], str]]:
+        return [
+            (
+                "TTFT",
+                [output.ttft_ms for output in self.outputs if output.ttft_ms],
+                "ms",
+            ),
+            (
+                "TPOT(ecl the ttft)",
+                [
+                    tpot_ms
+                    for output in self.outputs
+                    if (tpot_ms := output.calculate_tpot_ms()) is not None
+                ],
+                "ms",
+            ),
+            ("Latency", [output.latency_ms for output in self.outputs], "ms"),
+            (
+                "Prompt tokens",
+                [output.prompt_tokens for output in self.outputs],
+                "tokens",
+            ),
+            (
+                "Reasoning tokens",
+                [output.reasoning_tokens for output in self.outputs],
+                "tokens",
+            ),
+            (
+                "Cached tokens",
+                [output.cached_tokens for output in self.outputs],
+                "tokens",
+            ),
+            (
+                "Completion tokens",
+                [output.completion_tokens for output in self.outputs],
+                "tokens",
+            ),
+        ]
+
+    def build_spec_table(self) -> MetricTable | None:
+        total_proposed_drafts = sum(
+            output.spec_num_proposed_drafts for output in self.outputs
+        )
+        if not total_proposed_drafts:
+            return None
+
+        total_correct_drafts = sum(
+            output.spec_num_correct_drafts for output in self.outputs
+        )
+        spec_outputs = [output for output in self.outputs if output.spec_verify_ct]
+        total_verify_ct = sum(output.spec_verify_ct for output in spec_outputs)
+        total_completion_tokens = sum(
+            output.completion_tokens for output in spec_outputs
+        )
+        avg_accept_length = (
+            f"{total_completion_tokens / total_verify_ct:.2f}"
+            if total_verify_ct
+            else "N/A"
+        )
+
+        max_histogram_length = max(
+            (len(output.spec_correct_drafts_histogram) for output in self.outputs),
+            default=0,
+        )
+        total_histogram = [
+            sum(
+                output.spec_correct_drafts_histogram[index]
+                for output in self.outputs
+                if index < len(output.spec_correct_drafts_histogram)
+            )
+            for index in range(max_histogram_length)
+        ]
+        return (
+            "Spec Tokens Statistics",
+            [
+                ["Metric", "Value"],
+                [
+                    "Avg Spec Accept Rate",
+                    f"{total_correct_drafts / total_proposed_drafts:.2%}",
+                ],
+                ["Avg Spec Accept Length", avg_accept_length],
+                ["Total Spec Correct Drafts Histogram", total_histogram],
+                [
+                    "Spec Correct Drafts Histogram Percentages",
+                    format_histogram_percentages(total_histogram),
+                ],
+            ],
+        )
+
+    def build_finish_reason_table(self):
+        finish_reason_counts = {
+            finish_reason: sum(
+                output.finish_reason == finish_reason for output in self.outputs
+            )
+            for finish_reason in FinishReason
+        }
+        return (
+            "Finish Reason Statistics",
+            [
+                ["Finish reason", "Requests", "Percentage"],
+                *[
+                    [
+                        finish_reason,
+                        str(count),
+                        f"{count / self.num_success_requests:.2%}",
+                    ]
+                    for finish_reason, count in finish_reason_counts.items()
+                ],
+            ],
+        )
+
+    def build_benchmark_summary_table(self):
+        total_prompt_tokens = sum(output.prompt_tokens for output in self.outputs)
+        total_completion_tokens = sum(
+            output.completion_tokens for output in self.outputs
+        )
+        total_reasoning_tokens = sum(output.reasoning_tokens for output in self.outputs)
+        total_cached_tokens = sum(output.cached_tokens for output in self.outputs)
+        total_cached_tokens_device = sum(
+            output.cached_tokens_device for output in self.outputs
+        )
+        total_cached_tokens_host = sum(
+            output.cached_tokens_host for output in self.outputs
+        )
+        cached_tokens_device_ratio = (
+            total_cached_tokens_device / total_cached_tokens
+            if total_cached_tokens
+            else 0.0
+        )
+        cached_tokens_host_ratio = (
+            total_cached_tokens_host / total_cached_tokens
+            if total_cached_tokens
+            else 0.0
+        )
+        total_cacheable_prompt_tokens = total_prompt_tokens - self.num_success_requests
+        global_cache_ratio = (
+            total_cached_tokens / total_cacheable_prompt_tokens
+            if total_cacheable_prompt_tokens > 0
+            else 0.0
+        )
+        request_rate_display = (
+            "unlimited"
+            if self.request_rate == float("inf")
+            else f"{self.request_rate:g} req/s"
+        )
+        return (
+            "Benchmark Summary",
+            [
+                ["Metric", "Value"],
+                ["Total requests", str(self.num_total_requests)],
+                ["Successful requests", str(self.num_success_requests)],
+                ["Failed requests", str(self.num_failed_requests)],
+                ["Max concurrency", str(self.max_concurrency)],
+                ["Request rate", request_rate_display],
+                [
+                    "Request Throughput",
+                    f"{self.num_success_requests / self.duration_s:.2f} req/s",
+                ],
+                ["Duration", f"{self.duration_s:.2f} s"],
+                [
+                    "Output throughput",
+                    f"{total_completion_tokens / self.duration_s:.2f} tokens/s",
+                ],
+                ["Total prompt tokens", f"{total_prompt_tokens} tokens"],
+                ["Total completion tokens", f"{total_completion_tokens} tokens"],
+                ["Total reasoning tokens", f"{total_reasoning_tokens} tokens"],
+                ["Total cached tokens", f"{total_cached_tokens} tokens"],
+                [
+                    "Total cached tokens device",
+                    f"{total_cached_tokens_device} ({cached_tokens_device_ratio:.2%}) tokens",
+                ],
+                [
+                    "Total cached tokens host",
+                    f"{total_cached_tokens_host} ({cached_tokens_host_ratio:.2%}) tokens",
+                ],
+                ["Global cache ratio", f"{global_cache_ratio:.2%}"],
+            ],
+        )
+
+    def build_latency_token_table(self):
+        return (
+            "Latency & Token Metrics",
+            [
+                ["Metric", "Mean", "P50", "P95", "P99", "Unit"],
+                *[
+                    [metric, *self.compute_metrics(values), unit]
+                    for metric, values, unit in self.metric_series()
+                ],
+                [
+                    "Cached token ratio",
+                    f"{np.mean(self.cached_token_ratios):.2%}",
+                    f"{np.percentile(self.cached_token_ratios, 50):.2%}",
+                    f"{np.percentile(self.cached_token_ratios, 95):.2%}",
+                    f"{np.percentile(self.cached_token_ratios, 99):.2%}",
+                    "ratio",
+                ],
+            ],
+        )
+
+    @staticmethod
+    def compute_metrics(values: List[float | int]) -> List[str]:
+        return [
+            format_mean(values),
+            format_percentile(values, 50),
+            format_percentile(values, 95),
+            format_percentile(values, 99),
+        ]
