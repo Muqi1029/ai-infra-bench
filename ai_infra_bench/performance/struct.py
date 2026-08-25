@@ -293,7 +293,7 @@ class _OutputStats:
                 ["Total Correct Drafts", total_correct_drafts],
                 ["Toral Verify Count", total_spec_verify_ct],
                 [
-                    "Avg Spec Accept Rate",
+                    "Avg Spec Accept Rate(All Verify)",
                     f"{total_correct_drafts / total_proposed_drafts:.2%}",
                 ],
                 [
