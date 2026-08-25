@@ -285,7 +285,7 @@ class _OutputStats:
             [output.spec_correct_drafts_histogram for output in self.outputs]
         )
 
-        table = (
+        table = [
             "Spec Tokens Statistics",
             [
                 ["Metric", "Value"],
@@ -313,7 +313,7 @@ class _OutputStats:
                     format_histogram_percentages(agg_spec_correct_drafts_histogram),
                 ],
             ],
-        )
+        ]
 
         total_spec_num_cap_tokens = sum(
             output.spec_cap_length * output.spec_verify_ct for output in self.outputs
