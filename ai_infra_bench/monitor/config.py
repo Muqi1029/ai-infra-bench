@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from ai_infra_bench.utils.req import sanitize_url
 
+DEFAULT_METRICS_PATH = "/metric"
 DURATION_PATTERN = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h|d|w|y)$")
 
 
@@ -68,7 +69,7 @@ def _format_host_port(host: str, port: int | None) -> str:
 
 
 def parse_targets(
-    base_urls: Sequence[str], metrics_path: str = "/metrics"
+    base_urls: Sequence[str], metrics_path: str = DEFAULT_METRICS_PATH
 ) -> list[ScrapeTarget]:
     metrics_path = _normalize_metrics_path(metrics_path)
     targets = []
@@ -89,26 +90,25 @@ def parse_targets(
             raise ConfigurationError(
                 f"base URL {raw_url!r} must not contain a query or fragment"
             )
-        if parsed.path not in {"", "/"}:
-            raise ConfigurationError(
-                f"base URL {raw_url!r} contains an unsupported path; "
-                "use --metrics-path for a custom metrics endpoint"
-            )
         try:
             address = _format_host_port(parsed.hostname, parsed.port)
         except ValueError as error:
             raise ConfigurationError(f"invalid port in {raw_url!r}: {error}") from error
 
-        key = (parsed.scheme, address, metrics_path)
+        base_path = parsed.path.rstrip("/")
+        target_metrics_path = (
+            metrics_path if not base_path else f"{base_path}/{metrics_path.lstrip('/')}"
+        )
+        key = (parsed.scheme, address, target_metrics_path)
         if key in seen:
             continue
         seen.add(key)
         targets.append(
             ScrapeTarget(
-                base_url=f"{parsed.scheme}://{address}",
+                base_url=f"{parsed.scheme}://{address}{base_path}",
                 scheme=parsed.scheme,
                 address=address,
-                metrics_path=metrics_path,
+                metrics_path=target_metrics_path,
                 label=f"server-{len(targets)}",
             )
         )

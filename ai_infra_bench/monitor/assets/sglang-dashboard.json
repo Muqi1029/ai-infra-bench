@@ -1,17 +1,5 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
+  "annotations": {"list": []},
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -19,266 +7,160 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {
-        "defaults": {"color": {"mode": "continuous-GrYlRd"}, "unit": "reqps"},
-        "overrides": []
-      },
-      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
-      "id": 1,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "targets": [
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [
         {
-          "editorMode": "code",
-          "expr": "sum(rate(sglang:num_requests_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))",
-          "legendFormat": "requests/s",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Request Rate",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {
-        "defaults": {"color": {"mode": "continuous-BlYlRd"}, "unit": "tps"},
-        "overrides": []
-      },
-      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
-      "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(sglang:gen_throughput{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "tokens/s",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Generation Throughput",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {
-        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 10}]}},
-        "overrides": []
-      },
-      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
-      "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(sglang:num_running_reqs{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "running",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Running Requests",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {
-        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 10}]}},
-        "overrides": []
-      },
-      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(sglang:num_queue_reqs{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "queued",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Queued Requests",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "tps"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
-      "id": 5,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (sglang:gen_throughput{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "{{aib_target}} generation",
-          "range": true,
-          "refId": "A"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "continuous-GrYlRd"}, "unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 5, "w": 8, "x": 0, "y": 1},
+          "id": 1,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+          "targets": [{"editorMode": "code", "expr": "sum(rate(sglang:num_requests_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))", "legendFormat": "requests/s", "range": true, "refId": "A"}],
+          "title": "Request Rate",
+          "type": "stat"
         },
         {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (rate(sglang:prompt_tokens_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))",
-          "legendFormat": "{{aib_target}} prompt",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Token Throughput",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "min": 0}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
-      "id": 6,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (sglang:num_running_reqs{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "{{aib_target}} running",
-          "range": true,
-          "refId": "A"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "continuous-BlYlRd"}, "unit": "tps"}, "overrides": []},
+          "gridPos": {"h": 5, "w": 8, "x": 8, "y": 1},
+          "id": 2,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+          "targets": [{"editorMode": "code", "expr": "sum(sglang:gen_throughput{instance=~\"$instance\",aib_target=~\"$aib_target\"})", "legendFormat": "tokens/s", "range": true, "refId": "A"}],
+          "title": "Throughput",
+          "type": "stat"
         },
         {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (sglang:num_queue_reqs{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "{{aib_target}} queued",
-          "range": true,
-          "refId": "B"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 5, "w": 8, "x": 16, "y": 1},
+          "id": 3,
+          "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+          "targets": [{"editorMode": "code", "expr": "sum(sglang:num_running_reqs{instance=~\"$instance\",aib_target=~\"$aib_target\"})", "legendFormat": "running", "range": true, "refId": "A"}],
+          "title": "Running Requests",
+          "type": "stat"
         }
       ],
-      "title": "Scheduler Requests",
-      "type": "timeseries"
+      "title": "Overview",
+      "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "max": 100, "min": 0, "unit": "percent"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
-      "id": 7,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 6},
+      "id": 101,
+      "panels": [
         {
-          "editorMode": "code",
-          "expr": "100 * max by (aib_target) (sglang:token_usage{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "{{aib_target}} KV usage",
-          "range": true,
-          "refId": "A"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 7},
+          "id": 4,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "sum by (aib_target) (rate(sglang:prompt_tokens_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))", "legendFormat": "{{aib_target}} prompt tokens", "range": true, "refId": "A"}],
+          "title": "Prompt Tokens",
+          "type": "timeseries"
         },
         {
-          "editorMode": "code",
-          "expr": "100 * max by (aib_target) (sglang:cache_hit_rate{instance=~\"$instance\",aib_target=~\"$aib_target\"})",
-          "legendFormat": "{{aib_target}} cache hit",
-          "range": true,
-          "refId": "B"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 7},
+          "id": 5,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "sum by (aib_target) (rate(sglang:reasoning_tokens_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))", "legendFormat": "{{aib_target}} reasoning tokens", "range": true, "refId": "A"}],
+          "title": "Reasoning Tokens",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 7},
+          "id": 6,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "sum by (aib_target) (rate(sglang:generation_tokens_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))", "legendFormat": "{{aib_target}} completion tokens", "range": true, "refId": "A"}],
+          "title": "Completion Tokens",
+          "type": "timeseries"
         }
       ],
-      "title": "KV Cache",
-      "type": "timeseries"
+      "title": "Token Usage",
+      "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
-      "id": 8,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 15},
+      "id": 102,
+      "panels": [
         {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le, aib_target) (rate(sglang:time_to_first_token_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))",
-          "legendFormat": "{{aib_target}} p50",
-          "range": true,
-          "refId": "A"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "percent"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+          "id": 7,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "100 * avg by (aib_target) (sglang:spec_accept_rate{instance=~\"$instance\",aib_target=~\"$aib_target\"})", "legendFormat": "{{aib_target}} accept rate", "range": true, "refId": "A"}],
+          "title": "Spec Accept Rate",
+          "type": "timeseries"
         },
         {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, aib_target) (rate(sglang:time_to_first_token_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))",
-          "legendFormat": "{{aib_target}} p99",
-          "range": true,
-          "refId": "B"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16},
+          "id": 8,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [{"editorMode": "code", "expr": "avg by (aib_target) (sglang:spec_accept_length{instance=~\"$instance\",aib_target=~\"$aib_target\"})", "legendFormat": "{{aib_target}} accept length", "range": true, "refId": "A"}],
+          "title": "Spec Accept Length",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
+          "id": 9,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le, aib_target) (rate(sglang:spec_correct_drafts_histogram_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p50", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "histogram_quantile(0.90, sum by (le, aib_target) (rate(sglang:spec_correct_drafts_histogram_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p90", "range": true, "refId": "B"},
+            {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le, aib_target) (rate(sglang:spec_correct_drafts_histogram_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p99", "range": true, "refId": "C"}
+          ],
+          "title": "Correct Drafts Histogram",
+          "type": "timeseries"
         }
       ],
-      "title": "Time to First Token",
-      "type": "timeseries"
+      "title": "Speculative Decoding",
+      "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21},
-      "id": 9,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 24},
+      "id": 103,
+      "panels": [
         {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le, aib_target) (rate(sglang:e2e_request_latency_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))",
-          "legendFormat": "{{aib_target}} p50",
-          "range": true,
-          "refId": "A"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 25},
+          "id": 10,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le, aib_target) (rate(sglang:time_to_first_token_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p50", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le, aib_target) (rate(sglang:time_to_first_token_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p99", "range": true, "refId": "B"}
+          ],
+          "title": "TTFT",
+          "type": "timeseries"
         },
         {
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, aib_target) (rate(sglang:e2e_request_latency_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))",
-          "legendFormat": "{{aib_target}} p99",
-          "range": true,
-          "refId": "B"
+          "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 25},
+          "id": 11,
+          "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+          "targets": [
+            {"editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le, aib_target) (rate(sglang:e2e_request_latency_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p50", "range": true, "refId": "A"},
+            {"editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le, aib_target) (rate(sglang:e2e_request_latency_seconds_bucket{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval])))", "legendFormat": "{{aib_target}} p99", "range": true, "refId": "B"}
+          ],
+          "title": "E2E Request Latency",
+          "type": "timeseries"
         }
       ],
-      "title": "End-to-End Request Latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "aib-prometheus"},
-      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "min": 0, "unit": "reqps"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21},
-      "id": 10,
-      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (rate(sglang:num_aborted_requests_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))",
-          "legendFormat": "{{aib_target}} aborted",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "editorMode": "code",
-          "expr": "sum by (aib_target) (rate(sglang:num_retracted_requests_total{instance=~\"$instance\",aib_target=~\"$aib_target\"}[$__rate_interval]))",
-          "legendFormat": "{{aib_target}} retracted",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Aborted and Retracted Requests",
-      "type": "timeseries"
+      "title": "Latency",
+      "type": "row"
     }
   ],
   "refresh": "5s",
@@ -325,6 +207,6 @@
   "timezone": "browser",
   "title": "SGLang Overview",
   "uid": "sglang-dashboard",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

@@ -8,10 +8,11 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 from ai_infra_bench.monitor.binaries import BinaryError, resolve_binary
 from ai_infra_bench.monitor.config import (
+    DEFAULT_METRICS_PATH,
     ConfigurationError,
     ScrapeTarget,
     create_runtime_layout,
@@ -81,7 +82,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         nargs="+",
         required=True,
         metavar="URL",
-        help="SGLang server base URLs exposing /metrics",
+        help="SGLang server URLs; metrics are read from the URL plus the metrics path",
     )
     parser.add_argument(
         "--runtime",
@@ -104,7 +105,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--prometheus-port", type=_port, default=9090)
     parser.add_argument("--grafana-port", type=_port, default=3000)
-    parser.add_argument("--metrics-path", default="/metrics")
+    parser.add_argument(
+        "--metrics-path",
+        default=DEFAULT_METRICS_PATH,
+        help="Path suffix appended to each target URL (default: %(default)s)",
+    )
     parser.add_argument("--scrape-interval", type=_duration, default="5s")
     parser.add_argument("--retention-time", type=_duration, default="24h")
     parser.add_argument("--runtime-dir", type=Path)
@@ -186,7 +191,7 @@ def run(args: argparse.Namespace) -> int:
             "pass --allow-remote to confirm"
         )
 
-    targets = parse_targets(args.base_urls, args.metrics_path)
+    targets: List[ScrapeTarget] = parse_targets(args.base_urls, args.metrics_path)
     layout = create_runtime_layout(args.runtime_dir, args.data_dir)
     write_runtime_config(
         layout,
@@ -206,6 +211,7 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     ensure_port_available(args.listen_address, args.prometheus_port, "Prometheus")
+
     if not args.no_grafana:
         ensure_port_available(args.listen_address, args.grafana_port, "Grafana")
     if not args.skip_target_check:
@@ -260,13 +266,18 @@ def run(args: argparse.Namespace) -> int:
                 args.startup_timeout,
                 env=environment,
             )
+
         prometheus_url, grafana_url = _print_urls(
             args.listen_address,
             args.prometheus_port,
             None if args.no_grafana else args.grafana_port,
         )
+
+        # open
         if args.open and grafana_url:
             webbrowser.open(grafana_url)
+
+        # prepare for shell
         registry = TargetRegistry(
             targets=targets,
             config_path=layout.prometheus_config,

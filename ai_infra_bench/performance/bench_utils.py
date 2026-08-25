@@ -143,7 +143,7 @@ def validate_args(args: Namespace) -> None:
     if args.output_len < 1:
         raise ValueError("--output-len must be >= 1")
 
-    if getattr(args, "dataset", None) in ["random", "sharegpt"]:
+    if getattr(args, "dataset", None) not in ["random", "sharegpt"]:
         if args.num_requests is None:
             raise ValueError(
                 "--num-requests must be provided if using random or sharegpt dataset"
