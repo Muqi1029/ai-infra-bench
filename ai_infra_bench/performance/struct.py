@@ -162,6 +162,9 @@ class OutputMetric:
             "spec_accept_rate",
             "spec_verify_ct",
             "spec_correct_drafts_histogram",
+            "spec_cap_length",
+            "spec_block_accept_length",
+            "spec_cap_lens_histogram",
         ):
             value = metrics.get(field_name)
             if value is not None:
@@ -264,6 +267,14 @@ class _OutputStats:
             ),
         ]
 
+    def agg_histogram(self, histogram: List[List[int]]) -> List[int]:
+        max_histogram_length = max((len(o) for o in histogram), default=0)
+        total_histogram = [
+            sum(o[i] for o in histogram if i < len(o))
+            for i in range(max_histogram_length)
+        ]
+        return total_histogram
+
     def build_spec_table(self) -> MetricTable | None:
         total_proposed_drafts = sum(
             output.spec_num_proposed_drafts for output in self.outputs
@@ -275,44 +286,76 @@ class _OutputStats:
             output.spec_num_correct_drafts for output in self.outputs
         )
         spec_outputs = [output for output in self.outputs if output.spec_verify_ct]
-        total_verify_ct = sum(output.spec_verify_ct for output in spec_outputs)
+        total_spec_verify_ct = sum(output.spec_verify_ct for output in spec_outputs)
         total_completion_tokens = sum(
             output.completion_tokens for output in spec_outputs
         )
-        avg_accept_length = (
-            f"{total_completion_tokens / total_verify_ct:.2f}"
-            if total_verify_ct
-            else "N/A"
+
+        agg_spec_correct_drafts_histogram = self.agg_histogram(
+            [output.spec_correct_drafts_histogram for output in self.outputs]
         )
 
-        max_histogram_length = max(
-            (len(output.spec_correct_drafts_histogram) for output in self.outputs),
-            default=0,
-        )
-        total_histogram = [
-            sum(
-                output.spec_correct_drafts_histogram[index]
-                for output in self.outputs
-                if index < len(output.spec_correct_drafts_histogram)
-            )
-            for index in range(max_histogram_length)
-        ]
-        return (
+        table = (
             "Spec Tokens Statistics",
             [
                 ["Metric", "Value"],
+                ["Total Proposed Drafts", total_proposed_drafts],
+                ["Total Correct Drafts", total_correct_drafts],
+                ["Toral Verify Count", total_spec_verify_ct],
                 [
                     "Avg Spec Accept Rate",
                     f"{total_correct_drafts / total_proposed_drafts:.2%}",
                 ],
-                ["Avg Spec Accept Length", avg_accept_length],
-                ["Total Spec Correct Drafts Histogram", total_histogram],
+                [
+                    "Avg Spec Accept Length",
+                    (
+                        f"{total_completion_tokens / total_spec_verify_ct:.2f}"
+                        if total_spec_verify_ct
+                        else "N/A"
+                    ),
+                ],
+                [
+                    "Agg Spec Correct Drafts Histogram",
+                    agg_spec_correct_drafts_histogram,
+                ],
                 [
                     "Spec Correct Drafts Histogram Percentages",
-                    format_histogram_percentages(total_histogram),
+                    format_histogram_percentages(agg_spec_correct_drafts_histogram),
                 ],
             ],
         )
+
+        total_spec_num_cap_tokens = sum(
+            output.spec_num_cap_tokens for output in self.outputs
+        )
+        total_cap_proposed_tokens = total_spec_num_cap_tokens - total_spec_verify_ct
+        if not total_spec_num_cap_tokens:
+            return table
+
+        agg_spec_cap_lens_histogram = self.agg_histogram(
+            [output.spec_cap_lens_histogram for output in self.outputs]
+        )
+
+        cap_info = [
+            [
+                "Avg Cap Verify Len",
+                f"{total_spec_num_cap_tokens / total_spec_verify_ct:.2f}",
+            ],
+            [
+                "Avg Cap Spec Accept Rate",
+                f"{total_correct_drafts / total_cap_proposed_tokens:.2%}",
+            ],
+            [
+                "Agg Spec Cap Verify Len Histogram",
+                agg_spec_cap_lens_histogram,
+            ],
+            [
+                "Spec Cap Verify Len Histogram Percentages",
+                format_histogram_percentages(agg_spec_cap_lens_histogram),
+            ],
+        ]
+        table[1] += cap_info
+        return table
 
     def build_finish_reason_table(self):
         finish_reason_counts = {
