@@ -28,6 +28,9 @@ SPEC_METRIC_KEYS = (
     "spec_num_proposed_drafts",
     "spec_verify_ct",
     "spec_correct_drafts_histogram",
+    "spec_cap_length",
+    "spec_block_accept_length",
+    "spec_cap_lens_histogram",
 )
 
 
@@ -135,6 +138,7 @@ def extract_response_metrics(response: Any) -> Dict[str, Any]:
 
     usage = _as_mapping(data.get("usage"))
     prompt_details = _as_mapping(usage.get("prompt_tokens_details"))
+
     sglext = _as_mapping(data.get("sglext"))
     spec_details = _as_mapping(sglext.get("spec_tokens_details"))
 

@@ -12,7 +12,11 @@ from ai_infra_bench.utils.draw import (
     format_mean,
     format_percentile,
 )
-from ai_infra_bench.utils.req import extract_response_metrics
+from ai_infra_bench.utils.req import (
+    SPEC_METRIC_KEYS,
+    USAGE_METRIC_KEYS,
+    extract_response_metrics,
+)
 
 
 class TextType(Enum):
@@ -152,19 +156,9 @@ class OutputMetric:
     def update_response_metrics(self, response: Mapping[str, Any]) -> None:
         metrics = extract_response_metrics(response)
         for field_name in (
-            "prompt_tokens",
-            "completion_tokens",
-            "reasoning_tokens",
+            *USAGE_METRIC_KEYS,
             "cached_tokens",
-            "spec_num_proposed_drafts",
-            "spec_num_correct_drafts",
-            "spec_accept_length",
-            "spec_accept_rate",
-            "spec_verify_ct",
-            "spec_correct_drafts_histogram",
-            "spec_cap_length",
-            "spec_block_accept_length",
-            "spec_cap_lens_histogram",
+            *SPEC_METRIC_KEYS,
         ):
             value = metrics.get(field_name)
             if value is not None:
@@ -175,12 +169,8 @@ class OutputMetric:
             "device", self.cached_tokens_device
         )
         self.cached_tokens_host = cached_details.get("host", self.cached_tokens_host)
-
-    def handle_usage_data(self, usage_data: Mapping[str, Any]) -> None:
-        self.update_response_metrics({"usage": usage_data})
-
-    def handle_sglext_data(self, sglext: Mapping[str, Any]) -> None:
-        self.update_response_metrics({"sglext": sglext})
+        if not self.cached_tokens:
+            self.cached_tokens = self.cached_tokens_device + self.cached_tokens_host
 
     def calculate_tpot_ms(self):
         if self.completion_tokens <= 1 or self.ttft_ms <= 0.0:
