@@ -29,6 +29,7 @@ class TokenUsageStats(TypedDict):
     total: int
     mean: str
     p50: str
+    p90: str
     p99: str
 
 
@@ -194,6 +195,7 @@ class Eval:
                 "total": sum(values),
                 "mean": format_mean(values),
                 "p50": format_percentile(values, 50),
+                "p90": format_percentile(values, 90),
                 "p99": format_percentile(values, 99),
             }
         return token_usage
@@ -229,12 +231,13 @@ class Eval:
             ],
         ]
         token_rows = [
-            ["Metric", "Mean", "P50", "P99", "Unit"],
+            ["Metric", "Mean", "P50", "P90", "P99", "Unit"],
             *[
                 [
                     label,
                     token_usage[key]["mean"],
                     token_usage[key]["p50"],
+                    token_usage[key]["p90"],
                     token_usage[key]["p99"],
                     "tokens",
                 ]
