@@ -8,20 +8,14 @@ from ai_infra_bench.correctness.eval_dataset.base import (
     DEEPSWE_EVAL,
     EvalRuntime,
 )
+from ai_infra_bench.utils.req import add_common_args
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args(argv=None):
     parser = ArgumentParser()
-    parser.add_argument(
-        "--base-url",
-        help="OpenAI-compatible base URL (default: http://localhost:9090)",
-    )
-    parser.add_argument("--api-key", default="EMPTY", help="Endpoint API key")
-    parser.add_argument(
-        "--model", help="Model name for HTTP request payloads or agent evaluations"
-    )
+    add_common_args(parser)
 
     parser.add_argument(
         "--max-concurrency",
@@ -57,9 +51,6 @@ def parse_args(argv=None):
         "--num-questions",
         type=int,
         help="Maximum questions, or sampled tasks for DeepSWE",
-    )
-    parser.add_argument(
-        "--override-payload", type=str, help="JSON payload overrides for HTTP datasets"
     )
 
     deepswe_group = parser.add_argument_group("DeepSWE")

@@ -25,6 +25,20 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser(prog="aib bench", description="Benchmark")
     add_common_args(parser)
 
+    parser.add_argument("--dump-path", help="The dump path, jsonl format")
+    parser.add_argument(
+        "--dump-content",
+        default="all",
+        choices=["all", "msg"],
+        help="The dump Content, jsonl format",
+    )
+
+    parser.add_argument(
+        "--metrics-path",
+        type=str,
+        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
+    )
+
     parser.add_argument(
         "--num-requests",
         default=None,
