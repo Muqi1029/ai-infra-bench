@@ -518,8 +518,10 @@ def test_spec_accept_length_is_weighted_by_verify_ct(monkeypatch):
         rows for title, rows in tables if title == "Spec Tokens Statistics"
     )
     spec_metrics = {row[0]: row[1] for row in spec_rows[1:]}
-    assert spec_metrics["Avg Spec Accept Length"] == "3.67"
-    assert spec_metrics["Avg Spec Accept Rate"] == "88.89%"
+    assert spec_metrics["Avg Spec Accept Length(All Verify)"] == "3.67"
+    assert "Avg Spec Accept Length" not in spec_metrics
+    assert spec_metrics["Avg Spec Accept Rate(All Verify)"] == "88.89%"
+    assert "Avg Spec Accept Rate" not in spec_metrics
 
 
 def test_format_histogram_percentages():

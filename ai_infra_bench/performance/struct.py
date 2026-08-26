@@ -293,10 +293,9 @@ class _OutputStats:
                 ["Total Proposed Drafts", total_proposed_drafts],
                 ["Total Correct Drafts", total_correct_drafts],
                 ["Toral Verify Count", total_spec_verify_ct],
-                ["Avg Spec Accept Rate", avg_spec_accept_rate],
                 ["Avg Spec Accept Rate(All Verify)", avg_spec_accept_rate],
                 [
-                    "Avg Spec Accept Length",
+                    "Avg Spec Accept Length(All Verify)",
                     (
                         f"{total_completion_tokens / total_spec_verify_ct:.2f}"
                         if total_spec_verify_ct
