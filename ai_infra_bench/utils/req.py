@@ -138,6 +138,7 @@ def extract_response_metrics(response: Any) -> Dict[str, Any]:
 
     usage = _as_mapping(data.get("usage"))
     prompt_details = _as_mapping(usage.get("prompt_tokens_details"))
+    completion_details = _as_mapping(usage.get("completion_tokens_details"))
 
     sglext = _as_mapping(data.get("sglext"))
     spec_details = _as_mapping(sglext.get("spec_tokens_details"))
@@ -147,8 +148,13 @@ def extract_response_metrics(response: Any) -> Dict[str, Any]:
     choice_meta = _as_mapping(_as_mapping(first_choice).get("meta_info"))
 
     metrics = {
-        key: _first_value((key,), (usage, choice_meta)) for key in USAGE_METRIC_KEYS
+        key: _first_value((key,), (usage, choice_meta))
+        for key in ("prompt_tokens", "completion_tokens")
     }
+    metrics["reasoning_tokens"] = _first_value(
+        ("reasoning_tokens", "reasoning_token"),
+        (usage, completion_details, choice_meta),
+    )
     metrics.update(
         {
             "cached_tokens": _first_value(

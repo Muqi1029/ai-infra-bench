@@ -3,12 +3,14 @@ import json
 import logging
 from asyncio import Semaphore
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Any, Dict, Iterable, List, Tuple
 
 from aiohttp import ClientSession
 from tqdm import tqdm
 
 from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.req import extract_response_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +101,22 @@ class EvalRuntime:
                                 self.override_payload
                             )
                         ]
+                        round_start_time = perf_counter()
                         await asyncio.gather(*tasks)
+                        round_duration_s = max(perf_counter() - round_start_time, 1e-9)
 
+                        token_usage = eval.token_usage()
+                        tps = token_usage["completion_tokens"] / round_duration_s
                         correct_rate, wrong_rate, failed_rate = eval.summary()
                         summary = (
                             f"{eval.name} round {i + 1}: "
                             f"correct_rate={correct_rate:.4f} "
                             f"wrong_rate={wrong_rate:.4f} "
-                            f"failed_rate={failed_rate:.4f}"
+                            f"failed_rate={failed_rate:.4f} "
+                            f"reasoning_tokens={token_usage['reasoning_tokens']} "
+                            f"prompt_tokens={token_usage['prompt_tokens']} "
+                            f"completion_tokens={token_usage['completion_tokens']} "
+                            f"tps={tps:.2f} tokens/s"
                         )
                         pbar.write(summary)
                         logger.info(summary)
@@ -122,6 +132,9 @@ class EvalResult:
     payload: Dict = field(default_factory=dict)
     is_right: bool = False
     is_failed: bool = False
+    reasoning_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 class Eval:
@@ -137,24 +150,43 @@ class Eval:
     def _eval(self, response_content, answer, payload=None):
         raise NotImplementedError()
 
+    @staticmethod
+    def _token_usage(response_content: Any) -> Dict[str, int]:
+        metrics = extract_response_metrics(response_content)
+        return {
+            key: int(metrics.get(key) or 0)
+            for key in ("reasoning_tokens", "prompt_tokens", "completion_tokens")
+        }
+
     def eval(self, response_content, answer, payload):
+        token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
                 response=response_content,
                 payload=payload,
                 is_right=self._eval(response_content, answer, payload),
+                **token_usage,
             )
         )
 
     def add_failed_result(self, response_content, payload):
+        token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
                 response=response_content,
                 payload=payload,
                 is_right=False,
                 is_failed=True,
+                **token_usage,
             )
         )
+
+    def token_usage(self) -> Dict[str, int]:
+        successful_results = [result for result in self.results if not result.is_failed]
+        return {
+            key: sum(getattr(result, key) for result in successful_results)
+            for key in ("reasoning_tokens", "prompt_tokens", "completion_tokens")
+        }
 
     def summary(self):
         if not self.results:

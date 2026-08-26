@@ -66,6 +66,20 @@ def test_extract_response_metrics_from_choice_meta_info():
     assert {key: metrics[key] for key in expected} == expected
 
 
+def test_extract_response_metrics_reads_standard_reasoning_token_details():
+    metrics = extract_response_metrics(
+        {
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 6,
+                "completion_tokens_details": {"reasoning_tokens": 4},
+            }
+        }
+    )
+
+    assert metrics["reasoning_tokens"] == 4
+
+
 @pytest.mark.parametrize(
     ("argv", "response_json", "expected"),
     [
