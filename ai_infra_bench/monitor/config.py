@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from ai_infra_bench.utils.req import sanitize_url
 
-DEFAULT_METRICS_PATH = "/metric"
+DEFAULT_METRICS_PATH = "/metrics"
 DURATION_PATTERN = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h|d|w|y)$")
 
 
@@ -76,6 +76,14 @@ def parse_targets(
     seen = set()
 
     for raw_url in base_urls:
+        raw_url = raw_url.strip()
+        # A host:port shorthand contains a colon but does not specify a URL
+        # scheme. Only inspect schemes when the URL has an authority marker.
+        raw_scheme = urlsplit(raw_url).scheme if "://" in raw_url else ""
+        if raw_scheme and raw_scheme not in {"http", "https"}:
+            raise ConfigurationError(
+                f"unsupported scheme in {raw_url!r}; only http and https are supported"
+            )
         normalized = sanitize_url(raw_url)
         parsed = urlsplit(normalized)
         if parsed.scheme not in {"http", "https"}:
@@ -96,9 +104,11 @@ def parse_targets(
             raise ConfigurationError(f"invalid port in {raw_url!r}: {error}") from error
 
         base_path = parsed.path.rstrip("/")
-        target_metrics_path = (
-            metrics_path if not base_path else f"{base_path}/{metrics_path.lstrip('/')}"
-        )
+        if base_path not in {"", "/v1"}:
+            raise ConfigurationError(
+                f"base URL {raw_url!r} may only include the optional /v1 path"
+            )
+        target_metrics_path = metrics_path
         key = (parsed.scheme, address, target_metrics_path)
         if key in seen:
             continue

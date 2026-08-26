@@ -275,6 +275,7 @@ class _OutputStats:
         total_correct_drafts = sum(
             output.spec_num_correct_drafts for output in self.outputs
         )
+        avg_spec_accept_rate = f"{total_correct_drafts / total_proposed_drafts:.2%}"
         spec_outputs = [output for output in self.outputs if output.spec_verify_ct]
         total_spec_verify_ct = sum(output.spec_verify_ct for output in spec_outputs)
         total_completion_tokens = sum(
@@ -292,10 +293,8 @@ class _OutputStats:
                 ["Total Proposed Drafts", total_proposed_drafts],
                 ["Total Correct Drafts", total_correct_drafts],
                 ["Toral Verify Count", total_spec_verify_ct],
-                [
-                    "Avg Spec Accept Rate(All Verify)",
-                    f"{total_correct_drafts / total_proposed_drafts:.2%}",
-                ],
+                ["Avg Spec Accept Rate", avg_spec_accept_rate],
+                ["Avg Spec Accept Rate(All Verify)", avg_spec_accept_rate],
                 [
                     "Avg Spec Accept Length",
                     (

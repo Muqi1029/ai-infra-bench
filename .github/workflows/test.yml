@@ -8,6 +8,8 @@ on:
       - "aib-dataset/**"
       - ".github/workflows/test.yml"
       - "tests/**"
+      - "test/**"
+      - "pyproject.toml"
   pull_request:
   workflow_dispatch:
 
@@ -32,4 +34,4 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q
+          python -m pytest -q

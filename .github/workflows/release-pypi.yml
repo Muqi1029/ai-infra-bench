@@ -25,7 +25,7 @@ jobs:
     if: |
       github.repository == 'Muqi1029/ai-infra-bench' &&
       (
-        github.event_name != 'workflow_dispatch ||
+        github.event_name != 'workflow_dispatch' ||
         inputs.target_job == 'all' ||
         inputs.target_job == 'dataset'
       )
