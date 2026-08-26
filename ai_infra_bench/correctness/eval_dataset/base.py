@@ -4,12 +4,13 @@ import logging
 from asyncio import Semaphore
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, TypedDict
 
 from aiohttp import ClientSession
 from tqdm import tqdm
 
 from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.utils.draw import format_mean, format_percentile, print_table
 from ai_infra_bench.utils.req import extract_response_metrics
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,18 @@ logger = logging.getLogger(__name__)
 DATASET_CHOICES = ["gsm8k", "aime25", "constrained_decoding"]
 DEEPSWE_EVAL = "deepswe"
 AGENT_DATASET_CHOICES = [DEEPSWE_EVAL]
+TOKEN_METRICS = (
+    ("reasoning_tokens", "Reasoning tokens"),
+    ("prompt_tokens", "Prompt tokens"),
+    ("completion_tokens", "Completion tokens"),
+)
+
+
+class TokenUsageStats(TypedDict):
+    total: int
+    mean: str
+    p50: str
+    p99: str
 
 
 class EvalRuntime:
@@ -105,21 +118,12 @@ class EvalRuntime:
                         await asyncio.gather(*tasks)
                         round_duration_s = max(perf_counter() - round_start_time, 1e-9)
 
-                        token_usage = eval.token_usage()
-                        tps = token_usage["completion_tokens"] / round_duration_s
-                        correct_rate, wrong_rate, failed_rate = eval.summary()
-                        summary = (
-                            f"{eval.name} round {i + 1}: "
-                            f"correct_rate={correct_rate:.4f} "
-                            f"wrong_rate={wrong_rate:.4f} "
-                            f"failed_rate={failed_rate:.4f} "
-                            f"reasoning_tokens={token_usage['reasoning_tokens']} "
-                            f"prompt_tokens={token_usage['prompt_tokens']} "
-                            f"completion_tokens={token_usage['completion_tokens']} "
-                            f"tps={tps:.2f} tokens/s"
-                        )
-                        pbar.write(summary)
-                        logger.info(summary)
+                        for title, rows in eval.build_summary_tables(
+                            round_number=i + 1,
+                            duration_s=round_duration_s,
+                            max_concurrency=self.max_concurrency,
+                        ):
+                            print_table(title, rows)
         finally:
             pbar.close()
             self.session = None
@@ -181,12 +185,66 @@ class Eval:
             )
         )
 
-    def token_usage(self) -> Dict[str, int]:
+    def token_usage(self) -> Dict[str, TokenUsageStats]:
         successful_results = [result for result in self.results if not result.is_failed]
-        return {
-            key: sum(getattr(result, key) for result in successful_results)
-            for key in ("reasoning_tokens", "prompt_tokens", "completion_tokens")
-        }
+        token_usage = {}
+        for key, _ in TOKEN_METRICS:
+            values = [getattr(result, key) for result in successful_results]
+            token_usage[key] = {
+                "total": sum(values),
+                "mean": format_mean(values),
+                "p50": format_percentile(values, 50),
+                "p99": format_percentile(values, 99),
+            }
+        return token_usage
+
+    def build_summary_tables(
+        self, round_number: int, duration_s: float, max_concurrency: int
+    ) -> List[Tuple[str, List[List[Any]]]]:
+        total_requests = len(self.results)
+        successful_requests = sum(not result.is_failed for result in self.results)
+        token_usage = self.token_usage()
+        tps = token_usage["completion_tokens"]["total"] / max(duration_s, 1e-9)
+        correct_rate, wrong_rate, failed_rate = self.summary()
+
+        summary_rows = [
+            ["Metric", "Value"],
+            ["Evaluation", self.name],
+            ["Round", str(round_number)],
+            ["Total requests", str(total_requests)],
+            ["Successful requests", str(successful_requests)],
+            ["Failed requests", str(total_requests - successful_requests)],
+            ["Correct rate", f"{correct_rate:.2%}"],
+            ["Wrong rate", f"{wrong_rate:.2%}"],
+            ["Failed rate", f"{failed_rate:.2%}"],
+            ["Max concurrency", str(max_concurrency)],
+            ["Duration", f"{duration_s:.2f} s"],
+            ["TPS", f"{tps:.2f} tokens/s"],
+            *[
+                [
+                    f"Total {label.lower()}",
+                    f"{token_usage[key]['total']} tokens",
+                ]
+                for key, label in TOKEN_METRICS
+            ],
+        ]
+        token_rows = [
+            ["Metric", "Mean", "P50", "P99", "Unit"],
+            *[
+                [
+                    label,
+                    token_usage[key]["mean"],
+                    token_usage[key]["p50"],
+                    token_usage[key]["p99"],
+                    "tokens",
+                ]
+                for key, label in TOKEN_METRICS
+            ],
+        ]
+        return [
+            ("Evaluation Summary", summary_rows),
+            ("Token Metrics", token_rows),
+        ]
 
     def summary(self):
         if not self.results:
