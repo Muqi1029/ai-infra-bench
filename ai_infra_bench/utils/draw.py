@@ -1,5 +1,6 @@
 import html
 import json
+import math
 import random
 import re
 from argparse import SUPPRESS, ArgumentParser
@@ -107,7 +108,8 @@ def _parse_plot_value(value: Any) -> float | List[float] | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
     if isinstance(value, list):
         parsed = [_parse_plot_value(item) for item in value]
         if all(isinstance(item, (int, float)) for item in parsed):
@@ -132,21 +134,59 @@ def _parse_plot_value(value: Any) -> float | List[float] | None:
     return float(match.group(0)) if match else None
 
 
+def _validate_metric_records(
+    records: Any, source_name: str = "metrics source"
+) -> List[Mapping[str, Any]]:
+    if isinstance(records, Mapping):
+        return [records]
+    if isinstance(records, Sequence) and not isinstance(records, (str, bytes)):
+        invalid_index = next(
+            (
+                index
+                for index, record in enumerate(records, start=1)
+                if not isinstance(record, Mapping)
+            ),
+            None,
+        )
+        if invalid_index is not None:
+            raise ValueError(
+                f"{source_name}: record {invalid_index} must be a JSON object"
+            )
+        return list(records)
+    raise TypeError("metrics source must be a path, mapping, or sequence of mappings")
+
+
 def _load_metric_records(source: Any) -> List[Mapping[str, Any]]:
     if isinstance(source, (str, Path)):
         source_path = Path(source)
         if source_path.suffix.lower() == ".jsonl":
+            records = []
             with source_path.open("r", encoding="utf-8") as stream:
-                return [json.loads(line) for line in stream if line.strip()]
+                for line_number, line in enumerate(stream, start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as error:
+                        raise ValueError(
+                            f"{source_path}:{line_number}: invalid JSON ({error.msg})"
+                        ) from error
+                    if not isinstance(record, Mapping):
+                        raise ValueError(
+                            f"{source_path}:{line_number}: record must be a JSON object"
+                        )
+                    records.append(record)
+            return records
         with source_path.open("r", encoding="utf-8") as stream:
-            loaded = json.load(stream)
-        source = loaded
+            try:
+                loaded = json.load(stream)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"{source_path}: invalid JSON ({error.msg})"
+                ) from error
+        return _validate_metric_records(loaded, str(source_path))
 
-    if isinstance(source, Mapping):
-        return [source]
-    if isinstance(source, Sequence) and not isinstance(source, (str, bytes)):
-        return [record for record in source if isinstance(record, Mapping)]
-    raise TypeError("metrics source must be a path, mapping, or sequence of mappings")
+    return _validate_metric_records(source)
 
 
 def _metric_sections(table_title: str, metric_name: str) -> List[str]:
@@ -382,34 +422,34 @@ def export_metric_tables_html(
   <title>{safe_title}</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    :root {{ color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
-    body {{ margin: 0; color: #243b53; background: #edf3fb; }}
-    main {{ max-width: 1800px; margin: 0 auto; padding: 24px; }}
-    h1 {{ margin: 0 0 18px; color: #1d5f96; font-size: 22px; font-weight: 600; }}
-    h2 {{ margin: 26px 0 10px; color: #1d5f96; font-size: 20px; font-weight: 600; }}
-    .controls {{ display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; padding: 12px; border: 1px solid #d5e1ef; border-radius: 4px; background: #ffffff; box-shadow: 0 1px 2px rgba(31, 54, 83, 0.06); }}
-    .field {{ display: grid; gap: 4px; }}
-    label {{ color: #5e7390; font-size: 12px; }}
-    select, button {{ font: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid #b8c9dc; border-radius: 3px; background: #ffffff; color: #243b53; }}
-    select {{ min-width: 240px; }}
-    select:focus, button:focus {{ outline: 1px solid #1976d2; outline-offset: 1px; }}
+    :root {{ color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    body {{ margin: 0; color: #252b35; background: #f6f7f9; }}
+    main {{ max-width: 1680px; margin: 0 auto; padding: 30px 32px 24px; }}
+    h1 {{ margin: 0 0 20px; color: #252b35; font-size: 22px; line-height: 1.25; font-weight: 650; letter-spacing: 0; }}
+    h2 {{ margin: 30px 0 11px; color: #424b59; font-size: 13px; line-height: 1.2; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }}
+    .controls {{ display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; padding: 0 0 16px; border-bottom: 1px solid #e2e6eb; }}
+    .field {{ display: grid; gap: 5px; }}
+    label {{ color: #697382; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }}
+    select, button {{ font: inherit; font-size: 13px; line-height: 1.35; padding: 7px 9px; border: 1px solid #d5dbe3; border-radius: 4px; background: #ffffff; color: #252b35; }}
+    select {{ min-width: 230px; }}
+    select:focus, button:focus {{ outline: 2px solid #9ccbc4; outline-offset: 1px; }}
     button {{ cursor: pointer; }}
-    button:hover {{ background: #eef5fd; border-color: #1976d2; }}
-    #label-state {{ align-self: center; color: #5e7390; font-size: 12px; }}
-    #legend {{ display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 12px 0 2px; color: #40566f; font-size: 12px; }}
-    .legend-item {{ display: inline-flex; gap: 6px; align-items: center; }}
-    .swatch {{ width: 18px; height: 3px; }}
-    .dashboard-section {{ margin-top: 24px; }}
-    .section-title {{ display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: #1d5f96; font-size: 20px; font-weight: 600; }}
-    .section-title::after {{ content: ""; flex: 1; height: 1px; background: #cbd9e8; }}
-    .chart-grid {{ display: grid; grid-template-columns: repeat(2, minmax(360px, 1fr)); gap: 12px; }}
-    .metric-panel {{ min-width: 0; overflow: hidden; border: 1px solid #d5e1ef; border-radius: 3px; background: #ffffff; box-shadow: 0 1px 2px rgba(31, 54, 83, 0.06); }}
-    .metric-title {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 13px 14px 2px; color: #2a6f9e; font-size: 17px; font-weight: 600; }}
-    .metric-stats {{ color: #6d87a3; font-size: 12px; font-weight: 500; }}
-    .metric-plot {{ min-width: 0; min-height: 290px; }}
-    .empty {{ color: #5e7390; padding: 28px 0; }}
-    footer {{ color: #7187a3; font-size: 11px; padding-top: 20px; }}
-    @media (max-width: 800px) {{ main {{ padding: 16px; }} .chart-grid {{ grid-template-columns: 1fr; }} select {{ width: 100%; }} }}
+    button:hover {{ border-color: #4f968e; color: #246c65; background: #f2faf8; }}
+    #label-state {{ align-self: center; min-height: 18px; color: #697382; font-size: 12px; }}
+    #legend {{ display: flex; flex-wrap: wrap; gap: 7px 18px; margin: 14px 0 0; color: #596372; font-size: 12px; }}
+    .legend-item {{ display: inline-flex; gap: 7px; align-items: center; }}
+    .swatch {{ width: 16px; height: 3px; border-radius: 2px; }}
+    .dashboard-section {{ margin-top: 25px; }}
+    .section-title {{ display: flex; align-items: center; gap: 11px; margin: 0 0 11px; }}
+    .section-title::after {{ content: ""; flex: 1; height: 1px; background: #e2e6eb; }}
+    .chart-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 14px; }}
+    .metric-panel {{ min-width: 0; overflow: hidden; border: 1px solid #e1e5ea; border-radius: 5px; background: #ffffff; }}
+    .metric-title {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; padding: 12px 14px 0; color: #303846; font-size: 14px; font-weight: 650; }}
+    .metric-stats {{ color: #77818f; font-size: 11px; font-weight: 500; }}
+    .metric-plot {{ min-width: 0; min-height: 270px; }}
+    .empty {{ color: #697382; padding: 30px 0; font-size: 13px; }}
+    footer {{ color: #8a929e; font-size: 11px; padding-top: 20px; }}
+    @media (max-width: 800px) {{ main {{ padding: 22px 16px 18px; }} .chart-grid {{ grid-template-columns: 1fr; }} select {{ width: 100%; }} }}
   </style>
 </head>
 <body>
@@ -481,7 +521,12 @@ function renderLegend(labels) {{
 }}
 
 function renderMetricCategory(category, labels, categoryIndex) {{
-  if (!category.metrics.length) return;
+  const visibleMetrics = category.metrics.filter((metricGroup) =>
+    labels.some((label) => metricGroup.variants.some((variant) =>
+      (variant.metric.series[label] || []).length
+    ))
+  );
+  if (!visibleMetrics.length) return;
   const section = document.createElement("section");
   section.className = "dashboard-section";
   const heading = document.createElement("h2");
@@ -492,7 +537,7 @@ function renderMetricCategory(category, labels, categoryIndex) {{
   section.append(heading, grid);
   dashboard.append(section);
 
-  category.metrics.forEach((metricGroup, metricIndex) => {{
+  visibleMetrics.forEach((metricGroup, metricIndex) => {{
     const panel = document.createElement("div");
     panel.className = "metric-panel";
     const title = document.createElement("div");
@@ -522,22 +567,23 @@ function renderMetricCategory(category, labels, categoryIndex) {{
         name: traceName,
         x: points.map((point) => point.x),
         y: points.map((point) => point.y),
-        line: {{ color: labelColor(label), width: 2.5, dash: STAT_DASH[variant.stat] || "solid" }},
-        marker: {{ color: labelColor(label), size: 7 }},
+        line: {{ color: labelColor(label), width: 2.2, dash: STAT_DASH[variant.stat] || "solid" }},
+        marker: {{ color: labelColor(label), size: 6 }},
         hovertemplate: "<b>" + escapeHtml(traceName) + "</b><br>concurrency=%{{x}}<br>"
           + escapeHtml(metricGroup.name) + "=%{{y}}<extra></extra>"
       }}];
     }}));
     Plotly.newPlot(plot, traces, {{
-      margin: {{ l: 62, r: 18, t: 18, b: 54 }},
-      height: 320,
-      xaxis: {{ title: {{ text: "Concurrency", font: {{ color: "#5e7390", size: 11 }} }}, gridcolor: "#ffffff", zerolinecolor: "#ffffff", linecolor: "#b8c9dc", tickfont: {{ color: "#5e7390" }}, automargin: true }},
-      yaxis: {{ title: {{ text: metricGroup.unit || "Value", font: {{ color: "#5e7390", size: 11 }} }}, gridcolor: "#ffffff", zerolinecolor: "#ffffff", linecolor: "#b8c9dc", tickfont: {{ color: "#5e7390" }}, automargin: true }},
+      margin: {{ l: 56, r: 16, t: 8, b: 43 }},
+      height: 282,
+      xaxis: {{ title: {{ text: "Concurrency", font: {{ color: "#697382", size: 10 }} }}, gridcolor: "#edf0f3", zeroline: false, linecolor: "#cfd5dc", tickfont: {{ color: "#697382", size: 10 }}, automargin: true }},
+      yaxis: {{ title: {{ text: metricGroup.unit || "Value", font: {{ color: "#697382", size: 10 }} }}, gridcolor: "#edf0f3", zeroline: false, linecolor: "#cfd5dc", tickfont: {{ color: "#697382", size: 10 }}, automargin: true }},
       hovermode: "x unified",
       showlegend: false,
       paper_bgcolor: "#ffffff",
-      plot_bgcolor: "#e5ecf6",
-      font: {{ color: "#243b53", size: 11 }}
+      plot_bgcolor: "#ffffff",
+      font: {{ color: "#252b35", size: 11 }},
+      hoverlabel: {{ bgcolor: "#252b35", bordercolor: "#252b35", font: {{ color: "#ffffff", size: 11 }} }}
     }}, {{ responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] }});
   }});
 }}

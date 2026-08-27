@@ -11,10 +11,10 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
-import numpy as np
 from tqdm import tqdm
 
 from ai_infra_bench.performance.bench_utils import (
+    compute_random_lens,
     get_request,
     handle_outputs,
     parse_args,
@@ -32,22 +32,6 @@ logger = logging.getLogger(__name__)
 
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
 RANDOM_TOKEN_UPPER_BOUND = 10_000
-
-
-def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int]:
-    """Sample per-request lengths up to ``full_len``.
-
-    A zero (or negative) length is useful for benchmarks that do not generate
-    output tokens, so it is handled explicitly instead of being passed to
-    ``numpy.random.randint``.
-    """
-    if full_len <= 0:
-        return [0] * num
-    return np.random.randint(
-        max(int(full_len * range_ratio), 1),
-        full_len + 1,
-        size=num,
-    ).tolist()
 
 
 def read_requests_with_ts(

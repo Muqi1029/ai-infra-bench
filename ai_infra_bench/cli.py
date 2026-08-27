@@ -19,6 +19,12 @@ def main(argv: Sequence[str] | None = None):
     subparsers.add_parser(
         "plot-metrics", help="Export benchmark metrics to HTML", add_help=False
     )
+    subparsers.add_parser(
+        "session-bench",
+        aliases=["session-reply-bench"],
+        help="Replay request sessions with session-level concurrency",
+        add_help=False,
+    )
     subparsers.add_parser("eval-dataset", help="Evaluate a dataset", add_help=False)
     subparsers.add_parser("eval-logits", help="Evaluate logits", add_help=False)
     subparsers.add_parser(
@@ -36,6 +42,14 @@ def main(argv: Sequence[str] | None = None):
         "reply": ("ai_infra_bench.reply", "main"),
         "check-weight": ("ai_infra_bench.check_weight", "main"),
         "plot-metrics": ("ai_infra_bench.utils.draw", "main"),
+        "session-bench": (
+            "ai_infra_bench.performance.session_reply_bench",
+            "main",
+        ),
+        "session-reply-bench": (
+            "ai_infra_bench.performance.session_reply_bench",
+            "main",
+        ),
         "eval-dataset": ("ai_infra_bench.correctness.eval_dataset.main", "main"),
         "eval-logits": ("ai_infra_bench.correctness.logits", "main"),
         "eval-hidden-states": ("ai_infra_bench.correctness.hidden_states", "main"),

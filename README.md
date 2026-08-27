@@ -54,6 +54,17 @@ metric plotting, and local Prometheus monitoring:
 aib --help
 ```
 
+Replay session-shaped JSONL payloads with one concurrency slot per session:
+
+```bash
+aib session-bench 'sessions/**/*.jsonl' \
+  --max-concurrency 16 \
+  --num-warmup-sessions 3
+```
+
+Requests in each file are sent in order. Different files run concurrently up
+to `--max-concurrency`.
+
 ## SLO Search
 
 SLO searches are configured in YAML. The command probes the configured range

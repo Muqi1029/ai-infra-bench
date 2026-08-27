@@ -16,6 +16,22 @@ from ai_infra_bench.utils.req import add_common_args, parse_override_payload
 logger = logging.getLogger(__name__)
 
 
+def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int]:
+    """Sample ``num`` integer lengths in the configured target range.
+
+    ``full_len <= 0`` is valid for workloads that do not generate tokens. A
+    positive target always has a lower bound of one token, matching SGLang's
+    random-range behavior.
+    """
+    if full_len <= 0:
+        return [0] * num
+    return np.random.randint(
+        max(int(full_len * range_ratio), 1),
+        full_len + 1,
+        size=num,
+    ).tolist()
+
+
 def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser(prog="aib bench", description="Benchmark")
     add_common_args(parser)
@@ -158,8 +174,8 @@ def validate_args(args: Namespace) -> None:
 
     if args.input_len < 1:
         raise ValueError("--input-len must be >= 1")
-    if args.output_len < 1:
-        raise ValueError("--output-len must be >= 1")
+    if args.output_len < 0:
+        raise ValueError("--output-len must be >= 0")
     random_range_ratio = getattr(args, "random_range_ratio", 1.0)
     if not 0.0 <= random_range_ratio <= 1.0:
         raise ValueError("--random-range-ratio must be between 0 and 1")

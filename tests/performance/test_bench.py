@@ -5,8 +5,10 @@ from dataclasses import asdict
 
 import pytest
 
-from ai_infra_bench.performance import bench_utils
+from ai_infra_bench.cli import main as cli_main
+from ai_infra_bench.performance import bench_utils, session_reply_bench
 from ai_infra_bench.performance.bench import (
+    compute_random_lens,
     generate_random_requests,
     get_request_url,
     read_requests_with_ts,
@@ -127,11 +129,154 @@ def test_generate_random_requests_uses_requested_lengths():
         assert payload["ignore_eos"] is True
 
 
+def test_compute_random_lens_samples_sglang_style_range():
+    bench_utils.set_seed(7)
+
+    lengths = compute_random_lens(full_len=10, range_ratio=0.5, num=100)
+
+    assert len(lengths) == 100
+    assert all(5 <= length <= 10 for length in lengths)
+    assert len(set(lengths)) > 1
+
+
+def test_compute_random_lens_supports_zero_target():
+    assert compute_random_lens(full_len=0, range_ratio=0.5, num=3) == [0, 0, 0]
+
+
+def test_random_dataset_allows_zero_output_length():
+    args = bench_utils.parse_args(
+        [
+            "--dataset",
+            "random",
+            "--input-len",
+            "4",
+            "--output-len",
+            "0",
+            "--num-requests",
+            "2",
+        ]
+    )
+
+    validate_args(args)
+
+    assert all(
+        payload["max_tokens"] == 0
+        for payload in generate_random_requests(4, 0, num_requests=2)
+    )
+
+
+@pytest.mark.parametrize("ratio", [-0.1, 1.1])
+def test_validate_args_rejects_invalid_random_range_ratio(ratio):
+    values = {
+        "max_concurrency": 1,
+        "request_rate": float("inf"),
+        "num_warmup_requests": 0,
+        "num_requests": None,
+        "input_len": 1,
+        "output_len": 1,
+        "random_range_ratio": ratio,
+        "metrics_path": None,
+        "dump_path": None,
+    }
+
+    with pytest.raises(ValueError, match="--random-range-ratio"):
+        validate_args(Namespace(**values))
+
+
 def test_random_dataset_uses_completions_api():
     assert (
         get_request_url("http://localhost:8888", "random")
         == "http://localhost:8888/v1/completions"
     )
+
+
+def test_read_session_requests_groups_jsonl_files(tmp_path):
+    (tmp_path / "b.jsonl").write_text('{"id": 2}\n', encoding="utf-8")
+    (tmp_path / "a.jsonl").write_text('{"id": 1}\n\n{"id": 3}\n', encoding="utf-8")
+
+    assert session_reply_bench.read_session_requests(str(tmp_path / "*.jsonl")) == [
+        [{"id": 1}, {"id": 3}],
+        [{"id": 2}],
+    ]
+
+
+def test_session_wrapper_holds_one_semaphore_slot_and_preserves_order(monkeypatch):
+    active = 0
+    max_active = 0
+    completed = {"a": [], "b": []}
+
+    async def fake_request(session, url, payload):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0)
+        completed[payload["session"]].append(payload["id"])
+        active -= 1
+        return OutputMetric(success=True, payload=payload)
+
+    async def no_wait(_request_rate):
+        return None
+
+    monkeypatch.setattr(session_reply_bench, "request_func", fake_request)
+    monkeypatch.setattr(session_reply_bench, "wait_for_request_interval", no_wait)
+    args = Namespace(
+        model="session-model",
+        override_payload='{"temperature": 0}',
+        request_rate=float("inf"),
+    )
+
+    async def run():
+        semaphore = asyncio.Semaphore(2)
+        return await asyncio.gather(
+            session_reply_bench.request_func_wrapper(
+                args,
+                None,
+                "url",
+                [{"session": "a", "id": 1}, {"session": "a", "id": 2}],
+                semaphore,
+            ),
+            session_reply_bench.request_func_wrapper(
+                args,
+                None,
+                "url",
+                [{"session": "b", "id": 3}, {"session": "b", "id": 4}],
+                semaphore,
+            ),
+        )
+
+    outputs = asyncio.run(run())
+
+    assert max_active == 2
+    assert completed == {"a": [1, 2], "b": [3, 4]}
+    assert outputs[0][0].payload == {
+        "session": "a",
+        "id": 1,
+        "model": "session-model",
+        "temperature": 0,
+    }
+
+
+def test_session_parse_args_accepts_positional_and_option_path():
+    positional = session_reply_bench.parse_args(["sessions/*.jsonl"])
+    option = session_reply_bench.parse_args(
+        ["--payload-regex-path", "sessions/*.jsonl"]
+    )
+
+    assert (
+        positional.payload_regex_path == option.payload_regex_path == "sessions/*.jsonl"
+    )
+
+
+def test_cli_dispatches_session_bench(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        "ai_infra_bench.performance.session_reply_bench.main",
+        lambda argv: calls.append(argv) or 0,
+    )
+
+    assert cli_main(["session-reply-bench", "sessions/*.jsonl"]) == 0
+    assert calls == [["sessions/*.jsonl"]]
 
 
 def test_get_request_waits_only_between_requests(monkeypatch):

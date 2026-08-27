@@ -121,7 +121,8 @@ def test_dashboard_defaults_to_first_label_and_groups_metrics(tmp_path):
     document = output.read_text(encoding="utf-8")
     assert 'id="sample-size"' not in document
     assert "color-scheme: light" in document
-    assert "background: #edf3fb" in document
+    assert "background: #f6f7f9" in document
+    assert "box-shadow" not in document
     assert 'className = "metric-title"' in document
     assert "groupMetrics" in document
     data_start = document.index('<script id="metrics-data" type="application/json">')
@@ -163,6 +164,22 @@ def test_cli_dispatches_plot_metrics(monkeypatch):
 
     assert cli_main(["plot-metrics", "metrics.jsonl", "-o", "metrics.html"]) == 0
     assert calls == [["metrics.jsonl", "-o", "metrics.html"]]
+
+
+def test_export_metric_tables_html_reports_invalid_jsonl_line(tmp_path):
+    source = tmp_path / "metrics.jsonl"
+    source.write_text('{"label": "ok"}\nnot-json\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"metrics\.jsonl:2: invalid JSON"):
+        export_metric_tables_html(source, tmp_path / "comparison.html")
+
+
+def test_export_metric_tables_html_rejects_non_object_records(tmp_path):
+    source = tmp_path / "metrics.json"
+    source.write_text('[{"label": "ok"}, 3]', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"record 2 must be a JSON object"):
+        export_metric_tables_html(source, tmp_path / "comparison.html")
 
 
 def test_legacy_timestamp_labels_are_grouped_and_repeats_are_averaged(tmp_path):

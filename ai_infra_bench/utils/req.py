@@ -20,7 +20,6 @@ USAGE_METRIC_KEYS = (
     "reasoning_tokens",
     "completion_tokens",
 )
-CACHED_METRIC_KEYS = ("cached_tokens", "cached_tokens_details")
 SPEC_METRIC_KEYS = (
     "spec_accept_rate",
     "spec_accept_length",
