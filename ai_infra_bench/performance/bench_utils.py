@@ -10,12 +10,7 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 
 from ai_infra_bench.performance.struct import MetricTable, OutputMetric, _OutputStats
-from ai_infra_bench.utils.draw import (
-    format_histogram_percentages,
-    format_mean,
-    format_percentile,
-    print_table,
-)
+from ai_infra_bench.utils.draw import format_mean, print_table
 from ai_infra_bench.utils.req import add_common_args, parse_override_payload
 
 logger = logging.getLogger(__name__)
