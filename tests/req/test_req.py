@@ -173,7 +173,7 @@ def test_stream_request(stream_handler):
     main([])
 
     stream_handler.assert_awaited_once()
-    url, headers, payload, raw = stream_handler.await_args.args
+    url, headers, payload, raw, _ = stream_handler.await_args.args
     assert url == "http://127.0.0.1:30000/v1/chat/completions"
     assert headers == {"Authorization": "Bearer JustKeepMe"}
     assert payload["stream"] is True
@@ -187,7 +187,7 @@ def test_length_request(stream_handler):
     main(argv)
 
     first, second = (call.args for call in stream_handler.await_args_list)
-    url, _, payload, _ = first
+    url, _, payload, _, _ = first
     prompt = payload["prompt"]
     assert url == "http://127.0.0.1:30000/v1/completions"
     assert prompt == second[2]["prompt"]
@@ -221,7 +221,7 @@ def test_payload_prompt_uses_completions_api(tmp_path, stream_handler):
 
     main(["--payload-path", str(payload_path)])
 
-    url, _, payload, _ = stream_handler.await_args.args
+    url, _, payload, _, _ = stream_handler.await_args.args
     assert url == "http://127.0.0.1:30000/v1/completions"
     assert payload["prompt"] == "hello"
 

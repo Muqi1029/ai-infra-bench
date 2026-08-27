@@ -211,7 +211,9 @@ def _handle_non_stream_request(url, headers, payload) -> None:
     _handle_request_output(output_metric, duration_s)
 
 
-async def _handle_stream_request(url, headers, payload, raw: bool) -> None:
+async def _handle_stream_request(
+    url, headers, payload, raw: bool, no_print: bool
+) -> None:
     start_time = time.perf_counter()
 
     async with _create_bench_client_session() as session:
@@ -221,7 +223,7 @@ async def _handle_stream_request(url, headers, payload, raw: bool) -> None:
             payload=payload,
             headers=headers,
             raw=raw,
-            render_content=True,
+            render_content=not no_print,
         )
     duration_s = time.perf_counter() - start_time
     _handle_request_output(output_metric, duration_s)
@@ -236,7 +238,9 @@ def http_request(args):
     if args.disable_stream:
         _handle_non_stream_request(url, headers, payload)
     else:
-        asyncio.run(_handle_stream_request(url, headers, payload, args.raw))
+        asyncio.run(
+            _handle_stream_request(url, headers, payload, args.raw, args.no_print)
+        )
 
 
 def main(argv=None):
@@ -271,6 +275,10 @@ def main(argv=None):
         "--output-len",
         type=int,
         help="Target output token length for a random-token request",
+    )
+
+    parser.add_argument(
+        "--no-print", action="store_true", help="Whether to print sse content"
     )
 
     # extra kwargs in the payload
