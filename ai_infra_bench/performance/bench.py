@@ -11,6 +11,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
+import numpy as np
 from tqdm import tqdm
 
 from ai_infra_bench.performance.bench_utils import (
@@ -31,6 +32,22 @@ logger = logging.getLogger(__name__)
 
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
 RANDOM_TOKEN_UPPER_BOUND = 10_000
+
+
+def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int]:
+    """Sample per-request lengths up to ``full_len``.
+
+    A zero (or negative) length is useful for benchmarks that do not generate
+    output tokens, so it is handled explicitly instead of being passed to
+    ``numpy.random.randint``.
+    """
+    if full_len <= 0:
+        return [0] * num
+    return np.random.randint(
+        max(int(full_len * range_ratio), 1),
+        full_len + 1,
+        size=num,
+    ).tolist()
 
 
 def read_requests_with_ts(
@@ -60,18 +77,23 @@ def read_requests(payload_regex_path: str) -> List[Dict]:
 
 
 def generate_random_requests(
-    input_len: int, output_len: int, num_requests: int
+    input_len: int,
+    output_len: int,
+    num_requests: int,
+    range_ratio: float = 1.0,
 ) -> List[Dict]:
+    input_lens = compute_random_lens(input_len, range_ratio, num_requests)
+    output_lens = compute_random_lens(output_len, range_ratio, num_requests)
     return [
         {
             "prompt": random.choices(
                 range(RANDOM_TOKEN_UPPER_BOUND),
-                k=input_len,
+                k=input_lens[i],
             ),
-            "max_tokens": output_len,
+            "max_tokens": output_lens[i],
             "ignore_eos": True,
         }
-        for _ in range(num_requests)
+        for i in range(num_requests)
     ]
 
 
@@ -195,6 +217,7 @@ def load_requests(args: Namespace) -> List[Dict]:
             input_len=args.input_len,
             output_len=args.output_len,
             num_requests=args.num_requests,
+            range_ratio=getattr(args, "random_range_ratio", 1.0),
         )
         logger.info(f"Generated {len(requests)} random requests")
     elif getattr(args, "dataset", None) in {"gsm8k", "sharegpt"}:

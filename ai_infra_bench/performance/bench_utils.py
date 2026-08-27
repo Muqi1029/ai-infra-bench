@@ -85,6 +85,15 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         help="Target output token length for random or ShareGPT datasets",
     )
     parser.add_argument(
+        "--random-range-ratio",
+        type=float,
+        default=1.0,
+        help=(
+            "Sample each random request's input/output length between this "
+            "fraction of the target length and the target length"
+        ),
+    )
+    parser.add_argument(
         "--tokenizer",
         type=str,
         help="Tokenizer name or path for ShareGPT; defaults to --model",
@@ -151,6 +160,9 @@ def validate_args(args: Namespace) -> None:
         raise ValueError("--input-len must be >= 1")
     if args.output_len < 1:
         raise ValueError("--output-len must be >= 1")
+    random_range_ratio = getattr(args, "random_range_ratio", 1.0)
+    if not 0.0 <= random_range_ratio <= 1.0:
+        raise ValueError("--random-range-ratio must be between 0 and 1")
 
     if getattr(args, "dataset", None) in ["random", "sharegpt"]:
         if args.num_requests is None:

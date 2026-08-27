@@ -38,9 +38,14 @@ aib bench \
   --dataset random \
   --input-len 1024 \
   --output-len 256 \
+  --random-range-ratio 0.5 \
   --num-requests 100 \
   --max-concurrency 16
 ```
+
+When `--random-range-ratio` is set, each random request samples its input and
+output length uniformly from the configured ratio of the target length up to
+the target length. The default value of `1.0` preserves fixed-length requests.
 
 Other commands cover dataset evaluation, logits and hidden-state comparison,
 metric plotting, and local Prometheus monitoring:
