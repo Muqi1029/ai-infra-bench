@@ -9,7 +9,7 @@ from datetime import datetime
 from glob import glob
 from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping
 
 from tqdm import tqdm
 
@@ -343,7 +343,7 @@ async def run_benchmark(args: Namespace) -> None:
                 request_rate=args.request_rate,
                 dump_path=args.dump_path,
                 dump_content=args.dump_content,
-                metrics_path=args.metrics_path,
+                metric_path=args.metric_path,
                 label=args.label,
             )
 

@@ -258,7 +258,7 @@ def main(argv=None):
     )
 
     parser.add_argument(
-        "--metrics-path",
+        "--metric-path",
         type=str,
         help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
     )

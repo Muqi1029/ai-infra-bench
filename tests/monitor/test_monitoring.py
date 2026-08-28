@@ -109,6 +109,8 @@ def test_monitor_dry_run_does_not_resolve_or_start_services(tmp_path, capsys):
         [
             "--base-urls",
             "localhost:30000",
+            "--metric-path",
+            "/custom-metrics",
             "--runtime-dir",
             str(tmp_path / "runtime"),
             "--dry-run",
@@ -118,7 +120,10 @@ def test_monitor_dry_run_does_not_resolve_or_start_services(tmp_path, capsys):
     assert result == 0
     output = capsys.readouterr().out
     assert "Dry run complete" in output
-    assert (tmp_path / "runtime" / "prometheus.yml").exists()
+    prometheus_config = json.loads(
+        (tmp_path / "runtime" / "prometheus.yml").read_text()
+    )
+    assert prometheus_config["scrape_configs"][0]["metrics_path"] == "/custom-metrics"
 
 
 def test_ensure_port_available_detects_bound_socket():

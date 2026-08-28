@@ -106,7 +106,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--prometheus-port", type=_port, default=9090)
     parser.add_argument("--grafana-port", type=_port, default=3000)
     parser.add_argument(
-        "--metrics-path",
+        "--metric-path",
         default=DEFAULT_METRICS_PATH,
         help="Path suffix appended to each target URL (default: %(default)s)",
     )
@@ -191,7 +191,7 @@ def run(args: argparse.Namespace) -> int:
             "pass --allow-remote to confirm"
         )
 
-    targets: List[ScrapeTarget] = parse_targets(args.base_urls, args.metrics_path)
+    targets: List[ScrapeTarget] = parse_targets(args.base_urls, args.metric_path)
     layout = create_runtime_layout(args.runtime_dir, args.data_dir)
     write_runtime_config(
         layout,
@@ -282,7 +282,7 @@ def run(args: argparse.Namespace) -> int:
             targets=targets,
             config_path=layout.prometheus_config,
             scrape_interval=args.scrape_interval,
-            metrics_path=args.metrics_path,
+            metrics_path=args.metric_path,
             prometheus_url=prometheus_url,
         )
         MonitorShell(registry, process_check=stack.check).cmdloop()

@@ -45,8 +45,9 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
 
     parser.add_argument(
-        "--metrics-path",
+        "--metric-path",
         type=str,
+        default="aib-metric.jsonl",
         help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
     )
 
@@ -161,10 +162,10 @@ def validate_args(args: Namespace) -> None:
     if args.num_requests is not None and args.num_requests < 1:
         raise ValueError("--num-requests must be >= 1")
 
-    if (metrics_path := args.metrics_path) and not (
-        any(metrics_path.endswith(suffix) for suffix in [".json", ".jsonl"])
+    if (metric_path := args.metric_path) and not (
+        any(metric_path.endswith(suffix) for suffix in [".json", ".jsonl"])
     ):
-        raise ValueError("--metrics-path must end with .json or .jsonl")
+        raise ValueError("--metric-path must end with .json or .jsonl")
 
     if (dump_path := args.dump_path) and not dump_path.endswith(".jsonl"):
         logger.warning(
@@ -216,21 +217,21 @@ def maybe_dump_outputs(
 
 
 def maybe_dump_metric_tables(
-    metric_tables: Dict[str, List[Dict[str, Any]]], metrics_path: str | None
+    metric_tables: Dict[str, List[Dict[str, Any]]], metric_path: str | None
 ) -> None:
-    if not metrics_path:
+    if not metric_path:
         return
-    normalized_path = metrics_path.lower()
+    normalized_path = metric_path.lower()
     if normalized_path.endswith(".json"):
-        logger.info(f"Writing metrics to {metrics_path}")
-        with open(metrics_path, "w", encoding="utf-8") as f:
+        logger.info(f"Writing metrics to {metric_path}")
+        with open(metric_path, "w", encoding="utf-8") as f:
             json.dump(metric_tables, f, ensure_ascii=False, indent=2)
     elif normalized_path.endswith(".jsonl"):
-        logger.info(f"Appending metrics to {metrics_path}")
-        with open(metrics_path, "a", encoding="utf-8") as f:
+        logger.info(f"Appending metrics to {metric_path}")
+        with open(metric_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(metric_tables, ensure_ascii=False) + "\n")
     else:
-        raise ValueError("--metrics-path must end with .json or .jsonl")
+        raise ValueError("--metric-path must end with .json or .jsonl")
 
 
 def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
@@ -313,7 +314,7 @@ def handle_outputs(
     request_rate: float,
     dump_path: str | None = None,
     dump_content: str = "all",
-    metrics_path: str | None = None,
+    metric_path: str | None = None,
     label: str | None = None,
     benchmark_mode: bool = True,
 ) -> Dict:
@@ -342,7 +343,7 @@ def handle_outputs(
     for title, rows in table_builder(stats):
         emit_metric_table(title, rows)
 
-    maybe_dump_metric_tables(metric_tables, metrics_path)
+    maybe_dump_metric_tables(metric_tables, metric_path)
 
     return metric_tables
 

@@ -740,7 +740,7 @@ def parse_plot_metrics_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument(
         "metrics_path",
         type=Path,
-        help="Metrics JSON or JSONL produced by aib bench --metrics-path",
+        help="Metrics JSON or JSONL produced by aib bench --metric-path",
     )
     parser.add_argument(
         "-o",

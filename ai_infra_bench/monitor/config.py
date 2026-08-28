@@ -59,7 +59,7 @@ def _normalize_metrics_path(metrics_path: str) -> str:
         metrics_path = f"/{metrics_path}"
     parsed = urlsplit(metrics_path)
     if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
-        raise ConfigurationError("--metrics-path must be a URL path without a query")
+        raise ConfigurationError("--metric-path must be a URL path without a query")
     return parsed.path.rstrip("/") or "/"
 
 

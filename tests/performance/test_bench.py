@@ -103,12 +103,15 @@ def test_random_dataset_arguments_parse_num_requests_as_integer():
             "8",
             "--num-requests",
             "3",
+            "--metric-path",
+            "metrics.json",
         ]
     )
 
     validate_args(args)
 
     assert args.num_requests == 3
+    assert args.metric_path == "metrics.json"
 
 
 def test_generate_random_requests_uses_requested_lengths():
@@ -175,7 +178,7 @@ def test_validate_args_rejects_invalid_random_range_ratio(ratio):
         "input_len": 1,
         "output_len": 1,
         "random_range_ratio": ratio,
-        "metrics_path": None,
+        "metric_path": None,
         "dump_path": None,
     }
 
@@ -259,12 +262,18 @@ def test_session_wrapper_holds_one_semaphore_slot_and_preserves_order(monkeypatc
 def test_session_parse_args_accepts_positional_and_option_path():
     positional = session_reply_bench.parse_args(["sessions/*.jsonl"])
     option = session_reply_bench.parse_args(
-        ["--payload-regex-path", "sessions/*.jsonl"]
+        [
+            "--payload-regex-path",
+            "sessions/*.jsonl",
+            "--metric-path",
+            "metrics.jsonl",
+        ]
     )
 
     assert (
         positional.payload_regex_path == option.payload_regex_path == "sessions/*.jsonl"
     )
+    assert option.metric_path == "metrics.jsonl"
 
 
 def test_cli_dispatches_session_bench(monkeypatch):
@@ -532,7 +541,7 @@ def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
         max_concurrency=1,
         request_rate=1,
         dump_path=str(dump_path),
-        metrics_path=str(metrics_path),
+        metric_path=str(metrics_path),
     )
 
     dumped_path = tmp_path / "all_outputs.jsonl"
@@ -605,7 +614,7 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
         duration_s=2,
         max_concurrency=1,
         request_rate=1,
-        metrics_path=str(metrics_path),
+        metric_path=str(metrics_path),
     )
 
     summary_rows = next(rows for title, rows in tables if title == "Benchmark Summary")

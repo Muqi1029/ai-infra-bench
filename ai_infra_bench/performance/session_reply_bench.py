@@ -148,7 +148,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Namespace:
         default="all",
         help="Output dump format",
     )
-    parser.add_argument("--metrics-path", help="Optional JSON/JSONL metrics path")
+    parser.add_argument("--metric-path", help="Optional JSON/JSONL metrics path")
     parser.add_argument("--label", help="Label for exported metrics")
     parser.add_argument(
         "--disable-flush-cache",
@@ -174,10 +174,8 @@ def validate_args(args: Namespace) -> None:
         raise ValueError("--num-warmup-sessions must be >= 0")
     if args.num_sessions is not None and args.num_sessions < 1:
         raise ValueError("--num-sessions must be >= 1")
-    if args.metrics_path and not args.metrics_path.lower().endswith(
-        (".json", ".jsonl")
-    ):
-        raise ValueError("--metrics-path must end with .json or .jsonl")
+    if args.metric_path and not args.metric_path.lower().endswith((".json", ".jsonl")):
+        raise ValueError("--metric-path must end with .json or .jsonl")
     if args.dump_path and not args.dump_path.lower().endswith(".jsonl"):
         args.dump_path = f"{args.dump_path}.jsonl"
 
@@ -237,7 +235,7 @@ async def run_benchmark(args: Namespace) -> None:
         request_rate=args.request_rate,
         dump_path=args.dump_path,
         dump_content=args.dump_content,
-        metrics_path=args.metrics_path,
+        metric_path=args.metric_path,
         label=args.label,
     )
 
