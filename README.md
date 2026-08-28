@@ -47,6 +47,20 @@ When `--random-range-ratio` is set, each random request samples its input and
 output length uniformly from the configured ratio of the target length up to
 the target length. The default value of `1.0` preserves fixed-length requests.
 
+Evaluate the text-only portion of Humanity's Last Exam directly through a
+chat-completions endpoint. Local JSONL files are supported; image questions
+are skipped because this adapter does not require a multimodal runtime:
+
+```bash
+aib eval-dataset \
+  --evals hle \
+  --dataset-path ./hle.jsonl \
+  --num-shots 0 \
+  --num-questions 20 \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model
+```
+
 Other commands cover dataset evaluation, logits and hidden-state comparison,
 metric plotting, and local Prometheus monitoring:
 

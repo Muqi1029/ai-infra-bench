@@ -1,0 +1,14 @@
+name: HLE (Text Only)
+
+prompt_template: |-
+  Solve the following Humanity's Last Exam question. Think through the problem carefully.
+  For multiple-choice questions, finish with `Answer: <option letter>`. For exact-match
+  questions, finish with `Answer: <exact answer>`.
+
+  Question:
+  {question}
+
+payload:
+  max_completion_tokens: 16384
+
+dataset_path: cais/hle
