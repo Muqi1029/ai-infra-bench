@@ -446,7 +446,7 @@ def test_handle_outputs_supports_single_request_without_usage(monkeypatch):
     result_rows = next(rows for title, rows in tables if title == "Request Result")
     assert ["Status", "Success"] in result_rows
     assert ["Finish reason", "N/A"] in result_rows
-    assert not any(title == "Benchmark Summary" for title, _ in tables)
+    assert not any(title.startswith("Benchmark Summary") for title, _ in tables)
     assert not any(title == "Finish Reason Statistics" for title, _ in tables)
 
     latency_rows = next(
@@ -501,7 +501,12 @@ def test_handle_outputs_keeps_percentiles_for_single_benchmark_request(monkeypat
 
 
 def test_handle_outputs_keeps_stable_plot_metadata(monkeypatch):
-    monkeypatch.setattr(bench_utils, "print_table", lambda *_: None)
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
 
     metric_tables = handle_outputs(
         [OutputMetric(success=True, latency_ms=10)],
@@ -514,6 +519,9 @@ def test_handle_outputs_keeps_stable_plot_metadata(monkeypatch):
     assert metric_tables["label"] == "server-a"
     assert metric_tables["max_concurrency"] == 8
     assert metric_tables["timestamp"]
+    summary_title = f"Benchmark Summary (server-a {metric_tables['timestamp']})"
+    assert any(title == summary_title for title, _ in tables)
+    assert summary_title in metric_tables
 
 
 def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
@@ -609,7 +617,7 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
     ]
 
     metrics_path = tmp_path / "metrics.json"
-    handle_outputs(
+    returned_tables = handle_outputs(
         outputs,
         duration_s=2,
         max_concurrency=1,
@@ -617,13 +625,15 @@ def test_benchmark_summary_includes_total_output_tokens(monkeypatch, tmp_path):
         metric_path=str(metrics_path),
     )
 
-    summary_rows = next(rows for title, rows in tables if title == "Benchmark Summary")
+    assert returned_tables["label"] == ""
+    summary_title = f"Benchmark Summary ({returned_tables['timestamp']})"
+    summary_rows = next(rows for title, rows in tables if title == summary_title)
     assert ["Total completion tokens", "30 tokens"] in summary_rows
     assert ["Total reasoning tokens", "10 tokens"] in summary_rows
 
     metric_tables = json.loads(metrics_path.read_text(encoding="utf-8"))
     summary_metrics = {
-        row["Metric"]: row["Value"] for row in metric_tables["Benchmark Summary"]
+        row["Metric"]: row["Value"] for row in metric_tables[summary_title]
     }
     assert summary_metrics["Total completion tokens"] == "30 tokens"
     assert summary_metrics["Total reasoning tokens"] == "10 tokens"

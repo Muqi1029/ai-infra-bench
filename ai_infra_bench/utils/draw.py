@@ -219,6 +219,12 @@ def _metric_sections(table_title: str, metric_name: str) -> List[str]:
     return list(dict.fromkeys(sections or ["Other"]))
 
 
+def _normalize_table_title(table_title: str) -> str:
+    if table_title.startswith("Benchmark Summary ("):
+        return "Benchmark Summary"
+    return table_title
+
+
 def _metric_specs(
     records: Sequence[Mapping[str, Any]],
 ) -> tuple[List[str], List[Dict[str, Any]]]:
@@ -259,7 +265,15 @@ def _metric_specs(
 
         concurrency_value = _parse_plot_value(record.get("max_concurrency"))
         if not isinstance(concurrency_value, float):
-            summary_rows = record.get("Benchmark Summary") or []
+            summary_rows = next(
+                (
+                    rows
+                    for title, rows in record.items()
+                    if _normalize_table_title(str(title)) == "Benchmark Summary"
+                    and isinstance(rows, list)
+                ),
+                [],
+            )
             concurrency_value = next(
                 (
                     parsed
@@ -276,6 +290,7 @@ def _metric_specs(
         for table_title, rows in record.items():
             if not isinstance(rows, list):
                 continue
+            category = _normalize_table_title(str(table_title))
             for row in rows:
                 if not isinstance(row, Mapping):
                     continue
@@ -292,13 +307,13 @@ def _metric_specs(
                     suffix = "" if str(column).lower() == "value" else f" / {column}"
                     metric_name = f"{row_label}{suffix}"
                     unit = _plot_unit(raw_value, str(row.get("Unit") or ""))
-                    sections = _metric_sections(str(table_title), str(row_label))
+                    sections = _metric_sections(category, str(row_label))
                     if not sections:
                         continue
                     if isinstance(value, list):
                         for bin_index, bin_value in enumerate(value):
                             add_point(
-                                str(table_title),
+                                category,
                                 f"{metric_name} / bin {bin_index}",
                                 unit,
                                 label,
@@ -308,7 +323,7 @@ def _metric_specs(
                             )
                     else:
                         add_point(
-                            str(table_title),
+                            category,
                             metric_name,
                             unit,
                             label,
@@ -318,7 +333,7 @@ def _metric_specs(
                         )
                         if ratio_match := _PAREN_PERCENT_PATTERN.search(str(raw_value)):
                             add_point(
-                                str(table_title),
+                                category,
                                 f"{metric_name} / Ratio",
                                 "%",
                                 label,

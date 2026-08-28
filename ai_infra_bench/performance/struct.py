@@ -193,6 +193,8 @@ class _OutputStats:
     duration_s: float
     max_concurrency: int
     request_rate: float
+    label: str
+    ts: str
     outputs: List[OutputMetric] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -401,8 +403,9 @@ class _OutputStats:
             if self.request_rate == float("inf")
             else f"{self.request_rate:g} req/s"
         )
+        summary_context = " ".join(value for value in (self.label, self.ts) if value)
         return (
-            "Benchmark Summary",
+            f"Benchmark Summary ({summary_context})",
             [
                 ["Metric", "Value"],
                 ["Total requests", str(self.num_total_requests)],

@@ -321,8 +321,9 @@ def handle_outputs(
     maybe_dump_outputs(outputs, dump_path, dump_content)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    label = label or ""
     metric_tables: Dict[str, Any] = {
-        "label": label or "benchmark",
+        "label": label,
         "timestamp": now,
         "max_concurrency": max_concurrency,
     }
@@ -335,7 +336,14 @@ def handle_outputs(
             for row in rows[1:]
         ]
 
-    stats = _OutputStats(outputs, duration_s, max_concurrency, request_rate)
+    stats = _OutputStats(
+        outputs,
+        duration_s,
+        max_concurrency,
+        request_rate,
+        label=label,
+        ts=now,
+    )
     if stats.num_failed_requests:
         logger.warning(f"Failed requests: {stats.num_failed_requests}")
 

@@ -7,11 +7,16 @@ from ai_infra_bench.utils import draw
 from ai_infra_bench.utils.draw import export_metric_tables_html
 
 
-def _metrics(label, throughput, concurrency=1, ttft=10):
+def _metrics(label, throughput, concurrency=1, ttft=10, dynamic_summary=False):
+    summary_title = (
+        f"Benchmark Summary ({label} 2026-08-28 12:00:00)"
+        if dynamic_summary
+        else "Benchmark Summary"
+    )
     return {
         "label": label,
         "max_concurrency": concurrency,
-        "Benchmark Summary": [
+        summary_title: [
             {"Metric": "Max concurrency", "Value": str(concurrency)},
             {
                 "Metric": "Mean finished requests per second",
@@ -40,7 +45,15 @@ def test_export_metric_tables_html_from_jsonl(tmp_path):
     source = tmp_path / "metrics.jsonl"
     source.write_text(
         "\n".join(
-            json.dumps(_metrics(label, throughput, concurrency, ttft))
+            json.dumps(
+                _metrics(
+                    label,
+                    throughput,
+                    concurrency,
+                    ttft,
+                    dynamic_summary=label == "run-a",
+                )
+            )
             for label, throughput, concurrency, ttft in (
                 ("run-a", 100, 1, 10),
                 ("run-a", 180, 2, 18),
