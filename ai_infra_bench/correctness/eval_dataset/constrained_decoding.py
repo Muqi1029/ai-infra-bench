@@ -116,7 +116,7 @@ def check_answer(response_body, mode: str, is_thinking: bool) -> bool:
             if data["name_"] != "Muqi Li" or data["_age"] != 24:
                 return False
             return True
-        except json.decoder.JSONDecodeError:
+        except Exception:
             logger.error(f"Failed to loads: {message.get("content")}")
             return False
     else:
