@@ -25,12 +25,18 @@ def resolve_dataset_path(dataset_path: str) -> str:
     if dataset_path.startswith(DATA_PACKAGE_RESOURCE_PREFIX):
         resource_path = dataset_path.removeprefix(DATA_PACKAGE_RESOURCE_PREFIX)
         try:
-            return str(resources.files(DATA_PACKAGE) / resource_path)
+            resource = resources.files(DATA_PACKAGE) / resource_path
         except ModuleNotFoundError as exc:
             raise RuntimeError(
                 "Dataset package is not installed. Install ai-infra-bench[data] "
                 "or install ai-infra-bench-dataset."
             ) from exc
+        if not resource.exists():
+            raise FileNotFoundError(
+                f"Packaged dataset resource is missing: {resource_path}. "
+                "Install a newer ai-infra-bench-dataset package."
+            )
+        return str(resource)
 
     candidate = Path(dataset_path)
     if candidate.is_absolute() or candidate.exists():
