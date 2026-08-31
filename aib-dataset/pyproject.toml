@@ -21,4 +21,7 @@ include = ["ai_infra_bench_dataset*"]
   "data/AIME2025/README.md",
   "data/gsm8k/*.jsonl",
   "data/gsm8k/README.md",
+  "data/gpqa/*.csv",
+  "data/gpqa/*.jsonl",
+  "data/gpqa/README.md",
 ]

@@ -1,0 +1,16 @@
+name: GPQA Diamond
+
+prompt_template: |-
+  Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering.
+
+  {question}
+
+  A) {A}
+  B) {B}
+  C) {C}
+  D) {D}
+
+payload:
+  max_completion_tokens: 16384
+
+dataset_path: data-package://data/gpqa/gpqa_diamond.csv

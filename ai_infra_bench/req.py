@@ -307,7 +307,7 @@ def main(argv=None):
     mutex_group = parser.add_mutually_exclusive_group()
     mutex_group.add_argument(
         "--dataset",
-        choices=["gsm8k"],
+        choices=["gsm8k", "gpqa"],
         help="Randomly select one request from a packaged dataset",
     )
     mutex_group.add_argument(

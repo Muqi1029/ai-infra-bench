@@ -204,7 +204,7 @@ def load_requests(args: Namespace) -> List[Dict]:
             range_ratio=getattr(args, "random_range_ratio", 1.0),
         )
         logger.info(f"Generated {len(requests)} random requests")
-    elif getattr(args, "dataset", None) in {"gsm8k", "sharegpt"}:
+    elif getattr(args, "dataset", None) in {"gsm8k", "gpqa", "sharegpt"}:
         requests = read_packaged_requests(args.dataset)
         logger.info(f"Loaded {len(requests)} {args.dataset} payloads")
         if args.dataset == "sharegpt" and getattr(args, "input_len", None) is not None:

@@ -15,7 +15,7 @@ from ai_infra_bench.utils.req import extract_response_metrics
 
 logger = logging.getLogger(__name__)
 
-DATASET_CHOICES = ["gsm8k", "aime25", "hle", "constrained_decoding"]
+DATASET_CHOICES = ["gsm8k", "aime25", "gpqa", "hle", "constrained_decoding"]
 DEEPSWE_EVAL = "deepswe"
 AGENT_DATASET_CHOICES = [DEEPSWE_EVAL]
 TOKEN_METRICS = (

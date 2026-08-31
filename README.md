@@ -47,6 +47,16 @@ When `--random-range-ratio` is set, each random request samples its input and
 output length uniformly from the configured ratio of the target length up to
 the target length. The default value of `1.0` preserves fixed-length requests.
 
+Run the packaged GPQA Diamond multiple-choice workload (198 questions):
+
+```bash
+aib bench \
+  --base-url http://127.0.0.1:30000 \
+  --dataset gpqa \
+  --num-requests 198 \
+  --max-concurrency 16
+```
+
 Evaluate the text-only portion of Humanity's Last Exam directly through a
 chat-completions endpoint. Local JSONL files are supported; image questions
 are skipped because this adapter does not require a multimodal runtime:

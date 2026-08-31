@@ -85,7 +85,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     mutex_data_group = parser.add_mutually_exclusive_group()
     mutex_data_group.add_argument(
         "--dataset",
-        choices=["random", "gsm8k", "sharegpt"],
+        choices=["random", "gsm8k", "gpqa", "sharegpt"],
         help="use the dataset to benchmark",
     )
     # for random dataset

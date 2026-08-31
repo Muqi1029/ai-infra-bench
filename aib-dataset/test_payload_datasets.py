@@ -2,7 +2,11 @@ import json
 from argparse import Namespace
 from pathlib import Path
 
-from scripts.build_payload_datasets import build_gsm8k_payloads, build_sharegpt_payloads
+from scripts.build_payload_datasets import (
+    build_gpqa_payloads,
+    build_gsm8k_payloads,
+    build_sharegpt_payloads,
+)
 
 
 def test_build_gsm8k_payloads(tmp_path):
@@ -17,6 +21,23 @@ def test_build_gsm8k_payloads(tmp_path):
     assert json.loads(output_path.read_text(encoding="utf-8")) == {
         "messages": [{"role": "user", "content": "Question: What is 1 + 1?\nAnswer:"}]
     }
+
+
+def test_build_gpqa_payloads_permutates_choices_without_leaking_answer(tmp_path):
+    source_path = tmp_path / "gpqa.csv"
+    source_path.write_text(
+        "Question,Correct Answer,Incorrect Answer 1,Incorrect Answer 2,Incorrect Answer 3\n"
+        '"Choose?",Correct,Wrong 1,Wrong 2,Wrong 3\n',
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "gpqa" / "payload.jsonl"
+
+    assert build_gpqa_payloads(source_path, output_path, seed=0) == 1
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    content = payload["messages"][0]["content"]
+    assert "Choose?" in content
+    assert all(f"{label}) " in content for label in "ABCD")
+    assert "Correct Answer" not in content
 
 
 def test_build_sharegpt_payloads(tmp_path):
@@ -114,3 +135,22 @@ def test_benchmark_loads_packaged_gsm8k_payloads(monkeypatch):
 
     assert len(requests) == 1319
     assert requests[0]["messages"][0]["role"] == "user"
+
+
+def test_benchmark_loads_packaged_gpqa_payloads(monkeypatch):
+    package_parent = Path(__file__).resolve().parent
+    monkeypatch.syspath_prepend(str(package_parent))
+
+    from ai_infra_bench.performance.bench import load_requests
+
+    requests = load_requests(
+        Namespace(
+            dataset="gpqa",
+            filter_constrained_grammar_requests=False,
+        )
+    )
+
+    assert len(requests) == 198
+    content = requests[0]["messages"][0]["content"]
+    assert "Answer: $LETTER" in content
+    assert all(f"{label}) " in content for label in "ABCD")

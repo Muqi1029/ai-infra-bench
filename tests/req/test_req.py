@@ -242,6 +242,17 @@ def test_dataset_request_is_deterministic(stream_handler):
     assert first[2]["stream"] is True
 
 
+def test_gpqa_dataset_request_uses_chat_completions(stream_handler):
+    requests = [{"messages": [{"role": "user", "content": "question"}]}]
+
+    with patch("ai_infra_bench.req.read_packaged_requests", return_value=requests):
+        main(["--dataset", "gpqa", "--seed", "7"])
+
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert payload["messages"][0]["content"] == "question"
+
+
 def test_dataset_rejects_empty_requests():
     with (
         patch("ai_infra_bench.req.read_packaged_requests", return_value=[]),

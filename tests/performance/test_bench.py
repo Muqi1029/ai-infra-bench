@@ -114,6 +114,12 @@ def test_random_dataset_arguments_parse_num_requests_as_integer():
     assert args.metric_path == "metrics.json"
 
 
+def test_gpqa_dataset_arguments_parse():
+    args = bench_utils.parse_args(["--dataset", "gpqa"])
+    validate_args(args)
+    assert args.dataset == "gpqa"
+
+
 def test_generate_random_requests_uses_requested_lengths():
     bench_utils.set_seed(7)
 

@@ -2,8 +2,10 @@
 """Build OpenAI-compatible payload JSONL files for benchmark datasets."""
 
 import argparse
+import csv
 import json
 import os
+import random
 import re
 import shutil
 import sys
@@ -19,11 +21,19 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PACKAGE_DIR = SCRIPT_DIR.parent / "ai_infra_bench_dataset"
 DEFAULT_DATA_DIR = PACKAGE_DIR / "data"
 DEFAULT_GSM8K_SOURCE = DEFAULT_DATA_DIR / "gsm8k" / "test.jsonl"
+DEFAULT_GPQA_SOURCE = DEFAULT_DATA_DIR / "gpqa" / "gpqa_diamond.csv"
 DEFAULT_SHAREGPT_CACHE = (
     Path.home() / ".cache" / "ai-infra-bench-dataset" / SHAREGPT_FILENAME
 )
 MAX_PAYLOAD_SHARD_BYTES = 4 * 1024 * 1024
 PRIVATE_KEY_MARKER = re.compile(r"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----")
+GPQA_FIELDS = (
+    "Question",
+    "Correct Answer",
+    "Incorrect Answer 1",
+    "Incorrect Answer 2",
+    "Incorrect Answer 3",
+)
 
 
 def iter_json_array(path: Path, chunk_size: int = 1024 * 1024) -> Iterator[Any]:
@@ -149,6 +159,52 @@ def build_gsm8k_payloads(source_path: Path, output_path: Path) -> int:
     return count
 
 
+def format_gpqa_question(question: str, choices: list[str]) -> str:
+    labels = "ABCD"
+    options = "\n".join(f"{label}) {choice}" for label, choice in zip(labels, choices))
+    return (
+        "Answer the following multiple choice question. The last line of your "
+        "response should be of the following format: 'Answer: $LETTER' "
+        "(without quotes) where LETTER is one of ABCD. Think step by step "
+        "before answering.\n\n"
+        f"{question}\n\n{options}"
+    )
+
+
+def build_gpqa_payloads(source_path: Path, output_path: Path, seed: int = 0) -> int:
+    """Convert GPQA CSV rows into answer-free chat completion payloads."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(seed)
+    count = 0
+    with (
+        source_path.open("r", encoding="utf-8-sig", newline="") as source,
+        output_path.open("w", encoding="utf-8") as output,
+    ):
+        reader = csv.DictReader(source)
+        missing = [
+            field for field in GPQA_FIELDS if field not in (reader.fieldnames or [])
+        ]
+        if missing:
+            raise ValueError(
+                f"GPQA source is missing required columns: {', '.join(missing)}"
+            )
+        for line_number, row in enumerate(reader, start=2):
+            values = [str(row.get(field) or "").strip() for field in GPQA_FIELDS]
+            if not all(values):
+                raise ValueError(f"Invalid GPQA row at {source_path}:{line_number}")
+            question, *choices = values
+            permutation = rng.sample(range(4), 4)
+            prompt = format_gpqa_question(
+                question, [choices[index] for index in permutation]
+            )
+            write_payload(
+                output,
+                {"messages": [{"role": "user", "content": prompt}]},
+            )
+            count += 1
+    return count
+
+
 def first_human_message(record: dict[str, Any]) -> str | None:
     conversations = record.get("conversations", record.get("conversation", []))
     if not isinstance(conversations, list) or len(conversations) < 2:
@@ -219,7 +275,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dataset",
-        choices=("all", "gsm8k", "sharegpt"),
+        choices=("all", "gsm8k", "gpqa", "sharegpt"),
         default="all",
     )
     parser.add_argument(
@@ -231,6 +287,18 @@ def parse_args() -> argparse.Namespace:
         "--sharegpt-source",
         type=Path,
         help="Use a local ShareGPT JSON file instead of downloading it",
+    )
+    parser.add_argument(
+        "--gpqa-source",
+        type=Path,
+        default=DEFAULT_GPQA_SOURCE,
+        help="Use a local GPQA Diamond CSV file",
+    )
+    parser.add_argument(
+        "--gpqa-seed",
+        type=int,
+        default=0,
+        help="Seed used to permute GPQA answer choices",
     )
     parser.add_argument(
         "--output-dir",
@@ -254,6 +322,11 @@ def main() -> None:
         output_path = args.output_dir / "gsm8k" / "payload.jsonl"
         count = build_gsm8k_payloads(args.gsm8k_source, output_path)
         print(f"Wrote {count} GSM8K payloads to {output_path}")
+
+    if args.dataset in {"all", "gpqa"}:
+        output_path = args.output_dir / "gpqa" / "payload.jsonl"
+        count = build_gpqa_payloads(args.gpqa_source, output_path, args.gpqa_seed)
+        print(f"Wrote {count} GPQA payloads to {output_path}")
 
     if args.dataset in {"all", "sharegpt"}:
         source_path = args.sharegpt_source or download_sharegpt(DEFAULT_SHAREGPT_CACHE)
