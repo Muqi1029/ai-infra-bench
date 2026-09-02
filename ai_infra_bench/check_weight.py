@@ -1,16 +1,98 @@
 import argparse
+import json
 import os
 import re
+from dataclasses import dataclass
 from glob import glob
 
 import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
+from ai_infra_bench.utils.draw import print_table
+
 MIN_NAME_WIDTH = 60
 SHAPE_WIDTH = 24
 DTYPE_WIDTH = 20
 NUMEL_WIDTH = 16
+ROUTED_EXPERT_PATTERN = re.compile(r"\.mlp\.experts\.\d+\.")
+SHARED_EXPERT_MARKER = ".mlp.shared_experts."
+
+
+@dataclass
+class ParameterStats:
+    total: int = 0
+    routed_experts: int = 0
+    shared_experts: int = 0
+
+
+def update_parameter_stats(state_dict, stats):
+    for key, value in get_tensor_items(state_dict):
+        numel = value.numel()
+        if is_modelopt_nvfp4_weight(key, value, state_dict):
+            numel *= 2
+        stats.total += numel
+        if ROUTED_EXPERT_PATTERN.search(key):
+            stats.routed_experts += numel
+        elif SHARED_EXPERT_MARKER in key:
+            stats.shared_experts += numel
+
+
+def config_value(config, key, default=None):
+    if key in config:
+        return config[key]
+    text_config = config.get("text_config", {})
+    if isinstance(text_config, dict):
+        return text_config.get(key, default)
+    return default
+
+
+def activated_parameter_count(stats, config):
+    """Estimate per-token parameters for a sparse MoE model.
+
+    All non-expert and shared-expert parameters are active for every token.
+    Routed experts are reduced from the configured pool to the configured
+    ``num_experts_per_tok`` selection.
+    """
+    if stats.routed_experts == 0:
+        return stats.total
+
+    n_routed = config_value(config, "n_routed_experts")
+    n_shared = config_value(config, "n_shared_experts", 0)
+    n_active_routed = config_value(config, "num_experts_per_tok", 1)
+    if not isinstance(n_routed, int) or n_routed <= 0:
+        return None
+    if not isinstance(n_shared, int) or n_shared < 0:
+        return None
+    if (
+        not isinstance(n_active_routed, int)
+        or n_active_routed < 0
+        or n_active_routed > n_routed
+    ):
+        return None
+
+    non_expert = stats.total - stats.routed_experts - stats.shared_experts
+    routed_per_expert = stats.routed_experts / n_routed
+    shared_per_expert = stats.shared_experts / n_shared if n_shared else 0
+    return round(
+        non_expert + routed_per_expert * n_active_routed + shared_per_expert * n_shared
+    )
+
+
+def format_parameter_count(value):
+    if value is None:
+        return "N/A"
+    return f"{value / 1_000_000_000:.2f}B ({value:,})"
+
+
+def load_model_config(model_dir):
+    config_path = os.path.join(model_dir, "config.json")
+    try:
+        with open(config_path, encoding="utf-8") as stream:
+            config = json.load(stream)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    return config if isinstance(config, dict) else {}
 
 
 def get_tensor_items(state_dict):
@@ -146,12 +228,19 @@ def load_bin_file(path):
         return torch.load(path, map_location="cpu")
 
 
-def inspect_weight_files(weight_files, loader, name_filter=None):
+def inspect_weight_files(
+    weight_files,
+    loader,
+    name_filter=None,
+    parameter_stats=None,
+):
     total_tensors = 0
     total_bytes = 0
 
     for path in weight_files:
         state_dict = loader(path)
+        if parameter_stats is not None:
+            update_parameter_stats(state_dict, parameter_stats)
         items = get_tensor_items(state_dict)
         displayed_items = filter_tensor_items(items, name_filter)
         if name_filter is not None and not displayed_items:
@@ -195,19 +284,28 @@ def download_from_hub(
     if max_checkpoints != -1:
         weight_files = weight_files[:max_checkpoints]
 
+    parameter_stats = ParameterStats()
     total_tensors, total_bytes = inspect_weight_files(
         weight_files,
         loader,
         name_filter,
+        parameter_stats,
     )
 
-    line_width = 110
-    print("Summarization of inspected weights".center(line_width, "-"))
-    print(f"{'Num of weight files:':<40} {len(weight_files):<15}")
-    print(f"{'Num of tensors:':<40} {total_tensors:<15,}")
-    print(f"{'Total storage bytes:':<40} {total_bytes:<15,}")
-    print(f"{'Total storage size:':<40} {total_bytes / 1024**3:<15.2f} GiB")
-    print("-" * line_width)
+    config = load_model_config(dir_path)
+    summary_rows = [
+        ["Metric", "Value"],
+        ["Total parameters", format_parameter_count(parameter_stats.total)],
+        [
+            "Activated parameters",
+            format_parameter_count(activated_parameter_count(parameter_stats, config)),
+        ],
+        ["Num of weight files", f"{len(weight_files):,}"],
+        ["Num of tensors", f"{total_tensors:,}"],
+        ["Total storage bytes", f"{total_bytes:,}"],
+        ["Total storage size", f"{total_bytes / 1024**3:.2f} GiB"],
+    ]
+    print_table("Weight Summary", summary_rows)
 
 
 def parse_args(argv):
