@@ -294,7 +294,7 @@ async def run_benchmark(args: Namespace) -> None:
         for _ in range(args.repeat):
             semaphore = asyncio.Semaphore(max_concurrency)
             async with _create_bench_client_session(
-                max_concurrency, args.api_key
+                max_concurrency, args.api_key, args.request_timeout
             ) as session:
 
                 # warmup first
