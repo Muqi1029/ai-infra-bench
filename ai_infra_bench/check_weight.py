@@ -13,6 +13,26 @@ DTYPE_WIDTH = 20
 NUMEL_WIDTH = 16
 
 
+def get_tensor_items(state_dict):
+    return [
+        (key, value)
+        for key, value in state_dict.items()
+        if isinstance(value, torch.Tensor)
+    ]
+
+
+def filter_tensor_items(items, name_filter):
+    return [
+        (key, value)
+        for key, value in items
+        if name_filter is None or name_filter.search(key)
+    ]
+
+
+def tensor_storage_bytes(items):
+    return sum(value.numel() * value.element_size() for _, value in items)
+
+
 def compile_regex(pattern):
     try:
         return re.compile(pattern)
@@ -66,16 +86,15 @@ def tensor_details(key, value, state_dict):
 
 
 def print_weight_summary(state_dict, name_filter=None):
-    tensor_items = [
-        (key, value)
-        for key, value in state_dict.items()
-        if isinstance(value, torch.Tensor)
-    ]
-    displayed_items = [
-        (key, value)
-        for key, value in tensor_items
-        if name_filter is None or name_filter.search(key)
-    ]
+    items = get_tensor_items(state_dict)
+    displayed_items = filter_tensor_items(items, name_filter)
+    total_bytes = tensor_storage_bytes(items)
+
+    # A name filter is often used across sharded checkpoints. Keep shards with
+    # no matching tensors out of the per-file report while retaining their
+    # tensors in the overall totals.
+    if name_filter is not None and not displayed_items:
+        return len(items), total_bytes
 
     displayed_rows = [
         (key, value, tensor_details(key, value, state_dict))
@@ -112,14 +131,11 @@ def print_weight_summary(state_dict, name_filter=None):
         )
 
     print("-" * line_width)
-    print(
-        f"Stored tensor elements: {sum(value.numel() for _, value in tensor_items):,}"
-    )
+    print(f"Stored tensor elements: {sum(value.numel() for _, value in items):,}")
     if name_filter is not None:
-        print(f"Displayed tensors: {len(displayed_items):,} / {len(tensor_items):,}")
+        print(f"Displayed tensors: {len(displayed_items):,} / {len(items):,}")
 
-    total_bytes = sum(value.numel() * value.element_size() for _, value in tensor_items)
-    return len(tensor_items), total_bytes
+    return len(items), total_bytes
 
 
 def load_bin_file(path):
@@ -135,8 +151,15 @@ def inspect_weight_files(weight_files, loader, name_filter=None):
     total_bytes = 0
 
     for path in weight_files:
-        print(f"\n🔍 Loading weights from: {path}")
         state_dict = loader(path)
+        items = get_tensor_items(state_dict)
+        displayed_items = filter_tensor_items(items, name_filter)
+        if name_filter is not None and not displayed_items:
+            total_tensors += len(items)
+            total_bytes += tensor_storage_bytes(items)
+            continue
+
+        print(f"\n🔍 Loading weights from: {path}")
         num_tensors, file_bytes = print_weight_summary(state_dict, name_filter)
         total_tensors += num_tensors
         total_bytes += file_bytes
