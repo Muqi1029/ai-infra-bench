@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 
 from ai_infra_bench.performance.struct import MetricTable, OutputMetric, _OutputStats
+from ai_infra_bench.utils.client import BENCH_AIOHTTP_TIMEOUT_SECONDS
 from ai_infra_bench.utils.draw import format_mean, print_table
 from ai_infra_bench.utils.req import add_common_args, parse_override_payload
 
@@ -89,6 +90,12 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
     parser.add_argument(
         "--request-rate", default=float("inf"), type=float, help="Request rate"
+    )
+    parser.add_argument(
+        "--request-timeout",
+        default=BENCH_AIOHTTP_TIMEOUT_SECONDS,
+        type=float,
+        help="Total timeout in seconds for each request",
     )
 
     # dataset
@@ -180,6 +187,8 @@ def validate_args(args: Namespace) -> None:
             raise ValueError("--max-concurrency must be >= 1")
     if args.request_rate <= 0:
         raise ValueError("--request-rate must be > 0")
+    if getattr(args, "request_timeout", BENCH_AIOHTTP_TIMEOUT_SECONDS) <= 0:
+        raise ValueError("--request-timeout must be > 0")
     if args.num_warmup_requests < 0:
         raise ValueError("--num-warmup-requests must be >= 0")
     if args.num_requests is not None and args.num_requests < 1:
