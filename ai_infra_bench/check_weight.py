@@ -26,11 +26,12 @@ class ParameterStats:
     shared_experts: int = 0
 
 
-def update_parameter_stats(state_dict, stats):
-    for key, value in get_tensor_items(state_dict):
-        numel = value.numel()
-        if is_modelopt_nvfp4_weight(key, value, state_dict):
-            numel *= 2
+def update_parameter_stats(state_dict, stats, items=None):
+    items = get_tensor_items(state_dict) if items is None else items
+    for key, value in items:
+        numel = value.numel() * (
+            2 if is_modelopt_nvfp4_weight(key, value, state_dict) else 1
+        )
         stats.total += numel
         if ROUTED_EXPERT_PATTERN.search(key):
             stats.routed_experts += numel
@@ -38,44 +39,34 @@ def update_parameter_stats(state_dict, stats):
             stats.shared_experts += numel
 
 
-def config_value(config, key, default=None):
-    if key in config:
-        return config[key]
-    text_config = config.get("text_config", {})
-    if isinstance(text_config, dict):
-        return text_config.get(key, default)
-    return default
-
-
 def activated_parameter_count(stats, config):
-    """Estimate per-token parameters for a sparse MoE model.
-
-    All non-expert and shared-expert parameters are active for every token.
-    Routed experts are reduced from the configured pool to the configured
-    ``num_experts_per_tok`` selection.
-    """
+    """Estimate parameters used per token by sparse MoE routing."""
     if stats.routed_experts == 0:
         return stats.total
 
-    n_routed = config_value(config, "n_routed_experts")
-    n_shared = config_value(config, "n_shared_experts", 0)
-    n_active_routed = config_value(config, "num_experts_per_tok", 1)
-    if not isinstance(n_routed, int) or n_routed <= 0:
-        return None
-    if not isinstance(n_shared, int) or n_shared < 0:
-        return None
+    text_config = config.get("text_config", {})
+    if isinstance(text_config, dict):
+        config = text_config | config
+    n_routed = config.get("n_routed_experts")
+    n_shared = config.get("n_shared_experts", 0)
+    n_active_routed = config.get("num_experts_per_tok", 1)
     if (
-        not isinstance(n_active_routed, int)
+        not isinstance(n_routed, int)
+        or n_routed <= 0
+        or not isinstance(n_shared, int)
+        or n_shared < 0
+        or not isinstance(n_active_routed, int)
         or n_active_routed < 0
         or n_active_routed > n_routed
     ):
         return None
 
-    non_expert = stats.total - stats.routed_experts - stats.shared_experts
-    routed_per_expert = stats.routed_experts / n_routed
-    shared_per_expert = stats.shared_experts / n_shared if n_shared else 0
     return round(
-        non_expert + routed_per_expert * n_active_routed + shared_per_expert * n_shared
+        stats.total
+        - stats.routed_experts
+        - stats.shared_experts
+        + stats.routed_experts * n_active_routed / n_routed
+        + (stats.shared_experts if n_shared else 0)
     )
 
 
@@ -86,11 +77,10 @@ def format_parameter_count(value):
 
 
 def load_model_config(model_dir):
-    config_path = os.path.join(model_dir, "config.json")
     try:
-        with open(config_path, encoding="utf-8") as stream:
+        with open(os.path.join(model_dir, "config.json"), encoding="utf-8") as stream:
             config = json.load(stream)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except (OSError, json.JSONDecodeError):
         return {}
     return config if isinstance(config, dict) else {}
 
@@ -103,18 +93,6 @@ def get_tensor_items(state_dict):
     ]
 
 
-def filter_tensor_items(items, name_filter):
-    return [
-        (key, value)
-        for key, value in items
-        if name_filter is None or name_filter.search(key)
-    ]
-
-
-def tensor_storage_bytes(items):
-    return sum(value.numel() * value.element_size() for _, value in items)
-
-
 def compile_regex(pattern):
     try:
         return re.compile(pattern)
@@ -123,18 +101,12 @@ def compile_regex(pattern):
 
 
 def format_shape(value):
-    if value.ndim == 0:
-        return "scalar (0-D)"
-    return str(tuple(value.shape))
+    return "scalar (0-D)" if value.ndim == 0 else str(tuple(value.shape))
 
 
 def format_scalar(value):
     item = value.item()
-    if isinstance(item, float):
-        return f"{item:.9g}"
-    if isinstance(item, complex):
-        return f"{item:.9g}"
-    return str(item)
+    return f"{item:.9g}" if isinstance(item, (float, complex)) else str(item)
 
 
 def is_modelopt_nvfp4_weight(key, value, state_dict):
@@ -167,10 +139,19 @@ def tensor_details(key, value, state_dict):
     return ""
 
 
-def print_weight_summary(state_dict, name_filter=None):
+def print_weight_summary(
+    state_dict,
+    name_filter=None,
+    path=None,
+    parameter_stats=None,
+):
     items = get_tensor_items(state_dict)
-    displayed_items = filter_tensor_items(items, name_filter)
-    total_bytes = tensor_storage_bytes(items)
+    displayed_items = [
+        item for item in items if name_filter is None or name_filter.search(item[0])
+    ]
+    total_bytes = sum(value.numel() * value.element_size() for _, value in items)
+    if parameter_stats is not None:
+        update_parameter_stats(state_dict, parameter_stats, items)
 
     # A name filter is often used across sharded checkpoints. Keep shards with
     # no matching tensors out of the per-file report while retaining their
@@ -178,7 +159,10 @@ def print_weight_summary(state_dict, name_filter=None):
     if name_filter is not None and not displayed_items:
         return len(items), total_bytes
 
-    displayed_rows = [
+    if path is not None:
+        print(f"\n🔍 Loading weights from: {path}")
+
+    rows = [
         (key, value, tensor_details(key, value, state_dict))
         for key, value in displayed_items
     ]
@@ -188,7 +172,7 @@ def print_weight_summary(state_dict, name_filter=None):
     )
     details_width = max(
         len("Details"),
-        max((len(details) for _, _, details in displayed_rows), default=0),
+        max((len(details) for _, _, details in rows), default=0),
     )
     line_width = (
         name_width + SHAPE_WIDTH + DTYPE_WIDTH + NUMEL_WIDTH + details_width + 5
@@ -203,15 +187,13 @@ def print_weight_summary(state_dict, name_filter=None):
         f"{'Numel':>{NUMEL_WIDTH}}  Details"
     )
     print("-" * line_width)
-
-    for key, value, details in displayed_rows:
+    for key, value, details in rows:
         print(
             f"{key:<{name_width}} "
             f"{format_shape(value):<{SHAPE_WIDTH}} "
             f"{str(value.dtype):<{DTYPE_WIDTH}} "
             f"{value.numel():>{NUMEL_WIDTH},}  {details}"
         )
-
     print("-" * line_width)
     print(f"Stored tensor elements: {sum(value.numel() for _, value in items):,}")
     if name_filter is not None:
@@ -239,17 +221,12 @@ def inspect_weight_files(
 
     for path in weight_files:
         state_dict = loader(path)
-        if parameter_stats is not None:
-            update_parameter_stats(state_dict, parameter_stats)
-        items = get_tensor_items(state_dict)
-        displayed_items = filter_tensor_items(items, name_filter)
-        if name_filter is not None and not displayed_items:
-            total_tensors += len(items)
-            total_bytes += tensor_storage_bytes(items)
-            continue
-
-        print(f"\n🔍 Loading weights from: {path}")
-        num_tensors, file_bytes = print_weight_summary(state_dict, name_filter)
+        num_tensors, file_bytes = print_weight_summary(
+            state_dict,
+            name_filter,
+            path,
+            parameter_stats,
+        )
         total_tensors += num_tensors
         total_bytes += file_bytes
 
