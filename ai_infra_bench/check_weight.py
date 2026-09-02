@@ -94,10 +94,7 @@ def get_tensor_items(state_dict):
 
 
 def compile_regex(pattern):
-    try:
-        return re.compile(pattern)
-    except re.error as exc:
-        raise argparse.ArgumentTypeError(f"invalid regular expression: {exc}") from exc
+    return re.compile(re.escape(pattern))
 
 
 def format_shape(value):
@@ -296,7 +293,7 @@ def parse_args(argv):
         "--name-filter",
         type=compile_regex,
         default=None,
-        help="Only display tensor names matching this regular expression.",
+        help="Only display tensor names containing this literal filter string.",
     )
     return parser.parse_args(argv)
 

@@ -9,10 +9,18 @@ pytest.importorskip("safetensors")
 from ai_infra_bench.check_weight import (
     ParameterStats,
     activated_parameter_count,
+    compile_regex,
     inspect_weight_files,
     print_weight_summary,
     update_parameter_stats,
 )
+
+
+def test_name_filter_treats_dots_as_literal_characters():
+    name_filter = compile_regex("layers.1")
+
+    assert name_filter.search("model.layers.1.weight")
+    assert not name_filter.search("model.layersX1.weight")
 
 
 def test_inspect_weight_files_skips_unmatched_shards(capsys):
