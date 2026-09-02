@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from ai_infra_bench.performance.bench_utils import (
     compute_random_lens,
+    compute_shared_prefix_len,
     get_request,
     handle_outputs,
     parse_args,
@@ -65,14 +66,22 @@ def generate_random_requests(
     output_len: int,
     num_requests: int,
     range_ratio: float = 1.0,
+    cache_ratio: float = 0.0,
 ) -> List[Dict]:
     input_lens = compute_random_lens(input_len, range_ratio, num_requests)
     output_lens = compute_random_lens(output_len, range_ratio, num_requests)
+    prefix_len = compute_shared_prefix_len(input_len, cache_ratio)
+    if prefix_len and input_lens and prefix_len >= min(input_lens):
+        raise ValueError(
+            "shared prefix length exceeds a sampled input's cacheable length; "
+            "lower --cache-ratio or increase --random-range-ratio"
+        )
+    prefix = random.choices(range(RANDOM_TOKEN_UPPER_BOUND), k=prefix_len)
     return [
         {
-            "prompt": random.choices(
-                range(RANDOM_TOKEN_UPPER_BOUND),
-                k=input_lens[i],
+            "prompt": prefix
+            + random.choices(
+                range(RANDOM_TOKEN_UPPER_BOUND), k=input_lens[i] - prefix_len
             ),
             "max_tokens": output_lens[i],
             "ignore_eos": True,
@@ -197,13 +206,22 @@ def load_requests(args: Namespace) -> List[Dict]:
             )
 
     elif getattr(args, "dataset", None) == "random":
+        cache_ratio = getattr(args, "cache_ratio", 0.0)
         requests = generate_random_requests(
             input_len=args.input_len,
             output_len=args.output_len,
             num_requests=args.num_requests,
             range_ratio=getattr(args, "random_range_ratio", 1.0),
+            cache_ratio=cache_ratio,
         )
-        logger.info(f"Generated {len(requests)} random requests")
+        prefix_len = compute_shared_prefix_len(args.input_len, cache_ratio)
+        if prefix_len:
+            logger.info(
+                f"Generated {len(requests)} random requests with a "
+                f"{prefix_len}-token shared prefix"
+            )
+        else:
+            logger.info(f"Generated {len(requests)} random requests")
     elif getattr(args, "dataset", None) in {"gsm8k", "gpqa", "sharegpt"}:
         requests = read_packaged_requests(args.dataset)
         logger.info(f"Loaded {len(requests)} {args.dataset} payloads")
@@ -290,17 +308,40 @@ async def run_benchmark(args: Namespace) -> None:
         requests = requests[: args.num_requests]
         logger.info(f"Pruned to {len(requests)} requests")
 
+    cache_ratio = getattr(args, "cache_ratio", 0.0)
+    prefix_len = compute_shared_prefix_len(args.input_len, cache_ratio)
+    warmup_requests = (
+        [
+            {
+                "prompt": requests[0]["prompt"][:prefix_len],
+                "max_tokens": 1,
+                "ignore_eos": True,
+            }
+        ]
+        if prefix_len
+        else requests[: args.num_warmup_requests]
+    )
+    formal_requests = (
+        requests
+        if prefix_len or not args.disable_flush_cache
+        else requests[args.num_warmup_requests :]
+    )
+
     for max_concurrency in args.max_concurrency:
         for _ in range(args.repeat):
             semaphore = asyncio.Semaphore(max_concurrency)
             async with _create_bench_client_session(
                 max_concurrency, args.api_key
             ) as session:
+                # Prime the shared prefix after a flush so measured requests hit.
+                if prefix_len and not args.disable_flush_cache:
+                    await flush_cache(session, flush_cache_endpoint)
 
-                # warmup first
-                warmup_requests = requests[: args.num_warmup_requests]
                 if warmup_requests:
-                    logger.info(f"Warming up {len(warmup_requests)} requests")
+                    if prefix_len:
+                        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
+                    else:
+                        logger.info(f"Warming up {len(warmup_requests)} requests")
                     with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
                         await run_requests(
                             session,
@@ -313,12 +354,8 @@ async def run_benchmark(args: Namespace) -> None:
                         )
                     logger.info("Warming up done")
 
-                # flush cache
-                if not args.disable_flush_cache:
+                if not prefix_len and not args.disable_flush_cache:
                     await flush_cache(session, flush_cache_endpoint)
-                    formal_requests = requests
-                else:
-                    formal_requests = requests[args.num_warmup_requests :]
 
                 # formal run
                 with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:

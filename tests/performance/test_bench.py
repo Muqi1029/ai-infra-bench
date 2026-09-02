@@ -1,12 +1,13 @@
 import asyncio
 import json
 from argparse import Namespace
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 
 import pytest
 
 from ai_infra_bench.cli import main as cli_main
-from ai_infra_bench.performance import bench_utils, session_reply_bench
+from ai_infra_bench.performance import bench, bench_utils, session_reply_bench
 from ai_infra_bench.performance.bench import (
     compute_random_lens,
     generate_random_requests,
@@ -190,6 +191,153 @@ def test_validate_args_rejects_invalid_random_range_ratio(ratio):
 
     with pytest.raises(ValueError, match="--random-range-ratio"):
         validate_args(Namespace(**values))
+
+
+def test_random_dataset_parses_cache_ratio():
+    args = bench_utils.parse_args(
+        [
+            "--dataset",
+            "random",
+            "--input-len",
+            "8",
+            "--output-len",
+            "2",
+            "--num-requests",
+            "4",
+            "--cache-ratio",
+            "0.5",
+        ]
+    )
+
+    validate_args(args)
+
+    assert args.cache_ratio == 0.5
+    assert bench_utils.compute_shared_prefix_len(args.input_len, args.cache_ratio) == 3
+
+
+@pytest.mark.parametrize(
+    ("cli_args", "message"),
+    [
+        (
+            ["--dataset", "gpqa", "--cache-ratio", "0.5"],
+            "--dataset random",
+        ),
+        (
+            ["--dataset", "random", "--num-requests", "2", "--cache-ratio", "-0.1"],
+            "--cache-ratio",
+        ),
+        (
+            ["--dataset", "random", "--num-requests", "2", "--cache-ratio", "1.1"],
+            "--cache-ratio",
+        ),
+        (
+            [
+                "--dataset",
+                "random",
+                "--num-requests",
+                "2",
+                "--input-len",
+                "1",
+                "--cache-ratio",
+                "1",
+            ],
+            "too small",
+        ),
+        (
+            [
+                "--dataset",
+                "random",
+                "--num-requests",
+                "2",
+                "--input-len",
+                "10",
+                "--random-range-ratio",
+                "0.5",
+                "--cache-ratio",
+                "0.6",
+            ],
+            "minimum sampled input's cacheable length",
+        ),
+    ],
+)
+def test_validate_args_rejects_invalid_cache_ratio(cli_args, message):
+    with pytest.raises(ValueError, match=message):
+        validate_args(bench_utils.parse_args(cli_args))
+
+
+@pytest.mark.parametrize(
+    ("input_len", "range_ratio", "cache_ratio", "prefix_len"),
+    [(8, 1.0, 0.5, 3), (6, 1.0, 1.0, 5), (10, 0.5, 0.5, 4)],
+)
+def test_generate_random_requests_shares_configured_prefix(
+    input_len, range_ratio, cache_ratio, prefix_len
+):
+    bench_utils.set_seed(7)
+    requests = generate_random_requests(
+        input_len=input_len,
+        output_len=1,
+        num_requests=5,
+        range_ratio=range_ratio,
+        cache_ratio=cache_ratio,
+    )
+
+    prefix = requests[0]["prompt"][:prefix_len]
+    for payload in requests:
+        assert (
+            max(int(input_len * range_ratio), 1) <= len(payload["prompt"]) <= input_len
+        )
+        assert payload["prompt"][:prefix_len] == prefix
+
+
+def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
+    requests = [
+        {"prompt": [1, 2, 3, 4, 5, 6, 7, 8], "max_tokens": 2},
+    ]
+    events = []
+
+    @asynccontextmanager
+    async def fake_session(*_args):
+        yield object()
+
+    async def fake_flush_cache(_session, _url):
+        events.append(("flush", None))
+
+    async def fake_run_requests(_session, _url, payloads, *_args, **_kwargs):
+        payloads = list(payloads)
+        events.append(("run", payloads))
+        return [OutputMetric(success=True) for _ in payloads]
+
+    monkeypatch.setattr(bench, "load_requests", lambda _args: requests)
+    monkeypatch.setattr(bench, "_create_bench_client_session", fake_session)
+    monkeypatch.setattr(bench, "flush_cache", fake_flush_cache)
+    monkeypatch.setattr(bench, "run_requests", fake_run_requests)
+    monkeypatch.setattr(bench, "handle_outputs", lambda **_kwargs: None)
+
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "8",
+            "--num-requests",
+            "1",
+            "--cache-ratio",
+            "0.5",
+        ]
+    )
+
+    asyncio.run(bench.run_benchmark(args))
+
+    assert events == [
+        ("flush", None),
+        (
+            "run",
+            [{"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True}],
+        ),
+        ("run", requests),
+    ]
 
 
 def test_random_dataset_uses_completions_api():

@@ -32,6 +32,16 @@ def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int
     ).tolist()
 
 
+def compute_shared_prefix_len(input_len: int, cache_ratio: float) -> int:
+    """Return the shared prefix length for ``--cache-ratio``.
+
+    Prefix cache can cover at most ``prompt_len - 1`` tokens, matching
+    ``Global cache ratio``. The ratio is applied to that cacheable length:
+    ``int((input_len - 1) * cache_ratio)``. A zero ratio disables sharing.
+    """
+    return int((input_len - 1) * cache_ratio)
+
+
 def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser(prog="aib bench", description="Benchmark")
     add_common_args(parser)
@@ -111,6 +121,19 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         ),
     )
     parser.add_argument(
+        "--cache-ratio",
+        type=float,
+        default=0.0,
+        help=(
+            "Share a common token prefix across random requests so later "
+            "requests can hit the prefix cache. The prefix length is "
+            "int((--input-len - 1) * --cache-ratio) because a request can "
+            "cache at most prompt_len-1 tokens. Must be used with "
+            "--dataset random. A positive value primes this prefix once "
+            "before each measured run"
+        ),
+    )
+    parser.add_argument(
         "--tokenizer",
         type=str,
         help="Tokenizer name or path for ShareGPT; defaults to --model",
@@ -180,6 +203,23 @@ def validate_args(args: Namespace) -> None:
     random_range_ratio = getattr(args, "random_range_ratio", 1.0)
     if not 0.0 <= random_range_ratio <= 1.0:
         raise ValueError("--random-range-ratio must be between 0 and 1")
+
+    cache_ratio = getattr(args, "cache_ratio", 0.0)
+    if not 0.0 <= cache_ratio <= 1.0:
+        raise ValueError("--cache-ratio must be between 0 and 1")
+    if cache_ratio:
+        if getattr(args, "dataset", None) != "random":
+            raise ValueError("--cache-ratio must be used with --dataset random")
+        prefix_len = compute_shared_prefix_len(args.input_len, cache_ratio)
+        min_cacheable_len = max(int(args.input_len * random_range_ratio), 1) - 1
+        if prefix_len < 1:
+            raise ValueError("--cache-ratio is too small for --input-len")
+        if prefix_len > min_cacheable_len:
+            raise ValueError(
+                "--cache-ratio prefix length exceeds the minimum sampled input's "
+                "cacheable length; lower --cache-ratio or increase "
+                "--random-range-ratio"
+            )
 
     if getattr(args, "dataset", None) in ["random", "sharegpt"]:
         if args.num_requests is None:
