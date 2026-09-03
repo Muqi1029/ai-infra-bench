@@ -15,8 +15,14 @@ MIN_NAME_WIDTH = 60
 SHAPE_WIDTH = 24
 DTYPE_WIDTH = 20
 NUMEL_WIDTH = 16
-ROUTED_EXPERT_PATTERN = re.compile(r"\.mlp\.experts\.\d+\.")
-SHARED_EXPERT_MARKER = ".mlp.shared_experts."
+ROUTED_EXPERT_PATTERN = re.compile(r"\.(?:mlp|ffn)\.experts\.\d+\.")
+SHARED_EXPERT_PATTERN = re.compile(r"\.(?:mlp|ffn)\.shared_experts?\.")
+NGRAM_PLE_PATTERN = re.compile(r"(?:^|\.)ple\.")
+MTP_PATTERN = re.compile(r"(?:^|\.)mtp\.")
+VISION_PATTERN = re.compile(r"(?:^|\.)(?:visual|vision_model|vision_tower)\.")
+EMBEDDING_LM_HEAD_PATTERN = re.compile(
+    r"(?:^|\.)(?:embed|embed_tokens|word_embeddings|wte|head|lm_head)\."
+)
 
 
 @dataclass
@@ -24,50 +30,135 @@ class ParameterStats:
     total: int = 0
     routed_experts: int = 0
     shared_experts: int = 0
+    ngram_ple: int = 0
+    embedding_lm_head: int = 0
+    mtp: int = 0
+    mtp_routed_experts: int = 0
+    mtp_shared_experts: int = 0
+    vision: int = 0
 
 
-def update_parameter_stats(state_dict, stats, items=None):
+def update_parameter_stats(state_dict, stats, items=None, model_config=None):
     items = get_tensor_items(state_dict) if items is None else items
     for key, value in items:
         numel = value.numel() * (
-            2 if is_modelopt_nvfp4_weight(key, value, state_dict) else 1
+            2 if is_packed_fp4_weight(key, value, state_dict, model_config) else 1
         )
         stats.total += numel
-        if ROUTED_EXPERT_PATTERN.search(key):
+        if NGRAM_PLE_PATTERN.search(key):
+            stats.ngram_ple += numel
+        elif MTP_PATTERN.search(key):
+            stats.mtp += numel
+            if ROUTED_EXPERT_PATTERN.search(key):
+                stats.mtp_routed_experts += numel
+            elif SHARED_EXPERT_PATTERN.search(key):
+                stats.mtp_shared_experts += numel
+        elif VISION_PATTERN.search(key):
+            stats.vision += numel
+        elif EMBEDDING_LM_HEAD_PATTERN.search(key):
+            stats.embedding_lm_head += numel
+        elif ROUTED_EXPERT_PATTERN.search(key):
             stats.routed_experts += numel
-        elif SHARED_EXPERT_MARKER in key:
+        elif SHARED_EXPERT_PATTERN.search(key):
             stats.shared_experts += numel
 
 
-def activated_parameter_count(stats, config):
-    """Estimate parameters used per token by sparse MoE routing."""
-    if stats.routed_experts == 0:
-        return stats.total
-
+def moe_routing(config):
+    """Return the configured active and total routed-expert counts."""
     text_config = config.get("text_config", {})
     if isinstance(text_config, dict):
         config = text_config | config
     n_routed = config.get("n_routed_experts")
-    n_shared = config.get("n_shared_experts", 0)
+    if n_routed is None:
+        n_routed = config.get("num_experts")
     n_active_routed = config.get("num_experts_per_tok", 1)
     if (
         not isinstance(n_routed, int)
         or n_routed <= 0
-        or not isinstance(n_shared, int)
-        or n_shared < 0
         or not isinstance(n_active_routed, int)
         or n_active_routed < 0
         or n_active_routed > n_routed
     ):
         return None
 
-    return round(
-        stats.total
-        - stats.routed_experts
-        - stats.shared_experts
-        + stats.routed_experts * n_active_routed / n_routed
-        + (stats.shared_experts if n_shared else 0)
+    return n_active_routed, n_routed
+
+
+def moe_activated_parameter_count(total, routed_experts, config):
+    """Apply the configured MoE routing fraction to one parameter group."""
+    if routed_experts == 0:
+        return total
+
+    routing = moe_routing(config)
+    if routing is None:
+        return None
+    n_active_routed, n_routed = routing
+
+    return round(total - routed_experts + routed_experts * n_active_routed / n_routed)
+
+
+def format_routed_expert_activation_ratio(stats, config):
+    routed_experts = stats.routed_experts + stats.mtp_routed_experts
+    if routed_experts == 0:
+        return "N/A"
+
+    routing = moe_routing(config)
+    if routing is None:
+        return "N/A"
+    n_active_routed, n_routed = routing
+    return f"{n_active_routed} / {n_routed} ({n_active_routed / n_routed:.2%})"
+
+
+def activated_parameter_count(stats, config):
+    """Estimate activated parameters in the main language-model backbone.
+
+    N-gram/PLE tables, token embeddings, the output head, MTP, and vision are
+    reported separately. Shared experts remain part of the backbone total;
+    routed experts are reduced to the configured per-token routing fraction.
+    """
+    backbone_total = lm_backbone_parameter_count(stats)
+    return moe_activated_parameter_count(
+        backbone_total,
+        stats.routed_experts,
+        config,
     )
+
+
+def lm_backbone_parameter_count(stats):
+    return (
+        stats.total
+        - stats.ngram_ple
+        - stats.embedding_lm_head
+        - stats.mtp
+        - stats.vision
+    )
+
+
+def mtp_activated_parameter_count(stats, config):
+    """Estimate activation when optional MTP or DSpark weights are used.
+
+    DeepSeek DSpark stages use the ``mtp.<stage>.*`` checkpoint namespace, so
+    they are covered by the same weight-derived accounting as regular MTP.
+    """
+    return moe_activated_parameter_count(
+        stats.mtp,
+        stats.mtp_routed_experts,
+        config,
+    )
+
+
+def speculative_module_name(stats, config):
+    if stats.mtp == 0:
+        return "None detected"
+
+    text_config = config.get("text_config", {})
+    configs = [config, text_config] if isinstance(text_config, dict) else [config]
+    if any(
+        cfg.get("dspark_block_size") or cfg.get("dspark_target_layer_ids")
+        for cfg in configs
+    ):
+        return "DSpark"
+    return "MTP"
 
 
 def format_parameter_count(value):
@@ -118,7 +209,32 @@ def is_modelopt_nvfp4_weight(key, value, state_dict):
     )
 
 
-def tensor_details(key, value, state_dict):
+def is_configured_expert_fp4_weight(key, value, model_config):
+    """Detect packed expert FP4 weights declared by the model config."""
+    if not isinstance(model_config, dict):
+        return False
+
+    text_config = model_config.get("text_config", {})
+    if isinstance(text_config, dict):
+        model_config = text_config | model_config
+    expert_dtype = model_config.get("expert_dtype")
+    return (
+        isinstance(expert_dtype, str)
+        and expert_dtype.lower() == "fp4"
+        and value.dtype in (torch.int8, torch.uint8)
+        and value.ndim > 0
+        and key.endswith(".weight")
+        and ROUTED_EXPERT_PATTERN.search(key) is not None
+    )
+
+
+def is_packed_fp4_weight(key, value, state_dict, model_config=None):
+    return is_modelopt_nvfp4_weight(
+        key, value, state_dict
+    ) or is_configured_expert_fp4_weight(key, value, model_config)
+
+
+def tensor_details(key, value, state_dict, model_config=None):
     if value.ndim == 0:
         return f"value={format_scalar(value)}; scalar contains 1 element"
 
@@ -133,6 +249,14 @@ def tensor_details(key, value, state_dict):
             f"logical_shape={tuple(logical_shape)}"
         )
 
+    if is_configured_expert_fp4_weight(key, value, model_config):
+        logical_shape = list(value.shape)
+        logical_shape[-1] *= 2
+        return (
+            "Packed expert FP4: 2 FP4 values/int8; "
+            f"logical_shape={tuple(logical_shape)}"
+        )
+
     return ""
 
 
@@ -141,6 +265,7 @@ def print_weight_summary(
     name_filter=None,
     path=None,
     parameter_stats=None,
+    model_config=None,
 ):
     items = get_tensor_items(state_dict)
     displayed_items = [
@@ -148,7 +273,7 @@ def print_weight_summary(
     ]
     total_bytes = sum(value.numel() * value.element_size() for _, value in items)
     if parameter_stats is not None:
-        update_parameter_stats(state_dict, parameter_stats, items)
+        update_parameter_stats(state_dict, parameter_stats, items, model_config)
 
     # A name filter is often used across sharded checkpoints. Keep shards with
     # no matching tensors out of the per-file report while retaining their
@@ -160,7 +285,7 @@ def print_weight_summary(
         print(f"\n🔍 Loading weights from: {path}")
 
     rows = [
-        (key, value, tensor_details(key, value, state_dict))
+        (key, value, tensor_details(key, value, state_dict, model_config))
         for key, value in displayed_items
     ]
     name_width = max(
@@ -212,6 +337,7 @@ def inspect_weight_files(
     loader,
     name_filter=None,
     parameter_stats=None,
+    model_config=None,
 ):
     total_tensors = 0
     total_bytes = 0
@@ -223,6 +349,7 @@ def inspect_weight_files(
             name_filter,
             path,
             parameter_stats,
+            model_config,
         )
         total_tensors += num_tensors
         total_bytes += file_bytes
@@ -258,28 +385,97 @@ def download_from_hub(
     if max_checkpoints != -1:
         weight_files = weight_files[:max_checkpoints]
 
+    config = load_model_config(dir_path)
     parameter_stats = ParameterStats()
     total_tensors, total_bytes = inspect_weight_files(
         weight_files,
         loader,
         name_filter,
         parameter_stats,
+        config,
     )
 
-    config = load_model_config(dir_path)
-    summary_rows = [
+    model_rows = [
         ["Metric", "Value"],
         ["Total parameters", format_parameter_count(parameter_stats.total)],
         [
-            "Activated parameters",
+            "LM backbone parameters",
+            format_parameter_count(lm_backbone_parameter_count(parameter_stats)),
+        ],
+        [
+            "Activated parameters (LM backbone)",
             format_parameter_count(activated_parameter_count(parameter_stats, config)),
         ],
+        [
+            "N-gram/PLE parameters",
+            format_parameter_count(parameter_stats.ngram_ple),
+        ],
+        [
+            "Embedding/LM head parameters",
+            format_parameter_count(parameter_stats.embedding_lm_head),
+        ],
+        ["Vision parameters", format_parameter_count(parameter_stats.vision)],
+    ]
+    moe_rows = [
+        ["Metric", "Value"],
+        [
+            "Routed expert parameters (LM backbone)",
+            format_parameter_count(parameter_stats.routed_experts),
+        ],
+        [
+            "Routed expert parameters (speculative)",
+            format_parameter_count(parameter_stats.mtp_routed_experts),
+        ],
+        [
+            "Routed expert parameters (total)",
+            format_parameter_count(
+                parameter_stats.routed_experts + parameter_stats.mtp_routed_experts
+            ),
+        ],
+        [
+            "Routed expert activation ratio",
+            format_routed_expert_activation_ratio(parameter_stats, config),
+        ],
+        [
+            "Shared expert parameters (LM backbone)",
+            format_parameter_count(parameter_stats.shared_experts),
+        ],
+        [
+            "Shared expert parameters (speculative)",
+            format_parameter_count(parameter_stats.mtp_shared_experts),
+        ],
+        [
+            "Shared expert parameters (total)",
+            format_parameter_count(
+                parameter_stats.shared_experts + parameter_stats.mtp_shared_experts
+            ),
+        ],
+    ]
+    speculative_rows = [
+        ["Metric", "Value"],
+        ["Module", speculative_module_name(parameter_stats, config)],
+        [
+            "Parameters",
+            format_parameter_count(parameter_stats.mtp),
+        ],
+        [
+            "Activated parameters (when enabled)",
+            format_parameter_count(
+                mtp_activated_parameter_count(parameter_stats, config)
+            ),
+        ],
+    ]
+    checkpoint_rows = [
+        ["Metric", "Value"],
         ["Num of weight files", f"{len(weight_files):,}"],
         ["Num of tensors", f"{total_tensors:,}"],
         ["Total storage bytes", f"{total_bytes:,}"],
         ["Total storage size", f"{total_bytes / 1024**3:.2f} GiB"],
     ]
-    print_table("Weight Summary", summary_rows)
+    print_table("Model Parameters", model_rows)
+    print_table("MoE Parameters", moe_rows)
+    print_table("Speculative Parameters", speculative_rows)
+    print_table("Checkpoint Summary", checkpoint_rows)
 
 
 def parse_args(argv):

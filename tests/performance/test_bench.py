@@ -12,6 +12,7 @@ from ai_infra_bench.performance.bench import (
     compute_random_lens,
     generate_random_requests,
     get_request_url,
+    load_requests,
     read_requests_with_ts,
     run_requests,
     tool_filter_request,
@@ -119,6 +120,55 @@ def test_gpqa_dataset_arguments_parse():
     args = bench_utils.parse_args(["--dataset", "gpqa"])
     validate_args(args)
     assert args.dataset == "gpqa"
+
+
+def test_parse_args_requires_dataset_or_payload_path():
+    with pytest.raises(SystemExit):
+        bench_utils.parse_args([])
+
+
+def test_validate_args_requires_dataset_or_payload_path():
+    with pytest.raises(
+        ValueError, match="one of --dataset or --payload-regex-path is required"
+    ):
+        validate_args(
+            Namespace(
+                max_concurrency=1,
+                request_rate=float("inf"),
+                request_timeout=30,
+                num_warmup_requests=0,
+                num_requests=None,
+                metric_path=None,
+                dump_path=None,
+                input_len=1,
+                output_len=1,
+                random_range_ratio=1.0,
+                cache_ratio=0.0,
+            )
+        )
+
+
+def test_load_requests_requires_dataset_or_payload_path():
+    with pytest.raises(
+        ValueError, match="one of --dataset or --payload-regex-path is required"
+    ):
+        load_requests(Namespace(filter_constrained_grammar_requests=False))
+
+
+def test_load_requests_reads_payload_regex_path(tmp_path):
+    path = tmp_path / "payloads.jsonl"
+    path.write_text(
+        json.dumps({"messages": [{"role": "user", "content": "hi"}]}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert load_requests(
+        Namespace(
+            payload_regex_path=str(path),
+            with_ts=False,
+            filter_constrained_grammar_requests=False,
+        )
+    ) == [{"messages": [{"role": "user", "content": "hi"}]}]
 
 
 def test_generate_random_requests_uses_requested_lengths():

@@ -99,7 +99,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
 
     # dataset
-    mutex_data_group = parser.add_mutually_exclusive_group()
+    mutex_data_group = parser.add_mutually_exclusive_group(required=True)
     mutex_data_group.add_argument(
         "--dataset",
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
@@ -229,6 +229,11 @@ def validate_args(args: Namespace) -> None:
                 "cacheable length; lower --cache-ratio or increase "
                 "--random-range-ratio"
             )
+
+    if not getattr(args, "dataset", None) and not getattr(
+        args, "payload_regex_path", None
+    ):
+        raise ValueError("one of --dataset or --payload-regex-path is required")
 
     if getattr(args, "dataset", None) in ["random", "sharegpt"]:
         if args.num_requests is None:

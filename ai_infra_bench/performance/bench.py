@@ -240,6 +240,8 @@ def load_requests(args: Namespace) -> List[Dict]:
                 f"Prepared {len(requests)} ShareGPT requests with "
                 f"input_len={args.input_len}, output_len={args.output_len}"
             )
+    else:
+        raise ValueError("one of --dataset or --payload-regex-path is required")
 
     if args.filter_constrained_grammar_requests:
         filtered_requests = [
