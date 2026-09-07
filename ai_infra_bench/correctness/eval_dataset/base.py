@@ -23,6 +23,17 @@ TOKEN_METRICS = (
     ("prompt_tokens", "Prompt tokens"),
     ("completion_tokens", "Completion tokens"),
 )
+RESPONSE_BODY_LOG_LIMIT = 2000
+
+
+def _truncate_response_body(response_text: str) -> str:
+    """Keep diagnostic logs useful without dumping an unbounded response."""
+    body = response_text.strip()
+    if not body:
+        return "<empty>"
+    if len(body) > RESPONSE_BODY_LOG_LIMIT:
+        return f"{body[:RESPONSE_BODY_LOG_LIMIT]}... <truncated>"
+    return body
 
 
 class TokenUsageStats(TypedDict):
@@ -71,20 +82,57 @@ class EvalRuntime:
                 async with self.session.post(
                     self.endpoint_url, json=payload
                 ) as response:
-                    body = await response.json(content_type=None)
+                    response_text = await response.text()
+                    try:
+                        body = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        body = None
+
                     if response.status != 200:
                         logger.error(
-                            "HTTP %s from %s: %s",
+                            "Request failed for eval=%s: HTTP %s %s from %s; "
+                            "content-type=%s; response body: %s",
+                            eval.name,
                             response.status,
+                            getattr(response, "reason", ""),
                             self.endpoint_url,
-                            body,
+                            getattr(response, "headers", {}).get(
+                                "Content-Type", "<unknown>"
+                            ),
+                            _truncate_response_body(response_text),
                         )
+                        if response.status in (401, 403):
+                            logger.error(
+                                "Authentication failed for eval=%s (HTTP %s). "
+                                "Check --api-key and the endpoint's expected "
+                                "Authorization scheme; the API key is not logged.",
+                                eval.name,
+                                response.status,
+                            )
                         eval.add_failed_result(body, payload)
+                        return
+
+                    if body is None:
+                        logger.error(
+                            "Request failed for eval=%s: HTTP 200 from %s returned "
+                            "invalid JSON; content-type=%s; response body: %s",
+                            eval.name,
+                            self.endpoint_url,
+                            getattr(response, "headers", {}).get(
+                                "Content-Type", "<unknown>"
+                            ),
+                            _truncate_response_body(response_text),
+                        )
+                        eval.add_failed_result(None, payload)
                         return
 
                     eval.eval(body, answer, payload)
             except Exception:
-                logger.exception("Request failed for eval=%s", eval.name)
+                logger.exception(
+                    "Request failed for eval=%s while calling %s",
+                    eval.name,
+                    self.endpoint_url,
+                )
                 eval.add_failed_result(None, payload)
             finally:
                 pbar.update(1)
