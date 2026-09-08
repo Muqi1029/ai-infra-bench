@@ -377,6 +377,8 @@ def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
             "8",
             "--num-requests",
             "1",
+            "--num-warmup-requests",
+            "2",
             "--cache-ratio",
             "0.5",
         ]
@@ -388,7 +390,10 @@ def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
         ("flush", None),
         (
             "run",
-            [{"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True}],
+            [
+                {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True},
+                {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True},
+            ],
         ),
         ("run", requests),
     ]
@@ -423,7 +428,7 @@ def test_regular_warmup_flushes_before_formal_run(monkeypatch):
     ]
 
 
-def test_disable_flush_cache_warms_once_across_concurrency_sweeps(monkeypatch):
+def test_disable_flush_cache_skips_preparation_across_concurrency_sweeps(monkeypatch):
     requests = [{"prompt": [index], "max_tokens": 1} for index in range(5)]
     events = _patch_benchmark_run(monkeypatch, requests)
     args = bench_utils.parse_args(
@@ -449,12 +454,9 @@ def test_disable_flush_cache_warms_once_across_concurrency_sweeps(monkeypatch):
 
     asyncio.run(bench.run_benchmark(args))
 
-    warmup = requests[:2]
-    formal = requests[2:]
     assert events == [
-        ("run", warmup),
-        ("run", formal),
-        ("run", formal),
+        ("run", requests),
+        ("run", requests),
     ]
 
 
@@ -473,6 +475,8 @@ def test_cache_ratio_reprimes_prefix_on_each_flushed_concurrency(monkeypatch):
             "8",
             "--num-requests",
             "1",
+            "--num-warmup-requests",
+            "2",
             "--cache-ratio",
             "0.5",
             "--max-concurrency",
@@ -483,13 +487,16 @@ def test_cache_ratio_reprimes_prefix_on_each_flushed_concurrency(monkeypatch):
 
     asyncio.run(bench.run_benchmark(args))
 
-    prefix = {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True}
+    prefixes = [
+        {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True},
+        {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True},
+    ]
     assert events == [
         ("flush", None),
-        ("run", [prefix]),
+        ("run", prefixes),
         ("run", requests),
         ("flush", None),
-        ("run", [prefix]),
+        ("run", prefixes),
         ("run", requests),
     ]
 

@@ -17,37 +17,22 @@ from ai_infra_bench.utils.req import add_common_args, parse_override_payload
 logger = logging.getLogger(__name__)
 
 
-def prepare_warmup_requests(
-    requests: List[Dict], args: Namespace
-) -> tuple[List[Dict], List[Dict]]:
-    """Split payloads into warmup and measured requests.
-
-    ``--cache-ratio`` primes a single shared-prefix request, then measures every
-    payload so later requests can hit that prefix. Otherwise warmup is the first
-    ``--num-warmup-requests`` payloads. With ``--disable-flush-cache`` those
-    warmup payloads are excluded from the measured set so they are not counted
-    twice; without the flag they are flushed and then included in the measured
-    run.
-    """
+def prepare_warmup_requests(requests: List[Dict], args: Namespace) -> List[Dict]:
+    """Build the warmup payloads requested by the benchmark configuration."""
     cache_ratio = getattr(args, "cache_ratio", 0.0)
     prefix_len = compute_shared_prefix_len(getattr(args, "input_len", 0), cache_ratio)
     if prefix_len and requests:
-        warmup_requests = [
+        return [
             {
                 "prompt": requests[0]["prompt"][:prefix_len],
                 "max_tokens": 1,
                 "ignore_eos": True,
             }
+            for _ in range(args.num_warmup_requests)
         ]
-        return warmup_requests, requests
 
     warmup_requests = requests[: args.num_warmup_requests]
-    formal_requests = (
-        requests
-        if not getattr(args, "disable_flush_cache", False)
-        else requests[args.num_warmup_requests :]
-    )
-    return warmup_requests, formal_requests
+    return warmup_requests
 
 
 def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int]:

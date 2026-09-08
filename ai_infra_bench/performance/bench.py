@@ -264,36 +264,34 @@ async def prepare_benchmark_run(
     args: Namespace,
 ) -> None:
     """Warm the runtime and leave KV cache ready for the measured run."""
+    if args.disable_flush_cache or not warmup_requests:
+        return
+
     has_shared_prefix = prefix_len > 0
-    flush_cache_enabled = not args.disable_flush_cache
-    if has_shared_prefix and flush_cache_enabled:
+
+    if not has_shared_prefix and warmed_up:
+        return
+
+    if has_shared_prefix:
         # Prefix priming must survive into the measured run.
         await flush_cache(session, flush_cache_endpoint)
+        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
+    else:
+        logger.info(f"Warming up {len(warmup_requests)} requests")
 
-    # Re-prime a shared prefix only after a flush. Unique random
-    # warmup prompts must not run again before a --disable-flush-cache
-    # replay: they would evict the KV the second measured run should hit.
-    reprime_prefix = has_shared_prefix and flush_cache_enabled
+    with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
+        await run_requests(
+            session,
+            request_url,
+            warmup_requests,
+            args.model,
+            args.override_payload,
+            semaphore=None,  # not set concurrency during warmup stage
+            pbar=pbar,
+        )
+    logger.info("Warming up done")
 
-    should_warmup = (not warmed_up) or reprime_prefix
-    if warmup_requests and should_warmup:
-        if prefix_len:
-            logger.info(f"Warming up shared prefix of {prefix_len} tokens")
-        else:
-            logger.info(f"Warming up {len(warmup_requests)} requests")
-        with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
-            await run_requests(
-                session,
-                request_url,
-                warmup_requests,
-                args.model,
-                args.override_payload,
-                semaphore=None,  # not set concurrency during warmup stage
-                pbar=pbar,
-            )
-        logger.info("Warming up done")
-
-    if not has_shared_prefix and flush_cache_enabled:
+    if not has_shared_prefix:
         # Ordinary warmups must not affect measured KV-cache hits.
         await flush_cache(session, flush_cache_endpoint)
 
@@ -357,12 +355,10 @@ async def run_benchmark(args: Namespace) -> None:
 
     cache_ratio = getattr(args, "cache_ratio", 0.0)
     prefix_len = compute_shared_prefix_len(args.input_len, cache_ratio)
-    warmup_requests, formal_requests = prepare_warmup_requests(requests, args)
-    if not formal_requests:
-        logger.warning(
-            "No measured requests remain after warmup; "
-            "increase --num-requests or lower --num-warmup-requests"
-        )
+
+    # prepare warmup_requests & formal_requests
+    warmup_requests = prepare_warmup_requests(requests, args)
+    formal_requests = requests
 
     warmed_up = False
     for max_concurrency in args.max_concurrency:
