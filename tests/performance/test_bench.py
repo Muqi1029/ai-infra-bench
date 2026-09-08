@@ -394,6 +394,35 @@ def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
     ]
 
 
+def test_regular_warmup_flushes_before_formal_run(monkeypatch):
+    requests = [{"prompt": [index], "max_tokens": 1} for index in range(3)]
+    events = _patch_benchmark_run(monkeypatch, requests)
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "1",
+            "--output-len",
+            "1",
+            "--num-requests",
+            "3",
+            "--num-warmup-requests",
+            "1",
+        ]
+    )
+
+    asyncio.run(bench.run_benchmark(args))
+
+    assert events == [
+        ("run", requests[:1]),
+        ("flush", None),
+        ("run", requests),
+    ]
+
+
 def test_disable_flush_cache_warms_once_across_concurrency_sweeps(monkeypatch):
     requests = [{"prompt": [index], "max_tokens": 1} for index in range(5)]
     events = _patch_benchmark_run(monkeypatch, requests)

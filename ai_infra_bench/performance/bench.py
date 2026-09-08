@@ -254,6 +254,50 @@ def load_requests(args: Namespace) -> List[Dict]:
     return requests
 
 
+async def prepare_benchmark_run(
+    session,
+    warmup_requests: List,
+    prefix_len: int,
+    warmed_up: bool,
+    request_url: str,
+    flush_cache_endpoint: str,
+    args: Namespace,
+) -> None:
+    """Warm the runtime and leave KV cache ready for the measured run."""
+    has_shared_prefix = prefix_len > 0
+    flush_cache_enabled = not args.disable_flush_cache
+    if has_shared_prefix and flush_cache_enabled:
+        # Prefix priming must survive into the measured run.
+        await flush_cache(session, flush_cache_endpoint)
+
+    # Re-prime a shared prefix only after a flush. Unique random
+    # warmup prompts must not run again before a --disable-flush-cache
+    # replay: they would evict the KV the second measured run should hit.
+    reprime_prefix = has_shared_prefix and flush_cache_enabled
+
+    should_warmup = (not warmed_up) or reprime_prefix
+    if warmup_requests and should_warmup:
+        if prefix_len:
+            logger.info(f"Warming up shared prefix of {prefix_len} tokens")
+        else:
+            logger.info(f"Warming up {len(warmup_requests)} requests")
+        with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
+            await run_requests(
+                session,
+                request_url,
+                warmup_requests,
+                args.model,
+                args.override_payload,
+                semaphore=None,  # not set concurrency during warmup stage
+                pbar=pbar,
+            )
+        logger.info("Warming up done")
+
+    if not has_shared_prefix and flush_cache_enabled:
+        # Ordinary warmups must not affect measured KV-cache hits.
+        await flush_cache(session, flush_cache_endpoint)
+
+
 async def run_requests(
     session,
     request_url: str,
@@ -327,34 +371,16 @@ async def run_benchmark(args: Namespace) -> None:
             async with _create_bench_client_session(
                 max_concurrency, args.api_key, args.request_timeout
             ) as session:
-                # Re-prime a shared prefix only after a flush. Unique random
-                # warmup prompts must not run again before a --disable-flush-cache
-                # replay: they would evict the KV the second measured run should hit.
-                reprime_prefix = bool(prefix_len) and not args.disable_flush_cache
-                if reprime_prefix:
-                    await flush_cache(session, flush_cache_endpoint)
-
-                should_warmup = (not warmed_up) or reprime_prefix
-                if warmup_requests and should_warmup:
-                    if prefix_len:
-                        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
-                    else:
-                        logger.info(f"Warming up {len(warmup_requests)} requests")
-                    with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
-                        await run_requests(
-                            session,
-                            request_url,
-                            warmup_requests,
-                            args.model,
-                            args.override_payload,
-                            semaphore=None,  # not set concurrency during warmup stage
-                            pbar=pbar,
-                        )
-                    logger.info("Warming up done")
-                    warmed_up = True
-
-                if not prefix_len and not args.disable_flush_cache:
-                    await flush_cache(session, flush_cache_endpoint)
+                await prepare_benchmark_run(
+                    session,
+                    warmup_requests=warmup_requests,
+                    prefix_len=prefix_len,
+                    warmed_up=warmed_up,
+                    request_url=request_url,
+                    flush_cache_endpoint=flush_cache_endpoint,
+                    args=args,
+                )
+                warmed_up = True
 
                 # formal run
                 with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:

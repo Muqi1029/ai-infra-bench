@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum, auto
+from enum import Enum, auto
 from typing import Any, Dict, List, Mapping
 
 import numpy as np
@@ -25,11 +25,14 @@ class TextType(Enum):
     TOOL_CALLS = auto()
 
 
-class FinishReason(StrEnum):
+class FinishReason(str, Enum):
     STOP = "stop"
     LENGTH = "length"
     TOOL_CALLS = "tool_calls"
     ABORT = "abort"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @dataclass
