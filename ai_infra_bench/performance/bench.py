@@ -19,6 +19,7 @@ from ai_infra_bench.performance.bench_utils import (
     get_request,
     handle_outputs,
     parse_args,
+    prepare_warmup_requests,
     set_seed,
     validate_args,
 )
@@ -312,34 +313,29 @@ async def run_benchmark(args: Namespace) -> None:
 
     cache_ratio = getattr(args, "cache_ratio", 0.0)
     prefix_len = compute_shared_prefix_len(args.input_len, cache_ratio)
-    warmup_requests = (
-        [
-            {
-                "prompt": requests[0]["prompt"][:prefix_len],
-                "max_tokens": 1,
-                "ignore_eos": True,
-            }
-        ]
-        if prefix_len
-        else requests[: args.num_warmup_requests]
-    )
-    formal_requests = (
-        requests
-        if prefix_len or not args.disable_flush_cache
-        else requests[args.num_warmup_requests :]
-    )
+    warmup_requests, formal_requests = prepare_warmup_requests(requests, args)
+    if not formal_requests:
+        logger.warning(
+            "No measured requests remain after warmup; "
+            "increase --num-requests or lower --num-warmup-requests"
+        )
 
+    warmed_up = False
     for max_concurrency in args.max_concurrency:
         for _ in range(args.repeat):
             semaphore = asyncio.Semaphore(max_concurrency)
             async with _create_bench_client_session(
                 max_concurrency, args.api_key, args.request_timeout
             ) as session:
-                # Prime the shared prefix after a flush so measured requests hit.
-                if prefix_len and not args.disable_flush_cache:
+                # Re-prime a shared prefix only after a flush. Unique random
+                # warmup prompts must not run again before a --disable-flush-cache
+                # replay: they would evict the KV the second measured run should hit.
+                reprime_prefix = bool(prefix_len) and not args.disable_flush_cache
+                if reprime_prefix:
                     await flush_cache(session, flush_cache_endpoint)
 
-                if warmup_requests:
+                should_warmup = (not warmed_up) or reprime_prefix
+                if warmup_requests and should_warmup:
                     if prefix_len:
                         logger.info(f"Warming up shared prefix of {prefix_len} tokens")
                     else:
@@ -355,6 +351,7 @@ async def run_benchmark(args: Namespace) -> None:
                             pbar=pbar,
                         )
                     logger.info("Warming up done")
+                    warmed_up = True
 
                 if not prefix_len and not args.disable_flush_cache:
                     await flush_cache(session, flush_cache_endpoint)

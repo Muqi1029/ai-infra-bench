@@ -161,14 +161,23 @@ class OutputMetric:
             *SPEC_METRIC_KEYS,
         ):
             value = metrics.get(field_name)
-            if value is not None:
+            if value is None:
+                continue
+            # Streaming chunks often repeat usage with cached_tokens=0 after
+            # prefill. Keep the high-water mark so Global cache ratio is not
+            # wiped by a later empty/zero chunk.
+            if field_name == "cached_tokens":
+                self.cached_tokens = max(self.cached_tokens, value)
+            else:
                 setattr(self, field_name, value)
 
         cached_details = metrics.get("cached_tokens_details") or {}
-        self.cached_tokens_device = cached_details.get(
-            "device", self.cached_tokens_device
-        )
-        self.cached_tokens_host = cached_details.get("host", self.cached_tokens_host)
+        device = cached_details.get("device")
+        host = cached_details.get("host")
+        if device is not None:
+            self.cached_tokens_device = max(self.cached_tokens_device, device)
+        if host is not None:
+            self.cached_tokens_host = max(self.cached_tokens_host, host)
         if not self.cached_tokens:
             self.cached_tokens = self.cached_tokens_device + self.cached_tokens_host
 

@@ -339,10 +339,7 @@ def test_generate_random_requests_shares_configured_prefix(
         assert payload["prompt"][:prefix_len] == prefix
 
 
-def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
-    requests = [
-        {"prompt": [1, 2, 3, 4, 5, 6, 7, 8], "max_tokens": 2},
-    ]
+def _patch_benchmark_run(monkeypatch, requests):
     events = []
 
     @asynccontextmanager
@@ -362,7 +359,14 @@ def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
     monkeypatch.setattr(bench, "flush_cache", fake_flush_cache)
     monkeypatch.setattr(bench, "run_requests", fake_run_requests)
     monkeypatch.setattr(bench, "handle_outputs", lambda **_kwargs: None)
+    return events
 
+
+def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
+    requests = [
+        {"prompt": [1, 2, 3, 4, 5, 6, 7, 8], "max_tokens": 2},
+    ]
+    events = _patch_benchmark_run(monkeypatch, requests)
     args = bench_utils.parse_args(
         [
             "--base-url",
@@ -386,6 +390,77 @@ def test_cache_ratio_flushes_then_primes_exact_prefix(monkeypatch):
             "run",
             [{"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True}],
         ),
+        ("run", requests),
+    ]
+
+
+def test_disable_flush_cache_warms_once_across_concurrency_sweeps(monkeypatch):
+    requests = [{"prompt": [index], "max_tokens": 1} for index in range(5)]
+    events = _patch_benchmark_run(monkeypatch, requests)
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "1",
+            "--output-len",
+            "1",
+            "--num-requests",
+            "5",
+            "--num-warmup-requests",
+            "2",
+            "--max-concurrency",
+            "2",
+            "2",
+            "--disable-flush-cache",
+        ]
+    )
+
+    asyncio.run(bench.run_benchmark(args))
+
+    warmup = requests[:2]
+    formal = requests[2:]
+    assert events == [
+        ("run", warmup),
+        ("run", formal),
+        ("run", formal),
+    ]
+
+
+def test_cache_ratio_reprimes_prefix_on_each_flushed_concurrency(monkeypatch):
+    requests = [
+        {"prompt": [1, 2, 3, 4, 5, 6, 7, 8], "max_tokens": 2},
+    ]
+    events = _patch_benchmark_run(monkeypatch, requests)
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "8",
+            "--num-requests",
+            "1",
+            "--cache-ratio",
+            "0.5",
+            "--max-concurrency",
+            "1",
+            "1",
+        ]
+    )
+
+    asyncio.run(bench.run_benchmark(args))
+
+    prefix = {"prompt": [1, 2, 3], "max_tokens": 1, "ignore_eos": True}
+    assert events == [
+        ("flush", None),
+        ("run", [prefix]),
+        ("run", requests),
+        ("flush", None),
+        ("run", [prefix]),
         ("run", requests),
     ]
 
@@ -614,6 +689,35 @@ def test_output_metric_uses_shared_response_metric_extraction():
     assert output.cached_tokens_host == 1
     assert output.spec_num_proposed_drafts == 5
     assert output.spec_correct_drafts_histogram == [1, 2]
+    assert output.spec_num_proposed_drafts == 5
+    assert output.spec_correct_drafts_histogram == [1, 2]
+    assert output.spec_num_proposed_drafts == 5
+    assert output.spec_correct_drafts_histogram == [1, 2]
+
+
+def test_output_metric_keeps_cached_tokens_across_zero_stream_chunks():
+    output = OutputMetric()
+    output.update_response_metrics(
+        {
+            "usage": {"prompt_tokens_details": {"cached_tokens": 8}},
+            "sglext": {"cached_tokens_details": {"device": 8, "host": 0}},
+        }
+    )
+    output.update_response_metrics(
+        {
+            "usage": {
+                "prompt_tokens": 9,
+                "completion_tokens": 2,
+                "prompt_tokens_details": {"cached_tokens": 0},
+            },
+            "sglext": {"cached_tokens_details": {"device": 0, "host": 0}},
+        }
+    )
+
+    assert output.cached_tokens == 8
+    assert output.cached_tokens_device == 8
+    assert output.prompt_tokens == 9
+    assert output.completion_tokens == 2
 
 
 def test_handle_outputs_supports_zero_cached_tokens():
