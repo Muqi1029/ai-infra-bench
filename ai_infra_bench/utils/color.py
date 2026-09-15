@@ -20,7 +20,6 @@ COLOR_TO_ANSI = {
 }
 LEVEL_TO_COLOR = {
     logging.DEBUG: Color.LIGHT_CYAN,
-    logging.INFO: Color.LIGHT_GREEN,
     logging.WARNING: Color.LIGHT_YELLOW,
     logging.ERROR: Color.RED,
     logging.CRITICAL: Color.RED,
