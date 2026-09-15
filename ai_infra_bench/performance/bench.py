@@ -401,6 +401,7 @@ async def run_benchmark(args: Namespace) -> None:
                 request_rate=args.request_rate,
                 dump_path=args.dump_path,
                 dump_content=args.dump_content,
+                dump_finish_reason_length=args.dump_finish_reason_length,
                 metric_path=args.metric_path,
                 label=args.label,
             )

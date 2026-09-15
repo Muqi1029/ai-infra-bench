@@ -22,6 +22,7 @@ def prepare_warmup_requests(requests: List[Dict], args: Namespace) -> List[Dict]
     cache_ratio = getattr(args, "cache_ratio", 0.0)
     prefix_len = compute_shared_prefix_len(getattr(args, "input_len", 0), cache_ratio)
     if prefix_len and requests:
+        # special case for cache-ratio warmup
         return [
             {
                 "prompt": requests[0]["prompt"][:prefix_len],
@@ -65,6 +66,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser(prog="aib bench", description="Benchmark")
     add_common_args(parser)
 
+    # for dump
     parser.add_argument("--dump-path", help="The dump path, jsonl format")
     parser.add_argument(
         "--dump-content",
@@ -72,7 +74,13 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         choices=["all", "msg"],
         help="The dump Content, jsonl format",
     )
+    parser.add_argument(
+        "--dump-finish-reason-length",
+        action="store_true",
+        help="Dump requests whose finish reason is length",
+    )
 
+    # for metrics record
     parser.add_argument(
         "--metric-path",
         type=str,
@@ -123,6 +131,12 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
         help="use the dataset to benchmark",
     )
+    mutex_data_group.add_argument(
+        "--payload-regex-path",
+        type=str,
+        help="The path of payloads requests",
+    )
+
     # for random dataset
     parser.add_argument(
         "--input-len",
@@ -163,11 +177,6 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         type=str,
         help="Tokenizer name or path for ShareGPT; defaults to --model",
     )
-    mutex_data_group.add_argument(
-        "--payload-regex-path",
-        type=str,
-        help="The path of payloads requests",
-    )
 
     parser.add_argument(
         "--repeat",
@@ -176,11 +185,19 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         help="Repeat Count for each concurrency benchmark",
     )
 
-    parser.add_argument("--label", help="Label used for discribe this benchmark")
+    parser.add_argument(
+        "--label", help="Label used for discribe this benchmark, stored in metric files"
+    )
 
-    parser.add_argument("--with-ts", action="store_true")
+    parser.add_argument(
+        "--with-ts", action="store_true", help="For payload data with timestamps"
+    )
 
-    parser.add_argument("--debug", action="store_true", help="Debug mode")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Debug mode: set num-requests to 10 and num-warmup-requests to 3",
+    )
 
     parser.add_argument(
         "--disable-flush-cache",
@@ -227,6 +244,7 @@ def validate_args(args: Namespace) -> None:
         raise ValueError("--input-len must be >= 1")
     if args.output_len < 0:
         raise ValueError("--output-len must be >= 0")
+
     random_range_ratio = getattr(args, "random_range_ratio", 1.0)
     if not 0.0 <= random_range_ratio <= 1.0:
         raise ValueError("--random-range-ratio must be between 0 and 1")
@@ -248,18 +266,16 @@ def validate_args(args: Namespace) -> None:
                 "--random-range-ratio"
             )
 
-    if not getattr(args, "dataset", None) and not getattr(
-        args, "payload_regex_path", None
-    ):
-        raise ValueError("one of --dataset or --payload-regex-path is required")
-
-    if getattr(args, "dataset", None) in ["random", "sharegpt"]:
+    # validate dataset
+    dataset = getattr(args, "dataset", None)
+    if dataset in ["random", "sharegpt"]:
         if args.num_requests is None:
-            raise ValueError(
-                "--num-requests must be provided if using random or sharegpt dataset"
+            args.num_requests = 100
+            logger.warning(
+                f"--num-requests is not provided, set to {args.num_requests}"
             )
 
-    if getattr(args, "dataset", None) == "sharegpt":
+    if dataset == "sharegpt":
         if not getattr(args, "tokenizer", None) and not getattr(args, "model", None):
             raise ValueError(
                 "--tokenizer or --model must be provided when setting ShareGPT lengths"
@@ -267,17 +283,20 @@ def validate_args(args: Namespace) -> None:
 
 
 def maybe_dump_outputs(
-    outputs: List[OutputMetric], dump_path: str | None, dump_content: str
+    outputs: List[OutputMetric],
+    dump_path: str | None,
+    dump_content: str,
+    dump_finish_reason_length: bool,
 ) -> None:
     if not dump_path:
         return
-    if not dump_path.lower().endswith(".jsonl"):
-        dump_path = f"{dump_path}.jsonl"
-    dump_content = dump_content or "all"
-    if dump_content not in {"all", "msg"}:
-        raise ValueError("--dump-content must be all or msg")
 
-    logger.info(f"Dumping all {len(outputs)} outputs to {dump_path}")
+    additional_info = ""
+    if dump_finish_reason_length:
+        additional_info = "(finish_reason=length)"
+        outputs = [o for o in outputs if o.finish_reason == "length"]
+
+    logger.info(f"Dumping all {len(outputs)} outputs{additional_info} to {dump_path}")
     with open(dump_path, "w", encoding="utf-8") as f:
         for output in outputs:
             if dump_content == "all":
@@ -386,11 +405,12 @@ def handle_outputs(
     request_rate: float,
     dump_path: str | None = None,
     dump_content: str = "all",
+    dump_finish_reason_length: bool = False,
     metric_path: str | None = None,
     label: str | None = None,
     benchmark_mode: bool = True,
 ) -> Dict:
-    maybe_dump_outputs(outputs, dump_path, dump_content)
+    maybe_dump_outputs(outputs, dump_path, dump_content, dump_finish_reason_length)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     label = label or ""

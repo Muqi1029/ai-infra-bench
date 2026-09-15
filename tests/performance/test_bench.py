@@ -127,27 +127,6 @@ def test_parse_args_requires_dataset_or_payload_path():
         bench_utils.parse_args([])
 
 
-def test_validate_args_requires_dataset_or_payload_path():
-    with pytest.raises(
-        ValueError, match="one of --dataset or --payload-regex-path is required"
-    ):
-        validate_args(
-            Namespace(
-                max_concurrency=1,
-                request_rate=float("inf"),
-                request_timeout=30,
-                num_warmup_requests=0,
-                num_requests=None,
-                metric_path=None,
-                dump_path=None,
-                input_len=1,
-                output_len=1,
-                random_range_ratio=1.0,
-                cache_ratio=0.0,
-            )
-        )
-
-
 def test_load_requests_requires_dataset_or_payload_path():
     with pytest.raises(
         ValueError, match="one of --dataset or --payload-regex-path is required"
@@ -884,7 +863,7 @@ def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
             error_message="failed again",
         ),
     ]
-    dump_path = tmp_path / "all_outputs"
+    dump_path = tmp_path / "all_outputs.jsonl"
     metrics_path = tmp_path / "failed_metrics.json"
 
     handle_outputs(
@@ -896,8 +875,7 @@ def test_handle_outputs_dumps_all_outputs_before_filtering(tmp_path):
         metric_path=str(metrics_path),
     )
 
-    dumped_path = tmp_path / "all_outputs.jsonl"
-    dumped_text = dumped_path.read_text(encoding="utf-8")
+    dumped_text = dump_path.read_text(encoding="utf-8")
     dumped_outputs = [json.loads(line) for line in dumped_text.splitlines()]
     assert dumped_outputs == [asdict(output) for output in outputs]
     assert "完整回答" in dumped_text
