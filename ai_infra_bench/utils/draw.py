@@ -4,35 +4,16 @@ import math
 import random
 import re
 from argparse import SUPPRESS, ArgumentParser
-from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
-
-class Color(Enum):
-    LIGHT_CYAN = auto()
-    LIGHT_GREEN = auto()
-    LIGHT_YELLOW = auto()
-    RED = auto()
+from ai_infra_bench.utils.color import Color, colorize
 
 
 def color_print(text: str, color: Color):
-    RESET_CODE = "\033[0m"
-    COLOR_TO_ANSI = {
-        Color.LIGHT_CYAN: "\033[96m",
-        Color.LIGHT_GREEN: "\033[92m",
-        Color.LIGHT_YELLOW: "\033[93m",
-        Color.RED: "\033[41m",
-    }
-
-    try:
-        color_code = COLOR_TO_ANSI[color]
-    except KeyError:
-        raise NotImplementedError(f"{color} is not supported yet.")
-
-    print(f"{color_code}{text}{RESET_CODE}", end="", flush=True)
+    print(colorize(text, color), end="", flush=True)
 
 
 def print_table(title: str, rows: List[List[str]]) -> None:

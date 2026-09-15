@@ -1,11 +1,6 @@
-import logging
-
+from ai_infra_bench.utils.color import configure_logging
 from ai_infra_bench.version import __version__
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s(%(asctime)s):  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+configure_logging()
 
 __all__ = ["__version__"]
