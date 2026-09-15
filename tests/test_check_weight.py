@@ -92,7 +92,7 @@ def test_final_summary_separates_optional_parameter_groups(tmp_path, capsys):
     assert "Shared expert parameters (LM backbone)" in output
     assert "Shared expert parameters (speculative)" in output
     assert "Shared expert parameters (total)" in output
-    assert "N-gram/PLE parameters" in output
+    assert "N-gram (PLE/Engram) parameters" in output
     assert "Embedding/LM head parameters" in output
     assert "Activated parameters (when enabled)" in output
     assert "Vision parameters" in output
@@ -192,6 +192,9 @@ def test_update_parameter_stats_classifies_expert_tensors():
         "layers.0.ffn.experts.0.w1.weight": torch.zeros(2, 3),
         "layers.0.ffn.shared_experts.w1.weight": torch.zeros(2),
         "model.layers.1.ple.ple_embedding.weight": torch.zeros(2, 5),
+        "layers.1.engram.embed.weight": torch.zeros(3, 2),
+        "layers.1.engram.wkv.weight": torch.zeros(4),
+        "layers.1.engram.q_weight": torch.zeros(1),
         "model.embed_tokens.weight": torch.zeros(3),
         "lm_head.weight": torch.zeros(5),
         "mtp.layers.0.mlp.experts.0.up_proj.weight": torch.zeros(2, 3),
@@ -199,6 +202,8 @@ def test_update_parameter_stats_classifies_expert_tensors():
         "mtp.0.ffn.experts.0.w1.weight": torch.zeros(2, 3),
         "mtp.0.ffn.shared_experts.w1.weight": torch.zeros(2),
         "model.visual.blocks.0.attn.proj.weight": torch.zeros(7),
+        "vision.blocks.0.attn.wo.weight": torch.zeros(3),
+        "vision.norm.weight": torch.zeros(2),
         "model.layers.0.input_layernorm.weight": torch.zeros(4),
     }
     stats = ParameterStats()
@@ -206,15 +211,15 @@ def test_update_parameter_stats_classifies_expert_tensors():
     update_parameter_stats(state_dict, stats)
 
     assert stats == ParameterStats(
-        total=63,
+        total=79,
         routed_experts=12,
         shared_experts=6,
-        ngram_ple=10,
+        ngram_ple=21,
         embedding_lm_head=8,
         mtp=16,
         mtp_routed_experts=12,
         mtp_shared_experts=4,
-        vision=7,
+        vision=12,
     )
 
 
@@ -228,7 +233,25 @@ def test_update_parameter_stats_expands_packed_nvfp4_weights():
 
     update_parameter_stats(state_dict, stats)
 
-    assert stats.total == 8
+    assert stats.total == 6
+    assert stats.quant_scales == 2
+
+
+def test_update_parameter_stats_excludes_quantization_scales():
+    state_dict = {
+        "layers.1.engram.embed.weight": torch.zeros(4, 2),
+        "layers.1.engram.embed.scale": torch.zeros(4, 1),
+        "layers.0.attn.wq_a.weight": torch.zeros(4),
+        "layers.0.attn.wq_a.scale": torch.zeros(2),
+        "model.layers.0.mlp.down_proj.weight_scale_inv": torch.zeros(3),
+        "model.layers.0.mlp.down_proj.input_scale": torch.zeros(1),
+        "model.layers.0.mlp.down_proj.weight": torch.zeros(5),
+    }
+    stats = ParameterStats()
+
+    update_parameter_stats(state_dict, stats)
+
+    assert stats == ParameterStats(total=17, ngram_ple=8, quant_scales=10)
 
 
 def test_update_parameter_stats_expands_configured_expert_fp4_weights(capsys):
@@ -242,7 +265,8 @@ def test_update_parameter_stats_expands_configured_expert_fp4_weights(capsys):
     update_parameter_stats(state_dict, stats, model_config=config)
     print_weight_summary(state_dict, model_config=config)
 
-    assert stats.total == 7
-    assert stats.mtp == 7
-    assert stats.mtp_routed_experts == 7
+    assert stats.total == 6
+    assert stats.mtp == 6
+    assert stats.mtp_routed_experts == 6
+    assert stats.quant_scales == 1
     assert "Packed expert FP4" in capsys.readouterr().out

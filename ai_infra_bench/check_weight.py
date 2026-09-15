@@ -17,11 +17,21 @@ DTYPE_WIDTH = 20
 NUMEL_WIDTH = 16
 ROUTED_EXPERT_PATTERN = re.compile(r"\.(?:mlp|ffn)\.experts\.\d+\.")
 SHARED_EXPERT_PATTERN = re.compile(r"\.(?:mlp|ffn)\.shared_experts?\.")
-NGRAM_PLE_PATTERN = re.compile(r"(?:^|\.)ple\.")
+# N-gram memory modules: Gemma PLE (``*.ple.*``) and DeepSeek Engram
+# (``layers.N.engram.*``). Matched before the embedding pattern because the
+# Engram lookup table is stored as ``engram.embed.weight``.
+NGRAM_PLE_PATTERN = re.compile(r"(?:^|\.)(?:ple|engram)\.")
 MTP_PATTERN = re.compile(r"(?:^|\.)mtp\.")
-VISION_PATTERN = re.compile(r"(?:^|\.)(?:visual|vision_model|vision_tower)\.")
+VISION_PATTERN = re.compile(r"(?:^|\.)(?:visual|vision_model|vision_tower|vision)\.")
 EMBEDDING_LM_HEAD_PATTERN = re.compile(
     r"(?:^|\.)(?:embed|embed_tokens|word_embeddings|wte|head|lm_head)\."
+)
+# Block/channel quantization scales stored next to a quantized ``.weight``
+# (DeepSeek FP8/FP4 ``.scale``/``.weight_scale_inv``, ModelOpt ``.weight_scale``/
+# ``.weight_scale_2``/``.input_scale``). They are checkpoint metadata, not model
+# parameters, so official parameter counts exclude them.
+QUANT_SCALE_PATTERN = re.compile(
+    r"\.(?:scale|scale_inv|weight_scale|weight_scale_2|weight_scale_inv|input_scale)$"
 )
 
 
@@ -36,11 +46,19 @@ class ParameterStats:
     mtp_routed_experts: int = 0
     mtp_shared_experts: int = 0
     vision: int = 0
+    quant_scales: int = 0
+
+
+def is_quant_scale(key):
+    return QUANT_SCALE_PATTERN.search(key) is not None
 
 
 def update_parameter_stats(state_dict, stats, items=None, model_config=None):
     items = get_tensor_items(state_dict) if items is None else items
     for key, value in items:
+        if is_quant_scale(key):
+            stats.quant_scales += value.numel()
+            continue
         numel = value.numel() * (
             2 if is_packed_fp4_weight(key, value, state_dict, model_config) else 1
         )
@@ -407,7 +425,7 @@ def download_from_hub(
             format_parameter_count(activated_parameter_count(parameter_stats, config)),
         ],
         [
-            "N-gram/PLE parameters",
+            "N-gram (PLE/Engram) parameters",
             format_parameter_count(parameter_stats.ngram_ple),
         ],
         [
@@ -415,6 +433,10 @@ def download_from_hub(
             format_parameter_count(parameter_stats.embedding_lm_head),
         ],
         ["Vision parameters", format_parameter_count(parameter_stats.vision)],
+        [
+            "Quantization scale elements (excluded)",
+            format_parameter_count(parameter_stats.quant_scales),
+        ],
     ]
     moe_rows = [
         ["Metric", "Value"],
