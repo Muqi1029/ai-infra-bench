@@ -309,6 +309,10 @@ def maybe_dump_outputs(
         additional_info = "(finish_reason=length)"
         outputs = [o for o in outputs if o.finish_reason == "length"]
 
+    if not outputs:
+        logger.info("No dump data since len(outputs)=0")
+        return
+
     logger.info(f"Dumping all {len(outputs)} outputs{additional_info} to {dump_path}")
     with open(dump_path, "w", encoding="utf-8") as f:
         for output in outputs:
