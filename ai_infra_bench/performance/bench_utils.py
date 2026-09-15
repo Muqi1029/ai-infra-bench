@@ -136,6 +136,11 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         type=str,
         help="The path of payloads requests",
     )
+    parser.add_argument(
+        "--start-pos",
+        type=int,
+        help="The start position when using --payload-regex-path, the requests will be sent starting from this position",
+    )
 
     # for random dataset
     parser.add_argument(
@@ -279,6 +284,14 @@ def validate_args(args: Namespace) -> None:
         if not getattr(args, "tokenizer", None) and not getattr(args, "model", None):
             raise ValueError(
                 "--tokenizer or --model must be provided when setting ShareGPT lengths"
+            )
+
+    # dump_finish_reason_length
+    if args.dump_finish_reason_length:
+        if not args.dump_path:
+            args.dump_path = "aib-dump.jsonl"
+            logger.warning(
+                f"--dump-finish-reason-length has been set, but --dump-path not set. To ensure the dump process work as expected, --dump-path has been set to {args.dump_path}"
             )
 
 
