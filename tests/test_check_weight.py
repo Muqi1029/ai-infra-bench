@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -16,6 +17,7 @@ from ai_infra_bench.check_weight import (
     inspect_weight_files,
     lm_backbone_parameter_count,
     mtp_activated_parameter_count,
+    nextn_layer_indices,
     print_weight_summary,
     speculative_module_name,
     update_parameter_stats,
@@ -221,6 +223,107 @@ def test_update_parameter_stats_classifies_expert_tensors():
         mtp_shared_experts=4,
         vision=12,
     )
+
+
+def test_nextn_layer_indices_reads_nested_text_config():
+    assert nextn_layer_indices(
+        {
+            "text_config": {
+                "num_hidden_layers": 45,
+                "num_nextn_predict_layers": 1,
+            }
+        }
+    ) == frozenset({45})
+    assert nextn_layer_indices(
+        {"num_hidden_layers": 2, "num_nextn_predict_layers": 2}
+    ) == frozenset({2, 3})
+    assert nextn_layer_indices({"num_hidden_layers": 45}) == frozenset()
+
+
+def test_update_parameter_stats_classifies_nextn_layers_from_config():
+    state_dict = {
+        "model.language_model.layers.44.input_layernorm.weight": torch.zeros(4),
+        "model.language_model.layers.44.mlp.experts.0.up_proj.weight": torch.zeros(
+            2, 2
+        ),
+        "model.language_model.layers.45.eh_proj.weight": torch.zeros(8),
+        "model.language_model.layers.45.enorm.weight": torch.zeros(3),
+        "model.language_model.layers.45.hnorm.weight": torch.zeros(3),
+        "model.language_model.layers.45.mlp.experts.0.up_proj.weight": torch.zeros(
+            2, 3
+        ),
+        "model.language_model.layers.45.mlp.shared_experts.up_proj.weight": torch.zeros(
+            2
+        ),
+        "model.language_model.layers.45.shared_head.norm.weight": torch.zeros(5),
+        "model.language_model.layers.450.input_layernorm.weight": torch.zeros(7),
+    }
+    config = {
+        "text_config": {
+            "num_hidden_layers": 45,
+            "num_nextn_predict_layers": 1,
+        }
+    }
+    stats = ParameterStats()
+
+    update_parameter_stats(state_dict, stats, model_config=config)
+
+    assert stats == ParameterStats(
+        total=42,
+        routed_experts=4,
+        mtp=27,
+        mtp_routed_experts=6,
+        mtp_shared_experts=2,
+    )
+
+
+def test_update_parameter_stats_ignores_nextn_layers_without_config():
+    state_dict = {
+        "model.language_model.layers.45.eh_proj.weight": torch.zeros(8),
+        "model.language_model.layers.45.mlp.experts.0.up_proj.weight": torch.zeros(
+            2, 3
+        ),
+    }
+    stats = ParameterStats()
+
+    update_parameter_stats(state_dict, stats)
+
+    assert stats == ParameterStats(total=14, routed_experts=6)
+
+
+def test_nextn_layers_are_reported_as_speculative_parameters(tmp_path, capsys):
+    save_file(
+        {
+            "model.language_model.layers.0.input_layernorm.weight": torch.zeros(4),
+            "model.language_model.layers.1.eh_proj.weight": torch.zeros(6),
+            "model.language_model.layers.1.mlp.experts.0.up_proj.weight": torch.zeros(
+                2, 3
+            ),
+        },
+        tmp_path / "model.safetensors",
+    )
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {
+                "text_config": {
+                    "num_hidden_layers": 1,
+                    "num_nextn_predict_layers": 1,
+                    "n_routed_experts": 2,
+                    "num_experts_per_tok": 1,
+                }
+            }
+        )
+    )
+
+    download_from_hub(str(tmp_path))
+
+    output = capsys.readouterr().out
+    assert "Speculative Parameters" in output
+    assert "MTP" in output
+    assert "None detected" not in output
+    assert "0.00B (4)" in output
+    assert "0.00B (12)" in output
+    assert "0.00B (9)" in output
 
 
 def test_update_parameter_stats_expands_packed_nvfp4_weights():

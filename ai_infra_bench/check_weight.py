@@ -22,6 +22,7 @@ SHARED_EXPERT_PATTERN = re.compile(r"\.(?:mlp|ffn)\.shared_experts?\.")
 # Engram lookup table is stored as ``engram.embed.weight``.
 NGRAM_PLE_PATTERN = re.compile(r"(?:^|\.)(?:ple|engram)\.")
 MTP_PATTERN = re.compile(r"(?:^|\.)mtp\.")
+LAYER_INDEX_PATTERN = re.compile(r"(?:^|\.)layers\.(\d+)\.")
 VISION_PATTERN = re.compile(r"(?:^|\.)(?:visual|vision_model|vision_tower|vision)\.")
 EMBEDDING_LM_HEAD_PATTERN = re.compile(
     r"(?:^|\.)(?:embed|embed_tokens|word_embeddings|wte|head|lm_head)\."
@@ -53,8 +54,49 @@ def is_quant_scale(key):
     return QUANT_SCALE_PATTERN.search(key) is not None
 
 
+def language_model_config(config):
+    """Expose nested ``text_config`` fields alongside top-level config keys."""
+    if not isinstance(config, dict):
+        return {}
+    text_config = config.get("text_config", {})
+    if isinstance(text_config, dict):
+        return text_config | config
+    return config
+
+
+def nextn_layer_indices(config):
+    """Return transformer layer indices that store nextn (MTP) weights.
+
+    DeepSeek and GLM checkpoints keep ``num_nextn_predict_layers`` extra
+    layers after ``num_hidden_layers``, for example ``layers.45.*`` when
+    ``num_hidden_layers`` is 45 and ``num_nextn_predict_layers`` is 1.
+    Those tensors do not use the ``mtp.*`` namespace.
+    """
+    config = language_model_config(config)
+    num_hidden_layers = config.get("num_hidden_layers")
+    num_nextn_layers = config.get("num_nextn_predict_layers")
+    if (
+        not isinstance(num_hidden_layers, int)
+        or num_hidden_layers < 0
+        or not isinstance(num_nextn_layers, int)
+        or num_nextn_layers <= 0
+    ):
+        return frozenset()
+    return frozenset(range(num_hidden_layers, num_hidden_layers + num_nextn_layers))
+
+
+def is_mtp_parameter(key, nextn_layers=()):
+    if MTP_PATTERN.search(key):
+        return True
+    if not nextn_layers:
+        return False
+    match = LAYER_INDEX_PATTERN.search(key)
+    return match is not None and int(match.group(1)) in nextn_layers
+
+
 def update_parameter_stats(state_dict, stats, items=None, model_config=None):
     items = get_tensor_items(state_dict) if items is None else items
+    nextn_layers = nextn_layer_indices(model_config)
     for key, value in items:
         if is_quant_scale(key):
             stats.quant_scales += value.numel()
@@ -65,7 +107,7 @@ def update_parameter_stats(state_dict, stats, items=None, model_config=None):
         stats.total += numel
         if NGRAM_PLE_PATTERN.search(key):
             stats.ngram_ple += numel
-        elif MTP_PATTERN.search(key):
+        elif is_mtp_parameter(key, nextn_layers):
             stats.mtp += numel
             if ROUTED_EXPERT_PATTERN.search(key):
                 stats.mtp_routed_experts += numel
@@ -83,9 +125,7 @@ def update_parameter_stats(state_dict, stats, items=None, model_config=None):
 
 def moe_routing(config):
     """Return the configured active and total routed-expert counts."""
-    text_config = config.get("text_config", {})
-    if isinstance(text_config, dict):
-        config = text_config | config
+    config = language_model_config(config)
     n_routed = config.get("n_routed_experts")
     if n_routed is None:
         n_routed = config.get("num_experts")
@@ -153,10 +193,11 @@ def lm_backbone_parameter_count(stats):
 
 
 def mtp_activated_parameter_count(stats, config):
-    """Estimate activation when optional MTP or DSpark weights are used.
+    """Estimate activation when optional MTP, nextn, or DSpark weights are used.
 
-    DeepSeek DSpark stages use the ``mtp.<stage>.*`` checkpoint namespace, so
-    they are covered by the same weight-derived accounting as regular MTP.
+    DeepSeek DSpark stages use the ``mtp.<stage>.*`` checkpoint namespace.
+    GLM and DeepSeek nextn layers are extra ``layers.N.*`` tensors identified
+    from ``num_nextn_predict_layers``. Both are counted in ``stats.mtp``.
     """
     return moe_activated_parameter_count(
         stats.mtp,
@@ -169,12 +210,8 @@ def speculative_module_name(stats, config):
     if stats.mtp == 0:
         return "None detected"
 
-    text_config = config.get("text_config", {})
-    configs = [config, text_config] if isinstance(text_config, dict) else [config]
-    if any(
-        cfg.get("dspark_block_size") or cfg.get("dspark_target_layer_ids")
-        for cfg in configs
-    ):
+    merged = language_model_config(config)
+    if merged.get("dspark_block_size") or merged.get("dspark_target_layer_ids"):
         return "DSpark"
     return "MTP"
 
@@ -229,12 +266,7 @@ def is_modelopt_nvfp4_weight(key, value, state_dict):
 
 def is_configured_expert_fp4_weight(key, value, model_config):
     """Detect packed expert FP4 weights declared by the model config."""
-    if not isinstance(model_config, dict):
-        return False
-
-    text_config = model_config.get("text_config", {})
-    if isinstance(text_config, dict):
-        model_config = text_config | model_config
+    model_config = language_model_config(model_config)
     expert_dtype = model_config.get("expert_dtype")
     return (
         isinstance(expert_dtype, str)
