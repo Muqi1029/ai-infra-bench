@@ -129,6 +129,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     mutex_data_group.add_argument(
         "--dataset",
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
+        default="random",
         help="use the dataset to benchmark",
     )
     mutex_data_group.add_argument(
