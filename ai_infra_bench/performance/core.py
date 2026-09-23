@@ -7,7 +7,7 @@ import time
 import traceback
 from contextlib import nullcontext
 from copy import deepcopy
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import AsyncIterator, Dict, Optional
 
 import aiohttp
 from tqdm import tqdm

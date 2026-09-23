@@ -33,6 +33,9 @@ def main(argv: Sequence[str] | None = None):
     subparsers.add_parser(
         "monitor", help="Monitor Prometheus targets locally", add_help=False
     )
+    subparsers.add_parser(
+        "profile-sgl", help="Start or stop SGLang profiling", add_help=False
+    )
 
     args, extra_argv = parser.parse_known_args(argv)
     commands = {
@@ -54,6 +57,7 @@ def main(argv: Sequence[str] | None = None):
         "eval-logits": ("ai_infra_bench.correctness.logits", "main"),
         "eval-hidden-states": ("ai_infra_bench.correctness.hidden_states", "main"),
         "monitor": ("ai_infra_bench.monitor.cli", "main"),
+        "profile-sgl": ("ai_infra_bench.profile_sgl", "main"),
     }
     module_name, function_name = commands[args.subcommand]
     module = __import__(module_name, fromlist=[function_name])
