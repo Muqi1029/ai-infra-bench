@@ -102,7 +102,8 @@ async def request_func(
                         # count them like content.
                         delta = choice.get("delta") or {}
                         output.update_stream_output(
-                            delta.get("reasoning_content", ""),
+                            delta.get("reasoning_content", "")
+                            or delta.get("reasoning", ""),
                             st,
                             TextType.REASONING,
                             render_content,
