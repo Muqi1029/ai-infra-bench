@@ -39,14 +39,13 @@ def build_payload(args) -> dict[str, Any]:
 async def send_profile(args) -> int:
     endpoint = "/stop_profile" if args.stop else "/start_profile"
     url = api_url(args.base_url, endpoint)
-    headers = {"Authorization": f"Bearer {args.api_key}"}
     payload = None if args.stop else build_payload(args)
     if args.verbose:
-        logger.info("POST %s headers=%s payload=%s", url, headers, payload)
+        logger.info("POST %s payload=%s", url, payload)
 
     try:
         async with _create_bench_client_session(api_key=args.api_key) as session:
-            async with session.post(url, headers=headers, json=payload) as response:
+            async with session.post(url, json=payload) as response:
                 body = (await response.text()).strip()
                 status = response.status
     except Exception:

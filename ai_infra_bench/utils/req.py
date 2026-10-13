@@ -1,5 +1,5 @@
 import json
-from argparse import Namespace
+from argparse import ArgumentParser
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
 
@@ -179,7 +179,7 @@ def update_metrics(metrics: Dict[str, Any], new_metrics: Mapping[str, Any]) -> N
     )
 
 
-def add_common_args(parser: Namespace):
+def add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--base-url",
         default="127.0.0.1:30000",

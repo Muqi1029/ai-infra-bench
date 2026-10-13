@@ -536,7 +536,9 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(
         description="Inspect PyTorch or safetensors model weights."
     )
-    parser.add_argument("--model-path", type=str, required=True)
+    parser.add_argument(
+        "--model-path", "--path", dest="model_path", type=str, required=True
+    )
     parser.add_argument("--cache-dir", type=str, default=None)
     parser.add_argument("--max-checkpoints", type=int, default=-1)
     parser.add_argument(

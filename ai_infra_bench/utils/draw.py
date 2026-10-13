@@ -9,11 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
-from ai_infra_bench.utils.color import Color, colorize
-
-
-def color_print(text: str, color: Color):
-    print(colorize(text, color), end="", flush=True)
+from ai_infra_bench.utils.color import Color, color_print, colorize
 
 
 def print_table(title: str, rows: List[List[str]]) -> None:

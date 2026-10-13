@@ -148,6 +148,11 @@ def parse_args(argv: Sequence[str] | None = None) -> Namespace:
         default="all",
         help="Output dump format",
     )
+    parser.add_argument(
+        "--dump-finish-reason-length",
+        action="store_true",
+        help="Dump requests whose finish reason is length",
+    )
     parser.add_argument("--metric-path", help="Optional JSON/JSONL metrics path")
     parser.add_argument("--label", help="Label for exported metrics")
     parser.add_argument(
@@ -176,6 +181,8 @@ def validate_args(args: Namespace) -> None:
         raise ValueError("--num-sessions must be >= 1")
     if args.metric_path and not args.metric_path.lower().endswith((".json", ".jsonl")):
         raise ValueError("--metric-path must end with .json or .jsonl")
+    if getattr(args, "dump_finish_reason_length", False) and not args.dump_path:
+        args.dump_path = "aib-dump.jsonl"
     if args.dump_path and not args.dump_path.lower().endswith(".jsonl"):
         args.dump_path = f"{args.dump_path}.jsonl"
 
@@ -235,6 +242,7 @@ async def run_benchmark(args: Namespace) -> None:
         request_rate=args.request_rate,
         dump_path=args.dump_path,
         dump_content=args.dump_content,
+        dump_finish_reason_length=getattr(args, "dump_finish_reason_length", False),
         metric_path=args.metric_path,
         label=args.label,
     )

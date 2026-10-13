@@ -122,9 +122,25 @@ def test_gpqa_dataset_arguments_parse():
     assert args.dataset == "gpqa"
 
 
-def test_parse_args_requires_dataset_or_payload_path():
+def test_parse_args_defaults_to_random():
+    args = bench_utils.parse_args([])
+    validate_args(args)
+    assert args.dataset == "random"
+    assert args.payload_regex_path is None
+
+
+def test_parse_args_payload_regex_path_keeps_dataset_none():
+    args = bench_utils.parse_args(["--payload-regex-path", "test.jsonl"])
+    validate_args(args)
+    assert args.payload_regex_path == "test.jsonl"
+    assert args.dataset is None
+
+
+def test_parse_args_mutually_exclusive_dataset_and_payload_path():
     with pytest.raises(SystemExit):
-        bench_utils.parse_args([])
+        bench_utils.parse_args(
+            ["--dataset", "random", "--payload-regex-path", "test.jsonl"]
+        )
 
 
 def test_load_requests_requires_dataset_or_payload_path():
@@ -1013,3 +1029,22 @@ def test_spec_accept_length_is_weighted_by_verify_ct(monkeypatch):
 def test_format_histogram_percentages():
     assert format_histogram_percentages([1, 2, 1]) == "[25.00%, 50.00%, 25.00%]"
     assert format_histogram_percentages([0, 0]) == "[]"
+
+
+def test_maybe_dump_outputs_with_finish_reason_length(tmp_path):
+    dump_path = tmp_path / "filtered_dump.jsonl"
+    outputs = [
+        OutputMetric(finish_reason="length", content="cut off"),
+        OutputMetric(finish_reason="stop", content="complete"),
+    ]
+    bench_utils.maybe_dump_outputs(
+        outputs=outputs,
+        dump_path=str(dump_path),
+        dump_content="all",
+        dump_finish_reason_length=True,
+    )
+    lines = dump_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["finish_reason"] == "length"
+    assert record["content"] == "cut off"

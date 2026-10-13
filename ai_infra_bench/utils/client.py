@@ -6,7 +6,7 @@ BENCH_AIOHTTP_READ_BUFSIZE_BYTES = 10 * 1024**2  # 10 MB
 
 def _create_bench_client_session(
     max_concurrency: int = 32,
-    api_key: str = "EMPTY",
+    api_key: str | None = "EMPTY",
     request_timeout: float = BENCH_AIOHTTP_TIMEOUT_SECONDS,
 ) -> aiohttp.ClientSession:
     # When the pressure is big, the read buffer could be full before aio thread read
@@ -17,9 +17,10 @@ def _create_bench_client_session(
         limit_per_host=max_concurrency,
         enable_cleanup_closed=True,
     )
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     return aiohttp.ClientSession(
         timeout=aiohttp_timeout,
         read_bufsize=BENCH_AIOHTTP_READ_BUFSIZE_BYTES,
         connector=connector,
-        headers={"Authorization": "Bearer " + api_key},
+        headers=headers,
     )

@@ -125,12 +125,11 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
 
     # dataset
-    mutex_data_group = parser.add_mutually_exclusive_group(required=True)
+    mutex_data_group = parser.add_mutually_exclusive_group(required=False)
     mutex_data_group.add_argument(
         "--dataset",
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
-        default="random",
-        help="use the dataset to benchmark",
+        help="use the dataset to benchmark (default: random)",
     )
     mutex_data_group.add_argument(
         "--payload-regex-path",
@@ -273,6 +272,11 @@ def validate_args(args: Namespace) -> None:
             )
 
     # validate dataset
+    if not getattr(args, "payload_regex_path", None) and not getattr(
+        args, "dataset", None
+    ):
+        args.dataset = "random"
+
     dataset = getattr(args, "dataset", None)
     if dataset in ["random", "sharegpt"]:
         if args.num_requests is None:
@@ -288,7 +292,7 @@ def validate_args(args: Namespace) -> None:
             )
 
     # dump_finish_reason_length
-    if args.dump_finish_reason_length:
+    if getattr(args, "dump_finish_reason_length", False):
         if not args.dump_path:
             args.dump_path = "aib-dump.jsonl"
             logger.warning(
@@ -299,8 +303,8 @@ def validate_args(args: Namespace) -> None:
 def maybe_dump_outputs(
     outputs: List[OutputMetric],
     dump_path: str | None,
-    dump_content: str,
-    dump_finish_reason_length: bool,
+    dump_content: str = "all",
+    dump_finish_reason_length: bool = False,
 ) -> None:
     if not dump_path:
         return
@@ -320,7 +324,9 @@ def maybe_dump_outputs(
             if dump_content == "all":
                 f.write(json.dumps(asdict(output), ensure_ascii=False) + "\n")
             elif dump_content == "msg":
-                messages = list(output.payload["messages"])
+                messages = list(output.payload.get("messages") or [])
+                if not messages and "prompt" in output.payload:
+                    messages = [{"role": "user", "content": output.payload["prompt"]}]
                 messages.append({"role": "assistant", "content": output.content})
                 f.write(json.dumps(messages, ensure_ascii=False) + "\n")
 

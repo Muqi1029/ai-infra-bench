@@ -244,7 +244,7 @@ def load_requests(args: Namespace) -> List[Dict]:
     else:
         raise ValueError("one of --dataset or --payload-regex-path is required")
 
-    if args.filter_constrained_grammar_requests:
+    if getattr(args, "filter_constrained_grammar_requests", False):
         filtered_requests = [
             request for request in requests if tool_filter_request(request)
         ]
@@ -335,18 +335,18 @@ async def run_requests(
 
 
 async def run_benchmark(args: Namespace) -> None:
-    requests = load_requests(args)
-    request_url = get_request_url(
-        args.base_url,
-        getattr(args, "dataset", None),
-    )
-    flush_cache_endpoint = f"{args.base_url}/flush_cache"
-
     if args.debug:
         args.num_requests = 10
         args.num_warmup_requests = 3
         logger.info(f"Debug mode: only use {args.num_requests} benchmark requests")
         logger.info(f"Debug mode: only use {args.num_warmup_requests} warmup requests")
+
+    requests = load_requests(args)
+    request_url = get_request_url(
+        args.base_url,
+        getattr(args, "dataset", None),
+    )
+    flush_cache_endpoint = api_url(args.base_url, "/flush_cache")
 
     # prune
     if args.num_requests:

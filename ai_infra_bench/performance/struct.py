@@ -148,7 +148,7 @@ class OutputMetric:
 
         message = choice.get("message") or {}
         self.update_output(
-            message.get("reasoning_content", ""),
+            message.get("reasoning_content", "") or message.get("reasoning", ""),
             TextType.REASONING,
             render_content,
         )

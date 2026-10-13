@@ -34,6 +34,10 @@ def colorize(text: str, color: Color) -> str:
     return f"{color_code}{text}{RESET_CODE}"
 
 
+def color_print(text: str, color: Color, end: str = "", flush: bool = True) -> None:
+    print(colorize(text, color), end=end, flush=flush)
+
+
 def use_color(stream=None) -> bool:
     if os.environ.get("NO_COLOR"):
         return False
