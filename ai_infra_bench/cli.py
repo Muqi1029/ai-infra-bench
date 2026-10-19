@@ -49,10 +49,6 @@ def main(argv: Sequence[str] | None = None):
             "ai_infra_bench.performance.session_reply_bench",
             "main",
         ),
-        "session-reply-bench": (
-            "ai_infra_bench.performance.session_reply_bench",
-            "main",
-        ),
         "eval-dataset": ("ai_infra_bench.correctness.eval_dataset.main", "main"),
         "eval-logits": ("ai_infra_bench.correctness.logits", "main"),
         "eval-hidden-states": ("ai_infra_bench.correctness.hidden_states", "main"),
