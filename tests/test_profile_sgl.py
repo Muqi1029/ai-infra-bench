@@ -1,8 +1,6 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from ai_infra_bench.cli import main as cli_main
 from ai_infra_bench.profile_sgl import build_payload, main, send_profile
 
@@ -55,8 +53,7 @@ def test_build_payload_optional_flags():
     assert payload["profile_stages"] == ["prefill", "decode"]
 
 
-@pytest.mark.asyncio
-async def test_send_profile_start_success():
+def test_send_profile_start_success():
     from argparse import Namespace
 
     args = Namespace(
@@ -90,7 +87,7 @@ async def test_send_profile_start_success():
         "ai_infra_bench.profile_sgl._create_bench_client_session",
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_session)),
     ):
-        result = await send_profile(args)
+        result = asyncio.run(send_profile(args))
         assert result == 0
         mock_session.post.assert_called_once()
         call_args = mock_session.post.call_args
@@ -98,8 +95,7 @@ async def test_send_profile_start_success():
         assert call_args[1]["json"]["output_dir"] == "/tmp/profiles"
 
 
-@pytest.mark.asyncio
-async def test_send_profile_stop():
+def test_send_profile_stop():
     from argparse import Namespace
 
     args = Namespace(
@@ -123,7 +119,7 @@ async def test_send_profile_stop():
         "ai_infra_bench.profile_sgl._create_bench_client_session",
         return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_session)),
     ):
-        result = await send_profile(args)
+        result = asyncio.run(send_profile(args))
         assert result == 0
         call_args = mock_session.post.call_args
         assert call_args[0][0] == "http://127.0.0.1:30000/stop_profile"

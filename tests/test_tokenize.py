@@ -4,7 +4,7 @@ import types
 import pytest
 
 from ai_infra_bench import cli
-from ai_infra_bench import token as token_mod
+from ai_infra_bench import tokenize as token_mod
 from ai_infra_bench.cli import main as cli_main
 
 
@@ -37,7 +37,7 @@ def test_cli_dispatches_token(monkeypatch):
 
     monkeypatch.setattr(cli.importlib, "import_module", fake_import)
     assert cli_main(["token", "--tokenizer", "dummy", "hello"]) == 0
-    assert imported == ["ai_infra_bench.token"]
+    assert imported == ["ai_infra_bench.tokenize"]
 
 
 def test_encode_prints_ids_and_count(monkeypatch, capsys):

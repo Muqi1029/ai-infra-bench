@@ -52,6 +52,8 @@ def wait_for_http(
 ) -> None:
     deadline = time.monotonic() + timeout
     last_error = None
+    # Local Prometheus/Grafana (and tests) must not be reached through HTTP_PROXY.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     while time.monotonic() < deadline:
         return_code = process.poll()
         if return_code is not None:
@@ -59,7 +61,7 @@ def wait_for_http(
                 f"{service} exited with code {return_code}; see {log_path}"
             )
         try:
-            with urllib.request.urlopen(url, timeout=1) as response:
+            with opener.open(url, timeout=1) as response:
                 if 200 <= response.status < 300:
                     return
         except (OSError, urllib.error.URLError) as error:
@@ -130,7 +132,12 @@ class MonitoringStack:
             raise ProcessError(f"failed to start {name}: {error}") from error
         managed = ManagedProcess(name, process, log_file, log_path)
         self.processes.append(managed)
-        wait_for_http(ready_url, process, name, log_path, timeout)
+        try:
+            wait_for_http(ready_url, process, name, log_path, timeout)
+        except Exception:
+            self.processes.pop()
+            managed.stop()
+            raise
         return managed
 
     def check(self) -> None:

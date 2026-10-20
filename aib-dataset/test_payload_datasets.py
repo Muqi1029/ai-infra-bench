@@ -1,6 +1,11 @@
 import json
+import sys
 from argparse import Namespace
 from pathlib import Path
+
+# pytest --import-mode=importlib does not put this directory on sys.path, and the
+# repo root also has a scripts/ folder, so import the dataset builder from here.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from scripts.build_payload_datasets import (
     build_gpqa_payloads,

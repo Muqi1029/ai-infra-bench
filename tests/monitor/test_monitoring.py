@@ -159,31 +159,42 @@ def test_download_wraps_network_timeout(tmp_path, monkeypatch):
         _download(spec, tmp_path / "archive.tar.gz", attempts=1)
 
 
-def test_monitoring_stack_waits_for_and_stops_real_process(tmp_path):
+def test_monitoring_stack_waits_for_and_stops_real_process(tmp_path, monkeypatch):
     from ai_infra_bench.monitor.process import MonitoringStack
 
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+
+    (tmp_path / "index.html").write_text("ok", encoding="utf-8")
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
 
     stack = MonitoringStack()
-    managed = stack.start(
-        "test server",
-        [
-            sys.executable,
-            "-m",
-            "http.server",
-            str(port),
-            "--bind",
-            "127.0.0.1",
-        ],
-        tmp_path / "server.log",
-        f"http://127.0.0.1:{port}",
-        timeout=5,
-    )
-    assert managed.process.poll() is None
-
-    stack.stop()
+    try:
+        managed = stack.start(
+            "test server",
+            [
+                sys.executable,
+                "-m",
+                "http.server",
+                str(port),
+                "--bind",
+                "127.0.0.1",
+                "--directory",
+                str(tmp_path),
+            ],
+            tmp_path / "server.log",
+            f"http://127.0.0.1:{port}/index.html",
+            timeout=5,
+        )
+        assert managed.process.poll() is None
+    finally:
+        stack.stop()
 
     assert managed.process.poll() is not None
 
