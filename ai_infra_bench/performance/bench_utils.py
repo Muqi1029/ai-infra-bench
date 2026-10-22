@@ -209,6 +209,11 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         action="store_true",
         help="Whether to disable send a flush_cache before a benchmark",
     )
+    parser.add_argument(
+        "--disable-warmup",
+        action="store_true",
+        help="Whether to disable warmup before a benchmark",
+    )
 
     return parser.parse_args(args)
 
@@ -298,6 +303,10 @@ def validate_args(args: Namespace) -> None:
             logger.warning(
                 f"--dump-finish-reason-length has been set, but --dump-path not set. To ensure the dump process work as expected, --dump-path has been set to {args.dump_path}"
             )
+
+    if args.disable_warmup:
+        args.num_warmup_requests = 0
+        logger.info("--disable-warmup has been set, set --num-warmup-requests 0")
 
 
 def maybe_dump_outputs(
