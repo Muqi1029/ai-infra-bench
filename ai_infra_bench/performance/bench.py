@@ -5,6 +5,7 @@ import logging
 import random
 import time
 from argparse import Namespace
+from contextlib import nullcontext
 from datetime import datetime
 from glob import glob
 from importlib import resources
@@ -306,19 +307,25 @@ async def run_requests(
     pbar: tqdm | None = None,
     request_rate: float = float("inf"),
     benchmark_start_time: float | None = None,
+    max_concurrency: int = 32,
 ) -> List[OutputMetric]:
-    tasks = []
+    if max_concurrency <= 0:
+        raise ValueError("max_concurrency must be positive")
+    # Rate-limited arrivals may queue behind busy workers. Keep their original
+    # payloads untouched until a worker is ready. Saturation mode also bounds
+    # the queue so a large input iterable is consumed incrementally.
+    queue = asyncio.Queue(
+        maxsize=max_concurrency if request_rate == float("inf") else 0
+    )
+    outputs = []
     completion_tokens_sum = 0
 
     async def run_request(payload: Dict[str, Any]) -> OutputMetric:
         nonlocal completion_tokens_sum
 
-        output = await request_func(
-            session,
-            request_url,
-            payload,
-            sem=semaphore,
-        )
+        async with semaphore or nullcontext():
+            payload = prepare_payload(payload, model, override_payload)
+            output = await request_func(session, request_url, payload)
         if pbar is not None:
             pbar.update(1)
             if benchmark_start_time is not None and output.success:
@@ -328,10 +335,34 @@ async def run_requests(
                 pbar.set_postfix({"Avg TPS": f"{average_tps:.2f} tokens/s"})
         return output
 
-    async for payload in get_request(requests, request_rate):
-        payload = prepare_payload(payload, model, override_payload)
-        tasks.append(asyncio.create_task(run_request(payload)))
-    return await asyncio.gather(*tasks)
+    async def worker():
+        while True:
+            item = await queue.get()
+            try:
+                if item is None:
+                    return
+                index, payload = item
+                outputs[index] = await run_request(payload)
+            finally:
+                queue.task_done()
+
+    async def produce():
+        async for payload in get_request(requests, request_rate):
+            index = len(outputs)
+            outputs.append(None)
+            await queue.put((index, payload))
+        for _ in range(max_concurrency):
+            await queue.put(None)
+
+    tasks = [asyncio.create_task(worker()) for _ in range(max_concurrency)]
+    tasks.append(asyncio.create_task(produce()))
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    return outputs
 
 
 async def run_benchmark(args: Namespace) -> None:
@@ -391,6 +422,7 @@ async def run_benchmark(args: Namespace) -> None:
                         pbar,
                         args.request_rate,
                         benchmark_start_time,
+                        max_concurrency=max_concurrency,
                     )
                     duration_s = time.perf_counter() - benchmark_start_time
 

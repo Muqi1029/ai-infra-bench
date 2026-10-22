@@ -56,16 +56,16 @@ async def request_func(
     sem: Optional[asyncio.Semaphore] = None,
     pbar: Optional[tqdm] = None,
 ) -> OutputMetric:
-    payload = deepcopy(payload)
-    payload.pop("return_meta_info", None)
-    payload.update(STREAM_RETURN_PAYLOAD)
-
     render_content = render_content and not raw
     output = OutputMetric(payload=payload)
     st = 0.0
 
     try:
         async with sem or nullcontext():
+            payload = deepcopy(payload)
+            payload.pop("return_meta_info", None)
+            payload.update(STREAM_RETURN_PAYLOAD)
+            output.payload = payload
             st = time.perf_counter()
             async with session.post(
                 url=request_url, headers=headers, json=payload

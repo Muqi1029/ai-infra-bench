@@ -48,3 +48,30 @@ def test_request_func_handles_completions_stream_text():
     assert output.completion_tokens == 1
     assert payload == {"prompt": [1, 2, 3, 4], "return_meta_info": True}
     assert "return_meta_info" not in output.payload
+
+
+def test_request_func_does_not_copy_payload_until_semaphore_is_acquired():
+    class Payload(dict):
+        def __deepcopy__(self, memo):
+            copies.append(True)
+            return dict(self)
+
+    copies = []
+
+    async def run():
+        semaphore = asyncio.Semaphore(0)
+        task = asyncio.create_task(
+            request_func(
+                FakeSession(), "unused", Payload(prompt="hello"), sem=semaphore
+            )
+        )
+        await asyncio.sleep(0)
+        try:
+            assert copies == []
+        finally:
+            semaphore.release()
+            output = await asyncio.wait_for(task, 2)
+        assert output.success
+        assert copies == [True]
+
+    asyncio.run(run())

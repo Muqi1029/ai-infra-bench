@@ -653,7 +653,7 @@ def test_run_requests_updates_average_output_throughput(monkeypatch):
             self.postfixes.append(values)
 
     async def return_output(session, request_url, payload, sem=None):
-        assert sem is not None
+        assert sem is None  # run_requests holds the semaphore during preparation.
         return OutputMetric(
             success=True,
             completion_tokens=payload["completion_tokens"],
@@ -691,6 +691,124 @@ def test_run_requests_updates_average_output_throughput(monkeypatch):
         {"Avg TPS": "15.00 tokens/s"},
         {"Avg TPS": "3.10 tokens/s"},
     ]
+
+
+@pytest.mark.parametrize("request_rate", [float("inf"), 10.0])
+def test_run_requests_prepares_only_when_worker_is_ready(monkeypatch, request_rate):
+    async def run():
+        release = asyncio.Event()
+        busy = asyncio.Event()
+        arrivals_done = asyncio.Event()
+        prepared = []
+        consumed = []
+        original_prepare = bench.prepare_payload
+
+        def prepare(payload, *args):
+            prepared.append(payload["id"])
+            return original_prepare(payload, *args)
+
+        def requests():
+            for index in range(20):
+                consumed.append(index)
+                yield {"id": index}
+
+        async def arrivals(payloads, rate):
+            assert rate == request_rate
+            for payload in payloads:
+                yield payload
+                await asyncio.sleep(0)
+            arrivals_done.set()
+
+        async def request(_session, _url, payload):
+            if len(prepared) == 2:
+                busy.set()
+            await release.wait()
+            return OutputMetric(payload=payload)
+
+        monkeypatch.setattr(bench, "prepare_payload", prepare)
+        monkeypatch.setattr(bench, "request_func", request)
+        monkeypatch.setattr(bench, "get_request", arrivals)
+        task = asyncio.create_task(
+            run_requests(
+                None,
+                "unused",
+                requests(),
+                None,
+                None,
+                request_rate=request_rate,
+                max_concurrency=2,
+            )
+        )
+        try:
+            await asyncio.wait_for(busy.wait(), 2)
+            if request_rate != float("inf"):
+                # Offered arrivals continue while workers are occupied.
+                await asyncio.wait_for(arrivals_done.wait(), 2)
+                assert len(consumed) == 20
+            else:
+                # Two active, two queued, at most one awaiting enqueue.
+                assert len(consumed) <= 5
+            assert prepared == [0, 1]
+        finally:
+            release.set()
+            outputs = await asyncio.wait_for(task, 2)
+        assert [output.payload["id"] for output in outputs] == list(range(20))
+
+    asyncio.run(run())
+
+
+def test_run_requests_preserves_input_order_on_out_of_order_completion(monkeypatch):
+    async def run():
+        second_done = asyncio.Event()
+        completed = []
+
+        async def request(_session, _url, payload):
+            if payload["id"] == 0:
+                await second_done.wait()
+            else:
+                second_done.set()
+            completed.append(payload["id"])
+            return OutputMetric(payload=payload)
+
+        monkeypatch.setattr(bench, "request_func", request)
+        outputs = await asyncio.wait_for(
+            run_requests(
+                None, "unused", [{"id": 0}, {"id": 1}], None, None, max_concurrency=2
+            ),
+            2,
+        )
+        assert completed == [1, 0]
+        assert [output.payload["id"] for output in outputs] == [0, 1]
+
+    asyncio.run(run())
+
+
+def test_run_requests_cancels_workers_when_producer_fails(monkeypatch):
+    async def run():
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def request(_session, _url, _payload):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        async def arrivals(_requests, _rate):
+            yield {"id": 0}
+            await started.wait()
+            raise ValueError("broken input")
+
+        monkeypatch.setattr(bench, "request_func", request)
+        monkeypatch.setattr(bench, "get_request", arrivals)
+        with pytest.raises(ValueError, match="broken input"):
+            await asyncio.wait_for(
+                run_requests(None, "unused", [], None, None, max_concurrency=2), 2
+            )
+        assert cancelled.is_set()
+
+    asyncio.run(run())
 
 
 def test_output_metric_uses_shared_response_metric_extraction():
