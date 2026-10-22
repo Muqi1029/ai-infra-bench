@@ -16,6 +16,10 @@ def _create_bench_client_session(
         limit=max_concurrency,
         limit_per_host=max_concurrency,
         enable_cleanup_closed=True,
+        # Expire pooled connections before SGLang's default 5s idle timeout.
+        # Large payload preparation can block the loop from observing a peer's
+        # close; aiohttp also checks this age synchronously before reuse.
+        keepalive_timeout=1.0,
     )
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     return aiohttp.ClientSession(

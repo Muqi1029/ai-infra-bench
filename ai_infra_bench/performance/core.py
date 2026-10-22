@@ -150,15 +150,15 @@ async def flush_cache(session: aiohttp.ClientSession, flush_cache_endpoint: str)
     for i in range(FLUSH_CACHE_TRIES):
         try:
             await asyncio.sleep(0.2)
-            res = await session.post(flush_cache_endpoint)
-            if res.status != 200:
-                error_message = await res.text()
-                logger.warning(
-                    f"Failed to send a flush_cache request in {i+1}/{FLUSH_CACHE_TRIES} tries. "
-                    f"Error Message: {error_message}"
-                )
-            else:
-                successful_ct += 1
+            async with session.post(flush_cache_endpoint) as res:
+                response_text = await res.text()
+                if res.status != 200:
+                    logger.warning(
+                        f"Failed to send a flush_cache request in {i+1}/{FLUSH_CACHE_TRIES} tries. "
+                        f"Error Message: {response_text}"
+                    )
+                else:
+                    successful_ct += 1
         except Exception:
             exc_info = sys.exc_info()
             error_message = "".join(traceback.format_exception(*exc_info))
