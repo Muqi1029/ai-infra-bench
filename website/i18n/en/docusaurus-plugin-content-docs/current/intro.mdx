@@ -1,0 +1,30 @@
+---
+title: Introduction
+slug: /
+---
+
+# AI Infra Bench
+
+AI Infra Bench (AIB) is a command-line tool for inference services. Use an OpenAI-compatible endpoint to measure latency and throughput, evaluate model answers, and find a load limit that meets your service-level objectives (SLOs).
+
+No serving-framework SDK is required. Start your inference service, then run `aib` from a client machine.
+
+## Choose a task
+
+| I want to | Start here |
+| --- | --- |
+| Install AIB and run a first test | [Quickstart](./quickstart.mdx) |
+| Check that a model responds | [Send requests](./guides/requests.mdx) |
+| Compare performance across concurrency levels | [Benchmarking](./guides/benchmark.mdx) |
+| Find capacity within a latency target | [SLO search](./guides/slo.mdx) |
+| Replay conversation workloads | [Session replay](./guides/sessions.mdx) |
+| Measure answer accuracy | [Evaluation](./guides/evaluation.mdx) |
+| Inspect SGLang server metrics | [Local monitoring](./guides/monitoring.mdx) |
+
+## Endpoint requirements
+
+Text requests use `/v1/chat/completions`; random-token benchmarks use `/v1/completions`. Benchmarks require SSE streaming. Token usage, cache metrics, and speculative-decoding metrics depend on what the server reports.
+
+:::info Compatibility
+Random token IDs, `ignore_eos`, extended statistics fields, and `/flush_cache` are not supported by every OpenAI-compatible service. Begin with a plain text request, then enable benchmark features. See [Troubleshooting](./troubleshooting.mdx).
+:::

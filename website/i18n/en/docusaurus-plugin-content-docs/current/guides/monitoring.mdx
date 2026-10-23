@@ -1,0 +1,38 @@
+---
+title: Local monitoring
+---
+
+# Local monitoring
+
+`aib monitor` manages local Prometheus and Grafana processes with a bundled SGLang dashboard. Use it to inspect server metrics during a benchmark. Enable `--enable-metrics` on SGLang so it exposes `/metrics`.
+
+## Start
+
+```bash
+aib monitor --base-urls http://127.0.0.1:30000 --open
+```
+
+Prometheus defaults to `http://127.0.0.1:9090` and Grafana to `http://127.0.0.1:3000`. The command prints URLs and opens an interactive shell. Exiting the shell stops the processes it started.
+
+List multiple targets after `--base-urls`. Use `--prometheus-port` and `--grafana-port` to resolve port conflicts.
+
+## Runtime options
+
+| Option | Description |
+| --- | --- |
+| `--runtime auto` | Default: use available binaries or download verified standalone binaries |
+| `--runtime system` | Use locally installed binaries |
+| `--runtime download` | Use downloaded binaries |
+| `--no-grafana` | Run Prometheus only |
+| `--scrape-interval 5s` | Scrape interval; defaults to 5 seconds |
+| `--runtime-dir ./monitor-runtime` | Store configuration and logs |
+| `--dry-run` | Generate configuration without downloading or starting binaries |
+
+```bash
+aib monitor --base-urls http://127.0.0.1:30000 \
+  --runtime-dir ./monitor-runtime --dry-run
+```
+
+For offline operation, use `--runtime system`. You can also provide existing programs with `--prometheus-bin`, `--grafana-bin`, and `--grafana-home`. Services bind to loopback by default.
+
+Server monitoring reflects engine internals. Use `aib bench` results for client-observed latency and throughput.

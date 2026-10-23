@@ -207,3 +207,9 @@ __marimo__/
 data
 !aib-dataset/ai_infra_bench_dataset/data/
 !aib-dataset/ai_infra_bench_dataset/data/**
+
+# Documentation website
+website/node_modules/
+website/build/
+website/.docusaurus/
+package-lock.json

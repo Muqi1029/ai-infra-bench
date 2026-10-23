@@ -1,0 +1,30 @@
+---
+title: 项目介绍
+slug: /
+---
+
+# AI Infra Bench
+
+AI Infra Bench（AIB）是面向模型推理服务的命令行工具。通过 OpenAI 兼容接口，你可以测试响应速度与吞吐量、评估模型回答，并寻找满足服务等级目标（SLO）的负载上限。
+
+无需安装特定推理框架的 SDK；先启动你的推理服务，再从客户端运行 `aib`。
+
+## 选择你的任务
+
+| 我想要 | 从这里开始 |
+| --- | --- |
+| 安装并完成第一次测试 | [快速开始](./quickstart.mdx) |
+| 检查模型是否能正常回复 | [发送请求](./guides/requests.mdx) |
+| 比较不同并发下的性能 | [性能压测](./guides/benchmark.mdx) |
+| 找到满足延迟目标的容量 | [SLO 容量搜索](./guides/slo.mdx) |
+| 回放多轮对话请求 | [会话回放](./guides/sessions.mdx) |
+| 测试回答正确率 | [正确性评测](./guides/evaluation.mdx) |
+| 观察 SGLang 服务指标 | [本地监控](./guides/monitoring.mdx) |
+
+## 服务端需要支持什么
+
+文本请求使用 `/v1/chat/completions`；随机 token 压测使用 `/v1/completions`。压测需要 SSE 流式响应。token 用量、缓存与推测解码指标取决于服务端返回的数据。
+
+:::info 兼容范围
+随机 token ID、`ignore_eos`、扩展统计字段以及 `/flush_cache` 并非所有 OpenAI 兼容服务都支持。首次连接时建议先发送普通文本请求，再逐步启用压测功能。详见[常见问题](./troubleshooting.mdx)。
+:::

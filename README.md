@@ -14,6 +14,13 @@ AI Infra Bench measures OpenAI-compatible inference endpoints, evaluates model
 outputs, and finds the highest load that satisfies a service-level objective.
 It is backend-independent and does not require a serving framework SDK.
 
+## Documentation
+
+The [user documentation source](website/docs/intro.mdx) covers setup, benchmarking,
+SLO search, session replay, evaluation, and monitoring in Simplified Chinese and
+English. The MDX site includes language switching and a GitHub Pages workflow.
+See [website development and publishing](website/README.md) to preview or deploy it.
+
 ## Install
 
 ```bash

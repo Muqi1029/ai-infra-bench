@@ -1,0 +1,66 @@
+---
+title: Evaluation
+---
+
+# Evaluation
+
+Benchmarks measure speed; `aib eval-dataset` checks model outputs against dataset answers. Install the data extra first:
+
+```bash
+python -m pip install 'ai-infra-bench[data]'
+```
+
+## Start with a small sample
+
+```bash
+aib eval-dataset \
+  --evals gsm8k \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --num-shots 5 --num-questions 20 \
+  --max-concurrency 4
+```
+
+Read accuracy and request statistics in the terminal after the run. `--num-questions` caps questions, `--num-shots` sets few-shot examples, and `--repeat` sets evaluation rounds. A small sample verifies the workflow; it is not a full benchmark score.
+
+| `--evals` | Purpose |
+| --- | --- |
+| `gsm8k` | Grade-school math word problems |
+| `gpqa` | GPQA Diamond multiple-choice questions |
+| `aime25` | AIME 2025 math problems |
+| `hle` | Text-only Humanity's Last Exam |
+| `constrained_decoding` | Structured outputs and constrained decoding |
+| `deepswe` | Software engineering tasks through Pier |
+
+`--evals all` covers the HTTP datasets and excludes DeepSWE. It may require additional data access and substantial runtime. Start with individual datasets.
+
+## Local HLE data
+
+```bash
+aib eval-dataset --evals hle \
+  --dataset-path ./hle.jsonl \
+  --num-shots 0 --num-questions 20 \
+  --base-url http://127.0.0.1:30000 --model your-model
+```
+
+Local JSONL is supported. Without a local path, the default source is `cais/hle` on Hugging Face, which may require access permissions. Image questions are skipped. Scoring uses multiple-choice answer extraction and normalized exact matching, without an external model judge. Results are therefore not directly equivalent to official HLE scores produced with different grading procedures.
+
+## Custom evaluation configuration
+
+`--config /path/to/config.yaml` loads a dataset YAML and requires exactly one `--evals` value. Its `payload` controls generation settings, and `--override-payload` can override request fields. Dataset schemas and answer extraction differ; custom data must follow the relevant adapter's format.
+
+## DeepSWE
+
+Requires Python 3.12+, `ai-infra-bench[deepswe]`, and the Docker or Modal environment needed by Pier. Run DeepSWE separately, providing `--model` or a Pier `--config`. See `aib eval-dataset --help` for all options.
+
+## Compare inference implementations
+
+`aib eval-logits` compares Top-K logprobs across endpoints, using the first as the reference. Servers must return the requested logprob fields:
+
+```bash
+aib eval-logits \
+  --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 \
+  --prompt "The capital of France is" --atol 0.01
+```
+
+`aib eval-hidden-states` requires a server extension for hidden states; it is not a standard OpenAI API feature. Check its `--help` and your server configuration before use.

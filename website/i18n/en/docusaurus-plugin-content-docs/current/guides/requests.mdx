@@ -1,0 +1,55 @@
+---
+title: Send requests
+---
+
+# Send requests
+
+Use `aib req` to check connectivity, inspect model output, and debug request bodies.
+
+## Text and authentication
+
+```bash
+aib req \
+  --base-url https://your-inference-host.example \
+  --api-key "$AIB_API_KEY" \
+  --model your-model \
+  --prompt "What is prefix caching?"
+```
+
+Set `AIB_API_KEY` in your shell first. This is an example shell variable; common AIB options do not read it automatically, so pass it explicitly. `--base-url` accepts a trailing `/v1`; do not provide the full chat completions path.
+
+Streaming is the default. Use `--disable-stream` to inspect a non-streaming JSON response, `--raw` to inspect raw SSE data, or `--no-print` to hide streamed text.
+
+## Use your own payload
+
+Create `request.json`:
+
+```json
+{
+  "messages": [{"role": "user", "content": "Explain batching."}],
+  "temperature": 0,
+  "max_tokens": 128
+}
+```
+
+```bash
+aib req --base-url http://127.0.0.1:30000 \
+  --model your-model --payload-path request.json
+```
+
+A payload containing `prompt` without `messages` is sent to `/v1/completions`.
+
+## Override fields
+
+```bash
+aib req --prompt "What is a GPU?" \
+  --override-payload '{"temperature":0,"max_tokens":128}'
+```
+
+Overrides merge at the top level. Nested objects are replaced, not recursively merged. An overridden `model` takes precedence over `--model`. The tool then sets streaming and statistics fields; overrides cannot switch a benchmark to non-streaming mode.
+
+`--enable-thinking`, `--disable-thinking`, `--tools`, `--json-schema-response-format`, and `--ebnf` require server support. The last three use built-in demonstration structures; use a payload file for custom structures.
+
+:::tip Debug output
+`--verbose` prints headers and payloads, including authentication details. Remove keys before sharing logs.
+:::

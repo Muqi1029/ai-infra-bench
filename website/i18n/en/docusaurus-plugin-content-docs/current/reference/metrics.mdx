@@ -1,0 +1,54 @@
+---
+title: Metrics and results
+---
+
+# Metrics and results
+
+## Read benchmark metrics
+
+| Metric | Meaning |
+| --- | --- |
+| TTFT | Time from sending the HTTP request to the first nonempty content, reasoning, or tool-call delta, in milliseconds |
+| Latency | Total HTTP request duration in milliseconds, excluding earlier client queueing |
+| TPOT | `(latency_ms - ttft_ms) / (completion_tokens - 1)`, in milliseconds/token |
+| Request throughput | Successful requests / total measured duration, in requests/second |
+| Output throughput | Output tokens from successful requests / total measured duration, in tokens/second |
+| Cached tokens | Cache-hit token count reported by the server |
+
+TPOT requires more than one output token and a valid TTFT. It is an average generation time per token, not a distribution of raw inter-token intervals. Latency distributions use successful requests; check failure counts when assessing reliability.
+
+Cache and speculative-decoding metrics require server extension fields. Missing fields can produce zeros or empty statistics; these do not prove that caching or speculative decoding is inactive. Token throughput depends on accurate `usage` data.
+
+## Save and plot
+
+```bash
+aib bench --dataset random --input-len 1024 --output-len 256 \
+  --num-requests 100 --max-concurrency 1 8 32 \
+  --disable-flush-cache --metric-path metrics.jsonl \
+  --dump-path outputs.jsonl --label baseline
+
+aib plot-metrics metrics.jsonl -o metrics.html --title "Concurrency comparison"
+```
+
+- `--metric-path *.json`: overwrite with the current aggregate tables. Use JSONL to retain multiple runs.
+- `--metric-path *.jsonl`: append one aggregate record per run; `bench` defaults to `aib-metric.jsonl`.
+- `--dump-path`: per-request JSONL. The default `--dump-content all` includes payloads, outputs, and metrics.
+- `--dump-content msg`: export message-related content only.
+- `--dump-finish-reason-length`: export only requests stopped by length limits; defaults to `aib-dump.jsonl` when no path is supplied.
+
+Aggregate tables and per-request dumps have different formats. `plot-metrics` reads the aggregate file. Exports can contain application data; review them before storing or sharing.
+
+## SLO metric names
+
+`conditions[].metric` accepts:
+
+| Type | Names |
+| --- | --- |
+| Request counts | `total_requests`, `successful_requests`, `failed_requests`, `success_rate` |
+| Run information | `duration_s`, `max_concurrency`, `request_rate` |
+| Throughput | `request_throughput`, `output_throughput` |
+| Distributions | `mean_`, `p50_`, `p95_`, or `p99_` followed by a series name below |
+
+Series names: `ttft_ms`, `tpot_ms`, `latency_ms`, `prompt_tokens`, `completion_tokens`, `reasoning_tokens`, `cached_tokens`.
+
+Examples: `p99_ttft_ms`, `mean_completion_tokens`. Compatibility aliases `itl_ms` and `e2e_latency_ms` refer to TPOT and latency respectively; they also exclude earlier client queueing. SLO YAML reports use these machine-readable fields; ordinary benchmark files store display-oriented aggregate tables.

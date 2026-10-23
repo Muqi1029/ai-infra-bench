@@ -1,0 +1,68 @@
+---
+title: Benchmarking
+---
+
+# Benchmarking
+
+`aib bench` supports random tokens, packaged text datasets, and custom payload replay. Fix the workload before comparing load levels to make results reproducible.
+
+## Random-token workloads
+
+Your server must support integer token IDs in completions requests and `ignore_eos`. Its vocabulary must cover the generated IDs (0–9999).
+
+```bash
+aib bench \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --dataset random \
+  --input-len 1024 --output-len 256 \
+  --num-requests 100 \
+  --max-concurrency 1 4 16 \
+  --repeat 2 \
+  --disable-flush-cache \
+  --label baseline \
+  --metric-path metrics.jsonl
+```
+
+`--max-concurrency` accepts multiple values, tested sequentially. `--repeat` repeats each concurrency setting. `--request-rate` sets the arrival rate in requests per second; the default `inf` keeps concurrency saturated where possible. At finite rates, requests can queue on the client. Request latency starts when the HTTP request is sent and excludes earlier client queueing.
+
+`--num-requests` controls measured requests. When ordinary warmup is enabled, up to the first 10 requests are used for warmup. Warmup is excluded from measured metrics; the measured phase still runs the full request list. Currently, `--disable-flush-cache` also skips `bench` warmup. To use warmup, use a server with cache-flush support and omit that option.
+
+## Length distributions and prefix caching
+
+`--random-range-ratio 0.5` samples integer input and output lengths independently between half the target and the target length. The default `1.0` uses fixed lengths.
+
+Use `--dataset random --cache-ratio 0.5` to share a prefix of `int((input_len - 1) * 0.5)` tokens. With warmup and cache flushing enabled, prefix warmup requests run before each measured benchmark; their count is controlled by `--num-warmup-requests`. Cache hits depend on your server configuration. With variable lengths, the prefix must be shorter than the shortest sampled input.
+
+By default AIB attempts `/flush_cache`. Use `--disable-flush-cache` for a generic service, allowing cache state to persist between tests. Record this setting when comparing results.
+
+## Packaged datasets
+
+```bash
+python -m pip install 'ai-infra-bench[data]'
+aib bench --dataset gpqa --num-requests 198 \
+  --max-concurrency 16 --disable-flush-cache
+```
+
+Supported datasets are `gsm8k`, `gpqa`, and `sharegpt`. These are performance workloads; use [eval-dataset](./evaluation.mdx) to measure answer accuracy.
+
+ShareGPT truncates or repeats text to the configured length and sets the output length. It requires a tokenizer:
+
+```bash
+aib bench --dataset sharegpt \
+  --model your-model --tokenizer /path/to/tokenizer \
+  --input-len 1024 --output-len 256 \
+  --num-requests 100 --disable-flush-cache
+```
+
+## Custom request replay
+
+```bash
+aib bench --payload-regex-path 'requests/**/*.jsonl' \
+  --model your-model --max-concurrency 16 \
+  --disable-flush-cache --dump-path outputs.jsonl
+```
+
+Use a JSON array (`.json`) or one payload per line (`.jsonl`). Paths are glob patterns; quote them so AIB expands them. Custom replay uses chat completions. The measured request count cannot exceed loaded records; `--num-requests` does not duplicate data.
+
+Ordinary replay does not preserve session ordering. Use [session replay](./sessions.mdx) for dependent requests.

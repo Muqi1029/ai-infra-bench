@@ -1,0 +1,38 @@
+---
+title: 本地监控
+---
+
+# 本地监控
+
+`aib monitor` 在本机管理 Prometheus 和 Grafana，预置 SGLang 仪表盘，适合在压测期间观察服务端指标。SGLang 需启用 `--enable-metrics` 并提供 `/metrics`。
+
+## 启动
+
+```bash
+aib monitor --base-urls http://127.0.0.1:30000 --open
+```
+
+默认 Prometheus 为 `http://127.0.0.1:9090`，Grafana 为 `http://127.0.0.1:3000`。命令打印具体 URL，并进入交互终端；退出终端时会停止其启动的进程。
+
+多个目标可在 `--base-urls` 后依次列出。使用 `--prometheus-port` 和 `--grafana-port` 解决端口冲突。
+
+## 运行时选项
+
+| 参数 | 说明 |
+| --- | --- |
+| `--runtime auto` | 默认；使用已有程序或下载经过校验的独立二进制 |
+| `--runtime system` | 使用本地安装的程序 |
+| `--runtime download` | 使用下载的程序 |
+| `--no-grafana` | 只运行 Prometheus |
+| `--scrape-interval 5s` | 采集间隔，默认 5 秒 |
+| `--runtime-dir ./monitor-runtime` | 保存配置与运行日志 |
+| `--dry-run` | 只生成配置，不下载或启动程序 |
+
+```bash
+aib monitor --base-urls http://127.0.0.1:30000 \
+  --runtime-dir ./monitor-runtime --dry-run
+```
+
+无网络环境使用 `--runtime system`，也可以通过 `--prometheus-bin`、`--grafana-bin`、`--grafana-home` 指定现有程序。默认只绑定本机回环地址。
+
+服务端监控反映引擎内部状态，客户端的端到端延迟与吞吐量仍以 `aib bench` 结果为准。

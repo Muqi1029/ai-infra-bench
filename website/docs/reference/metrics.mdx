@@ -1,0 +1,54 @@
+---
+title: 指标与结果
+---
+
+# 指标与结果
+
+## 如何阅读压测指标
+
+| 指标 | 含义 |
+| --- | --- |
+| TTFT | 发起 HTTP 请求到收到首个非空内容、推理文本或工具调用增量的时间，毫秒 |
+| Latency | 单次 HTTP 请求的总耗时，毫秒；不含请求发起前的客户端排队 |
+| TPOT | `(latency_ms - ttft_ms) / (completion_tokens - 1)`，毫秒/token |
+| Request throughput | 成功请求数 / 正式阶段总时长，请求/秒 |
+| Output throughput | 成功请求的输出 token 总数 / 正式阶段总时长，token/秒 |
+| Cached tokens | 服务端返回的缓存命中 token 数 |
+
+TPOT 只有在输出超过一个 token 且 TTFT 有效时才计算。它是平均每 token 生成时间，不是逐 token 间隔的原始分布。延迟分布基于成功请求，判断稳定性还应同时查看失败请求数。
+
+缓存和推测解码指标依赖服务端扩展字段。字段缺失时，零值或空统计不能直接解释为服务没有缓存或没有执行推测解码。token 吞吐量依赖准确的 `usage`。
+
+## 保存和绘图
+
+```bash
+aib bench --dataset random --input-len 1024 --output-len 256 \
+  --num-requests 100 --max-concurrency 1 8 32 \
+  --disable-flush-cache --metric-path metrics.jsonl \
+  --dump-path outputs.jsonl --label baseline
+
+aib plot-metrics metrics.jsonl -o metrics.html --title "Concurrency comparison"
+```
+
+- `--metric-path *.json`：覆盖写入本次聚合表。多次测试希望保留历史时使用 JSONL。
+- `--metric-path *.jsonl`：每次追加一行聚合结果；`bench` 默认为 `aib-metric.jsonl`。
+- `--dump-path`：逐请求 JSONL，默认 `--dump-content all`，包含请求体、输出及指标。
+- `--dump-content msg`：仅导出消息相关内容。
+- `--dump-finish-reason-length`：只导出因长度限制结束的请求；未指定路径时使用 `aib-dump.jsonl`。
+
+指标表与逐请求记录是两种不同格式；`plot-metrics` 读取聚合指标文件。导出文件可能包含业务请求内容，保存与分享前请检查。
+
+## SLO 指标名称
+
+`conditions[].metric` 支持以下名称：
+
+| 类型 | 名称 |
+| --- | --- |
+| 请求统计 | `total_requests`、`successful_requests`、`failed_requests`、`success_rate` |
+| 运行信息 | `duration_s`、`max_concurrency`、`request_rate` |
+| 吞吐量 | `request_throughput`、`output_throughput` |
+| 分布统计 | `mean_`、`p50_`、`p95_`、`p99_` 加下列序列名 |
+
+序列名：`ttft_ms`、`tpot_ms`、`latency_ms`、`prompt_tokens`、`completion_tokens`、`reasoning_tokens`、`cached_tokens`。
+
+例如 `p99_ttft_ms`、`mean_completion_tokens`。兼容别名 `itl_ms` 对应 TPOT，`e2e_latency_ms` 对应 latency；客户端排队时间同样不包含在内。SLO YAML 报告使用这些机器字段，普通压测文件则存储用于显示的聚合表。

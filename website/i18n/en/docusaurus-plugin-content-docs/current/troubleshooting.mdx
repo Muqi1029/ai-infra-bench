@@ -1,0 +1,47 @@
+---
+title: Troubleshooting
+---
+
+# Troubleshooting
+
+## Connection refused or 404
+
+Confirm the inference service is running and reachable from the client. Use a root URL or a root URL ending in `/v1` for `--base-url`. Text requests need chat completions; random-token workloads need completions. The server must expose the matching endpoint.
+
+## 401, 403, or model not found
+
+Pass `--api-key` and the model name exposed by the server. Common connection options do not automatically read `OPENAI_API_KEY`. A server model alias may differ from a local model directory.
+
+## 400: unsupported request fields
+
+AIB requests streaming usage and extended cache/speculative-decoding statistics. Servers with strict schema validation may reject these fields. Check server logs and supported request shapes. Random tokens also require integer prompts and `ignore_eos`; start with the text workload in the [Quickstart](./quickstart.mdx).
+
+`--override-payload` cannot remove streaming statistics fields enforced later by the tool. Services accepting only strict standard fields may require adaptation before benchmarking.
+
+## `/flush_cache` is unavailable
+
+Pass `--disable-flush-cache` to `bench` or `session-bench`. Existing cache state will persist; use a consistent setting when comparing performance.
+
+## Packaged datasets or tokenizers are unavailable
+
+Install `python -m pip install 'ai-infra-bench[data]'`. Prepare datasets and tokenizers in advance for offline use. The default remote HLE source may also require access permissions. ShareGPT requires a loadable `--tokenizer` or `--model`.
+
+## Token counts, TTFT, or cache metrics are zero
+
+Check whether the service returns streamed content and `usage`. Cache and speculative-decoding statistics require extensions. Missing fields should not be interpreted as measured zeros; see [Metrics and results](./reference/metrics.mdx).
+
+## Session replay has no measured requests
+
+The first 3 sessions are warmup-only by default. Add more files or set `--num-warmup-sessions 0`. Each session needs its own JSONL file.
+
+## SLO is unsatisfied or unstable
+
+Inspect each probe's `conditions` to distinguish request failures from latency violations. Reduce the search range and fix the workload. Increase samples, repeat tests near the boundary, and record cache and server settings.
+
+## Monitoring fails to start
+
+Check for occupied ports (9090/3000), enabled target metrics, and binaries compatible with your platform. Use a system runtime offline. `--dry-run` checks configuration generation; logs are under the printed runtime directory.
+
+## Report an issue
+
+Include AIB/Python versions, the full command, serving framework/version, a minimal reproducible payload, and error logs in [GitHub Issues](https://github.com/Muqi1029/ai-infra-bench/issues). Remove API keys and sensitive application content.

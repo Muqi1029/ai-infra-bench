@@ -1,0 +1,47 @@
+---
+title: 常见问题
+---
+
+# 常见问题
+
+## 连接被拒绝或返回 404
+
+确认推理服务已启动，客户端可以访问对应端口。`--base-url` 使用服务根地址或以 `/v1` 结尾的根地址。普通文本使用 chat completions；随机 token 使用 completions，服务端必须提供相应接口。
+
+## 401、403 或找不到模型
+
+显式传入 `--api-key` 和服务端公开的 `--model` 名称。通用连接参数不会自动读取 `OPENAI_API_KEY`。不要将服务端模型别名和本地模型目录混淆。
+
+## 400：不支持某些请求字段
+
+AIB 会请求流式 usage 和缓存、推测解码扩展统计；严格校验 schema 的服务可能拒绝这些字段。检查服务端日志并确认支持的 API 形状。随机 token 还依赖整数 prompt 和 `ignore_eos`；可先改用[快速开始](./quickstart.mdx)中的文本请求测试。
+
+`--override-payload` 不能移除工具随后强制加入的流式统计字段。仅能接受严格标准字段的服务可能需要适配后才能压测。
+
+## `/flush_cache` 不存在
+
+对 `bench` 或 `session-bench` 使用 `--disable-flush-cache`。这会保留已有缓存状态；比较性能时统一该设置。
+
+## 找不到内置数据集或 tokenizer
+
+安装 `python -m pip install 'ai-infra-bench[data]'`。离线环境需提前准备数据和 tokenizer；HLE 的默认远程数据源还可能需要访问权限。ShareGPT 必须提供可加载的 `--tokenizer` 或 `--model`。
+
+## 输出 token、TTFT 或缓存指标为零
+
+检查服务端是否返回流式内容和 `usage`。缓存和推测解码需要扩展统计。不要把缺失字段当作真实的零，详见[指标解释](./reference/metrics.mdx)。
+
+## 会话回放没有正式请求
+
+默认前 3 个会话只用于预热。增加文件数，或设置 `--num-warmup-sessions 0`。每个会话需要一个 JSONL 文件。
+
+## SLO 未满足或结果波动
+
+检查报告中的各次 `conditions`，区分请求失败与延迟超标。先降低搜索范围并固定工作负载；增加样本量、重复边界测试，同时记录缓存与服务端配置。
+
+## 监控启动失败
+
+检查 9090/3000 端口是否被占用、目标是否启用 metrics，以及二进制是否适用于当前平台。离线时使用本地运行时；`--dry-run` 可先验证配置生成，运行日志位于命令打印的 runtime 目录。
+
+## 如何提交问题
+
+在 [GitHub Issues](https://github.com/Muqi1029/ai-infra-bench/issues) 附上 AIB/Python 版本、完整命令、服务框架与版本、可复现的最小请求和错误日志。移除 API 密钥与业务敏感内容。
