@@ -37,6 +37,15 @@ Send one request:
 aib req --base-url http://127.0.0.1:30000 --prompt "Who are you?"
 ```
 
+With no arguments, `aib req` reads a complete JSON request payload from stdin:
+
+```bash
+cat payload.json | aib req
+```
+
+Use `--payload-stdin` or `--payload-path -` to read from stdin when passing other
+options. The input must be a single JSON object.
+
 Run a random-token benchmark:
 
 ```bash

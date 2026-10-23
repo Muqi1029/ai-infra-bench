@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import random
+import sys
 import time
 from typing import Any, Dict, Mapping, Tuple
 
@@ -104,11 +105,20 @@ def _select_dataset_request(dataset: str, seed: int) -> Dict[str, Any]:
     return dict(payload)
 
 
+def _read_stdin_payload() -> Dict[str, Any]:
+    payload = json.load(sys.stdin)
+    if not isinstance(payload, Mapping):
+        raise ValueError("stdin must contain a JSON object")
+    return payload
+
+
 def build_request(args) -> Tuple[str, Dict[str, Any]]:
     url = api_url(args.base_url, "/v1/chat/completions")
 
     if args.dataset:
         payload = _select_dataset_request(args.dataset, args.seed)
+    elif args.payload_stdin or args.payload_path == "-":
+        payload = _read_stdin_payload()
     elif args.payload_path:
         payload = _read_json(args.payload_path)
         if not isinstance(payload, Mapping):
@@ -244,8 +254,13 @@ def http_request(args):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(
-        prog="aib req", description="Send a single inference request"
+        prog="aib req",
+        description=(
+            "Send a single inference request. With no arguments, read a JSON "
+            "request payload from stdin."
+        ),
     )
     add_common_args(parser)
 
@@ -325,13 +340,22 @@ def main(argv=None):
     )
     mutex_group.add_argument("--tools", action="store_true", help="Add tool")
     mutex_group.add_argument(
-        "--payload-path", type=str, help="Path to one JSON request payload"
+        "--payload-path",
+        type=str,
+        help="Path to one JSON request payload, or '-' to read from stdin",
+    )
+    mutex_group.add_argument(
+        "--payload-stdin",
+        action="store_true",
+        help="Read one JSON request payload from stdin",
     )
     mutex_group.add_argument(
         "--input-ids-path", type=str, help="Path to a JSON input token ID array"
     )
 
     args = parser.parse_args(argv)
+    if not argv:
+        args.payload_stdin = True
     if (args.input_len is None) != (args.output_len is None):
         parser.error("--input-len and --output-len must be used together")
     if args.input_len is not None and args.input_len < 1:

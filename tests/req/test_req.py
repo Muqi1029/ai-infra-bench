@@ -1,3 +1,4 @@
+import io
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -170,12 +171,13 @@ def test_non_stream_error(non_stream_handler):
 
 
 def test_stream_request(stream_handler):
-    main([])
+    main(["--prompt", "Who are you"])
 
     stream_handler.assert_awaited_once()
     url, headers, payload, raw, _ = stream_handler.await_args.args
     assert url == "http://127.0.0.1:30000/v1/chat/completions"
     assert headers == {"Authorization": "Bearer JustKeepMe"}
+    assert payload["messages"] == [{"role": "user", "content": "Who are you"}]
     assert payload["stream"] is True
     assert "return_meta_info" not in payload
     assert raw is False
@@ -224,6 +226,92 @@ def test_payload_prompt_uses_completions_api(tmp_path, stream_handler):
     url, _, payload, _, _ = stream_handler.await_args.args
     assert url == "http://127.0.0.1:30000/v1/completions"
     assert payload["prompt"] == "hello"
+
+
+@pytest.mark.parametrize("argv", [[], ["--payload-stdin"], ["--payload-path", "-"]])
+def test_payload_stdin_uses_completions_api(argv, monkeypatch, stream_handler):
+    monkeypatch.setattr(
+        "ai_infra_bench.req.sys.stdin",
+        io.StringIO('{"prompt":"hello","temperature":0.25}'),
+    )
+
+    main(argv)
+
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/completions"
+    assert payload["prompt"] == "hello"
+    assert payload["temperature"] == 0.25
+
+
+def test_no_arguments_read_stdin(monkeypatch, stream_handler):
+    monkeypatch.setattr("ai_infra_bench.req.sys.argv", ["aib req"])
+    monkeypatch.setattr(
+        "ai_infra_bench.req.sys.stdin",
+        io.StringIO('{"messages": [{"role": "user", "content": "hello"}]}'),
+    )
+
+    main()
+
+    stream_handler.assert_awaited_once()
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert payload["messages"] == [{"role": "user", "content": "hello"}]
+    assert payload["stream"] is True
+
+
+def test_payload_stdin_chat_request(monkeypatch, stream_handler):
+    monkeypatch.setattr(
+        "ai_infra_bench.req.sys.stdin",
+        io.StringIO(
+            """{
+                "model": "recorded-model",
+                "messages": [{"role": "user", "content": "你好"}],
+                "temperature": 0.8,
+                "max_tokens": 32
+            }\n"""
+        ),
+    )
+
+    main(
+        [
+            "--payload-stdin",
+            "--model",
+            "cli-model",
+            "--override-payload",
+            '{"temperature": 0}',
+        ]
+    )
+
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert payload["messages"] == [{"role": "user", "content": "你好"}]
+    assert payload["model"] == "cli-model"
+    assert payload["temperature"] == 0
+    assert payload["max_tokens"] == 32
+    assert payload["stream"] is True
+
+
+@pytest.mark.parametrize("stdin", ["", "not-json", "[]", "null", "{}\n{}"])
+@pytest.mark.parametrize("argv", [[], ["--payload-stdin"]])
+def test_payload_stdin_rejects_invalid_json(
+    stdin, argv, monkeypatch, stream_handler, capsys
+):
+    monkeypatch.setattr("ai_infra_bench.req.sys.stdin", io.StringIO(stdin))
+
+    with pytest.raises(SystemExit) as error:
+        main(argv)
+
+    assert error.value.code == 2
+    assert "aib req: error:" in capsys.readouterr().err
+    stream_handler.assert_not_called()
+
+
+def test_payload_stdin_cannot_be_combined_with_another_input(tmp_path):
+    payload_path = tmp_path / "payload.json"
+    payload_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        main(["--payload-stdin", "--payload-path", str(payload_path)])
 
 
 def test_dataset_request_is_deterministic(stream_handler):
