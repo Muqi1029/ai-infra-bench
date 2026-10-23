@@ -640,6 +640,34 @@ def test_run_requests_prepares_copied_payloads(monkeypatch):
     assert original == {"min_tokens": 0, "model": "recorded-model"}
 
 
+def test_run_requests_namespaces_rids_per_batch(monkeypatch):
+    captured = []
+
+    async def record_request(_session, _request_url, payload, sem=None):
+        captured.append(payload["rid"])
+        return OutputMetric(payload=payload)
+
+    monkeypatch.setattr(bench, "request_func", record_request)
+
+    async def run_batch():
+        return await run_requests(
+            None,
+            "unused",
+            [{"rid": "request-1"}, {"rid": "request-2"}],
+            None,
+            None,
+            max_concurrency=1,
+        )
+
+    asyncio.run(run_batch())
+    asyncio.run(run_batch())
+
+    assert captured[0].startswith("request-1-")
+    assert captured[1].startswith("request-2-")
+    assert captured[0].rsplit("-", 1)[1] == captured[1].rsplit("-", 1)[1]
+    assert captured[0].rsplit("-", 1)[1] != captured[2].rsplit("-", 1)[1]
+
+
 def test_run_requests_updates_average_output_throughput(monkeypatch):
     class Progress:
         def __init__(self):

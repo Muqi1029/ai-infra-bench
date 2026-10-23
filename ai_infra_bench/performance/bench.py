@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import time
+import uuid
 from argparse import Namespace
 from contextlib import nullcontext
 from datetime import datetime
@@ -319,12 +320,15 @@ async def run_requests(
     )
     outputs = []
     completion_tokens_sum = 0
+    rid_suffix = uuid.uuid4().hex
 
     async def run_request(payload: Dict[str, Any]) -> OutputMetric:
         nonlocal completion_tokens_sum
 
         async with semaphore or nullcontext():
             payload = prepare_payload(payload, model, override_payload)
+            if payload.get("rid") is not None:
+                payload["rid"] = f"{payload['rid']}-{rid_suffix}"
             output = await request_func(session, request_url, payload)
         if pbar is not None:
             pbar.update(1)
