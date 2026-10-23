@@ -213,3 +213,4 @@ website/node_modules/
 website/build/
 website/.docusaurus/
 package-lock.json
+!website/package-lock.json
