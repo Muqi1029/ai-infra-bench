@@ -1,0 +1,10 @@
+{
+  "sidebar.docs.category.使用指南": {
+    "message": "Guides",
+    "description": "The label for category '使用指南' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.参考": {
+    "message": "Reference",
+    "description": "The label for category '参考' in sidebar 'docs'"
+  }
+}

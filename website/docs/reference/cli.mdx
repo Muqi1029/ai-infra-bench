@@ -1,0 +1,66 @@
+---
+title: 命令行参考
+---
+
+# 命令行参考
+
+通过 `aib --help` 列出命令；通过 `aib <command> --help` 查看已安装版本的完整参数。
+
+## 命令一览
+
+| 命令 | 用途 |
+| --- | --- |
+| `req` | 发送单个请求 |
+| `bench` | 性能压测与普通请求回放 |
+| `slo` | YAML 驱动的 SLO 搜索 |
+| `session-bench` | 按会话回放；别名 `session-reply-bench` |
+| `eval-dataset` | 数据集正确性评测 |
+| `eval-logits` | 比较端点的 Top-K logprob |
+| `eval-hidden-states` | 比较隐藏状态扩展输出 |
+| `plot-metrics` | 将聚合指标导出为交互 HTML |
+| `monitor` | 管理本地监控栈 |
+| `reply` | 回放 token ID 输入/输出数据 |
+| `check-weight` | 检查 safetensors 模型权重 |
+| `profile-sgl` | 启动或停止 SGLang profiling |
+| `token` | 使用 Hugging Face tokenizer 编码/解码；别名 `tokenize` |
+
+部分高级命令需要服务端扩展或额外依赖，使用前请查看各自帮助。
+
+## 通用连接参数
+
+以下参数适用于 `req`、`bench`、`session-bench` 和 HTTP 数据集评测；其他命令可能使用不同接口。
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--base-url` | `127.0.0.1:30000` | 服务根地址，可带 `/v1` |
+| `--api-key` | `JustKeepMe` | Bearer token；真实鉴权服务需自行传入 |
+| `--model` | 未设置 | 请求模型名；要求 model 的服务必须设置 |
+| `--override-payload` | 未设置 | JSON 对象，覆盖请求顶层字段 |
+| `--seed` | `42` | 随机种子 |
+
+SLO 通过 YAML 中的 `endpoint` 配置连接信息，不使用上述 CLI 参数。
+
+## 常用 bench 参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--dataset` | `random` | 与 `--payload-regex-path` 互斥 |
+| `--num-requests` | random/ShareGPT 为 `100` | 其他工作负载由数据量决定 |
+| `--max-concurrency` | `32` | 可指定多个正整数 |
+| `--request-rate` | `inf` | 请求到达速率 |
+| `--input-len` / `--output-len` | `8192` / `1024` | random/ShareGPT 目标长度 |
+| `--num-warmup-requests` | `10` | 预热请求上限 |
+| `--repeat` | `1` | 每个并发值重复次数 |
+| `--metric-path` | `aib-metric.jsonl` | 聚合指标文件 |
+| `--disable-warmup` | 关闭 | 跳过普通预热 |
+| `--disable-flush-cache` | 关闭 | 跳过清缓存和 bench 预热 |
+
+## Token 工具
+
+```bash
+python -m pip install 'ai-infra-bench[data]'
+aib token --tokenizer /path/to/tokenizer "Hello world"
+aib token --tokenizer /path/to/tokenizer --decode '[1, 2, 3]'
+```
+
+token ID 与模型/tokenizer 相关，请使用与服务端一致的 tokenizer。

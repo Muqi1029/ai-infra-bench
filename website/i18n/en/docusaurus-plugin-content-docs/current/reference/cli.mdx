@@ -1,0 +1,66 @@
+---
+title: CLI reference
+---
+
+# CLI reference
+
+Run `aib --help` to list commands and `aib <command> --help` for the complete options in your installed version.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `req` | Send one request |
+| `bench` | Benchmark or replay independent requests |
+| `slo` | YAML-driven SLO search |
+| `session-bench` | Replay sessions; alias `session-reply-bench` |
+| `eval-dataset` | Evaluate dataset accuracy |
+| `eval-logits` | Compare endpoint Top-K logprobs |
+| `eval-hidden-states` | Compare hidden-state extension outputs |
+| `plot-metrics` | Export aggregate metrics to interactive HTML |
+| `monitor` | Manage a local monitoring stack |
+| `reply` | Replay token-ID input/output data |
+| `check-weight` | Inspect safetensors model weights |
+| `profile-sgl` | Start or stop SGLang profiling |
+| `token` | Encode/decode using a Hugging Face tokenizer; alias `tokenize` |
+
+Some advanced commands need server extensions or additional dependencies. Check their individual help before use.
+
+## Common connection options
+
+These options apply to `req`, `bench`, `session-bench`, and HTTP dataset evaluation. Other commands may use different interfaces.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--base-url` | `127.0.0.1:30000` | Service root URL; trailing `/v1` accepted |
+| `--api-key` | `JustKeepMe` | Bearer token; pass the real key for authenticated services |
+| `--model` | Unset | Model name; required if your server requires a model field |
+| `--override-payload` | Unset | JSON object overriding top-level payload fields |
+| `--seed` | `42` | Random seed |
+
+SLO configures connections in the YAML `endpoint` section instead of these CLI options.
+
+## Common bench options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--dataset` | `random` | Mutually exclusive with `--payload-regex-path` |
+| `--num-requests` | `100` for random/ShareGPT | Other workloads use the available data count |
+| `--max-concurrency` | `32` | Accepts multiple positive integers |
+| `--request-rate` | `inf` | Request arrival rate |
+| `--input-len` / `--output-len` | `8192` / `1024` | Target lengths for random/ShareGPT |
+| `--num-warmup-requests` | `10` | Maximum warmup requests |
+| `--repeat` | `1` | Repeats per concurrency setting |
+| `--metric-path` | `aib-metric.jsonl` | Aggregate metrics file |
+| `--disable-warmup` | Off | Skip ordinary warmup |
+| `--disable-flush-cache` | Off | Skip cache flushing and bench warmup |
+
+## Token utility
+
+```bash
+python -m pip install 'ai-infra-bench[data]'
+aib token --tokenizer /path/to/tokenizer "Hello world"
+aib token --tokenizer /path/to/tokenizer --decode '[1, 2, 3]'
+```
+
+Token IDs depend on the model and tokenizer. Use the same tokenizer as your server.

@@ -1,0 +1,73 @@
+---
+title: SLO 容量搜索
+---
+
+# SLO 容量搜索
+
+SLO 搜索回答：“在指定成功率和延迟目标下，服务能承受多大负载？”工具会在 YAML 定义的整数范围内进行二分探测，并记录每次结果。
+
+## 创建配置
+
+保存为 `slo.yaml`，将模型和地址替换为实际值：
+
+```yaml
+endpoint:
+  base_url: http://127.0.0.1:30000
+  api_key: EMPTY
+  model: your-model
+request:
+  payload:
+    messages:
+      - role: user
+        content: Explain prefix caching in one paragraph.
+    max_tokens: 128
+benchmark:
+  num_requests: 100
+  warmup_requests: 5
+  max_concurrency: 32
+  request_rate: inf
+  seed: 42
+search:
+  parameter: max_concurrency
+  min: 1
+  max: 64
+conditions:
+  - metric: success_rate
+    operator: ">="
+    value: 0.99
+  - metric: p99_latency_ms
+    operator: "<"
+    value: 3000
+```
+
+```bash
+aib slo slo.yaml -o slo-result.yaml
+```
+
+所有条件必须同时满足。`success_rate` 使用 0–1 的比例，延迟单位为毫秒。
+
+## 搜索请求速率
+
+将 `search.parameter` 改为 `request_rate`，并设置整数 `min`、`max`（请求/秒）。此时 `benchmark.max_concurrency` 是固定并发上限。搜索并发时，固定速率则来自 `benchmark.request_rate`。
+
+可用比较运算符为 `<`、`<=`、`>`、`>=` 和 `==`，在 YAML 中建议加引号。支持的指标见[指标与结果](../reference/metrics.mdx)。
+
+## 随机 token 模式
+
+将 `request.payload` 替换为：
+
+```yaml
+request:
+  input_len: 1024
+  output_len: 256
+```
+
+此时使用 completions 接口；服务端需支持 token ID 和 `ignore_eos`。如需自定义 API 路径，在 `endpoint.path` 指定。
+
+## 读取结果
+
+报告包含 `status`、`search_parameter`、`best_value` 和 `runs`。每个 run 记录探测值、指标和条件判定。没有通过条件的探测值时，`best_value` 为 `null`，`status` 为 `unsatisfied`；这不会导致命令返回非零退出码，自动化流程需要读取报告状态。
+
+:::info 如何理解容量
+二分搜索假设负载越高越难满足目标，不会穷举每个整数负载。缓存、热身和短样本会影响该假设。将结果作为当前工作负载下的候选容量，并在边界附近重复压测确认。
+:::

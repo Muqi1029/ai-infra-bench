@@ -1,0 +1,66 @@
+---
+title: 正确性评测
+---
+
+# 正确性评测
+
+性能压测关注速度；`aib eval-dataset` 会根据数据集答案检查模型输出。运行前安装数据扩展：
+
+```bash
+python -m pip install 'ai-infra-bench[data]'
+```
+
+## 从小样本开始
+
+```bash
+aib eval-dataset \
+  --evals gsm8k \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --num-shots 5 --num-questions 20 \
+  --max-concurrency 4
+```
+
+运行结束后查看终端中的正确率与请求统计。`--num-questions` 限制题目数，`--num-shots` 设置 few-shot 示例数，`--repeat` 设置评测轮数。少量题目的结果用于验证流程，不代表完整榜单成绩。
+
+| `--evals` | 用途 |
+| --- | --- |
+| `gsm8k` | 小学数学文字题 |
+| `gpqa` | GPQA Diamond 多项选择 |
+| `aime25` | AIME 2025 数学题 |
+| `hle` | Humanity's Last Exam 纯文本子集 |
+| `constrained_decoding` | 结构化输出与约束解码 |
+| `deepswe` | 通过 Pier 执行软件工程任务 |
+
+`--evals all` 覆盖 HTTP 数据集，不包含 DeepSWE，可能需要额外数据访问与较长运行时间。建议先逐个测试。
+
+## HLE 本地数据
+
+```bash
+aib eval-dataset --evals hle \
+  --dataset-path ./hle.jsonl \
+  --num-shots 0 --num-questions 20 \
+  --base-url http://127.0.0.1:30000 --model your-model
+```
+
+支持本地 JSONL；没有本地路径时，默认从 Hugging Face 的 `cais/hle` 读取，可能需要数据访问权限。含图片的题目会跳过。当前使用选择题答案提取与文本规范化后的精确匹配，不使用外部模型裁判，因此不能直接等同于采用其他评分流程的 HLE 官方成绩。
+
+## 自定义评测配置
+
+`--config /path/to/config.yaml` 加载一个数据集的 YAML；只能与单个 `--evals` 值使用。配置中的 `payload` 可以设置生成长度等参数，也可以用 `--override-payload` 覆盖请求字段。不同数据集的字段与答案提取方式不同，自定义数据应遵循对应适配器的格式。
+
+## DeepSWE
+
+需要 Python 3.12+、`ai-infra-bench[deepswe]` 以及 Pier 所需的 Docker 或 Modal 环境。DeepSWE 必须单独运行，传入 `--model` 或 Pier `--config`。完整选项见 `aib eval-dataset --help`。
+
+## 比较推理实现
+
+`aib eval-logits` 比较多个端点的 Top-K logprob，首个端点为参考，要求服务支持相关返回字段：
+
+```bash
+aib eval-logits \
+  --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 \
+  --prompt "The capital of France is" --atol 0.01
+```
+
+`aib eval-hidden-states` 需要服务端支持隐藏状态扩展接口；它不是通用 OpenAI API 功能。使用前查看对应 `--help` 并确认服务端配置。

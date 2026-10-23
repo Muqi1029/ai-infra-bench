@@ -1,0 +1,67 @@
+---
+title: 快速开始
+---
+
+# 快速开始
+
+## 1. 安装
+
+需要 Python 3.10 或更新版本。推荐在独立的虚拟环境安装：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade ai-infra-bench
+aib --help
+```
+
+Windows 使用 `.venv\Scripts\activate` 激活环境。
+
+如需内置数据集或 Hugging Face tokenizer：
+
+```bash
+python -m pip install --upgrade 'ai-infra-bench[data]'
+```
+
+## 2. 连接推理服务
+
+以下示例假设你已经启动服务，地址为 `http://127.0.0.1:30000`。将 `your-model` 替换为服务端公开的模型名称；鉴权服务还需要传入 `--api-key`。
+
+```bash
+aib req \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --prompt "请用一句话介绍你自己"
+```
+
+你会看到模型的流式回复和请求指标。连接失败时，先检查地址、模型名称和服务端日志。
+
+## 3. 使用文本请求压测
+
+创建 `requests.jsonl`，每行一个完整的请求体：
+
+```jsonl
+{"messages":[{"role":"user","content":"Explain what a GPU does."}],"max_tokens":128}
+{"messages":[{"role":"user","content":"Explain what a KV cache does."}],"max_tokens":128}
+```
+
+```bash
+aib bench \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --payload-regex-path requests.jsonl \
+  --max-concurrency 1 2 \
+  --num-warmup-requests 1 \
+  --disable-flush-cache \
+  --metric-path metrics.jsonl
+```
+
+这是连通性和输出流程检查，只包含两条正式请求，不适合作为性能结论。正式测试请扩大请求集，并阅读[性能压测](./guides/benchmark.mdx)。`--disable-flush-cache` 适用于没有清缓存接口的服务。
+
+## 4. 查看结果
+
+```bash
+aib plot-metrics metrics.jsonl -o metrics.html
+```
+
+使用浏览器打开 `metrics.html`，对比不同并发下的延迟和吞吐量。指标解释见[指标与结果](./reference/metrics.mdx)。

@@ -1,0 +1,55 @@
+---
+title: 发送请求
+---
+
+# 发送请求
+
+`aib req` 用于确认服务连通性、查看模型输出以及调试请求体。
+
+## 文本与鉴权
+
+```bash
+aib req \
+  --base-url https://your-inference-host.example \
+  --api-key "$AIB_API_KEY" \
+  --model your-model \
+  --prompt "What is prefix caching?"
+```
+
+在终端中先设置 `AIB_API_KEY`。这是示例中的 shell 变量；AIB 的通用参数不会自动读取该变量，需要显式传入。`--base-url` 可包含末尾的 `/v1`，不要填完整的 chat completions 路径。
+
+默认使用流式响应。加上 `--disable-stream` 可检查非流式 JSON 响应；加上 `--raw` 查看 SSE 原始内容，`--no-print` 隐藏流式文本。
+
+## 使用自己的请求体
+
+创建 `request.json`：
+
+```json
+{
+  "messages": [{"role": "user", "content": "Explain batching."}],
+  "temperature": 0,
+  "max_tokens": 128
+}
+```
+
+```bash
+aib req --base-url http://127.0.0.1:30000 \
+  --model your-model --payload-path request.json
+```
+
+含 `prompt` 且不含 `messages` 的请求体会发送到 `/v1/completions`。
+
+## 覆盖字段
+
+```bash
+aib req --prompt "What is a GPU?" \
+  --override-payload '{"temperature":0,"max_tokens":128}'
+```
+
+覆盖为顶层合并；嵌套对象整体替换，不会递归合并。覆盖中的 `model` 优先于 `--model`。流式控制与统计字段随后由工具设置，不能通过覆盖将压测改为非流式。
+
+`--enable-thinking`、`--disable-thinking`、`--tools`、`--json-schema-response-format` 和 `--ebnf` 依赖服务端能力。后面三个参数使用工具内置的演示结构；自定义结构请使用请求体文件。
+
+:::tip 调试输出
+`--verbose` 会打印请求头与请求体，包括鉴权信息。分享日志前请移除密钥。
+:::

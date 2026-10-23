@@ -1,0 +1,34 @@
+---
+title: 会话回放
+---
+
+# 会话回放
+
+`aib session-bench` 将每个 JSONL 文件视为一个会话。文件内请求按顺序执行，不同会话可并发运行；并发槽位在整个会话期间持有。
+
+## 准备会话文件
+
+创建 `sessions/session-01.jsonl`：
+
+```jsonl
+{"messages":[{"role":"user","content":"My name is Alex."}],"max_tokens":64}
+{"messages":[{"role":"user","content":"My name is Alex."},{"role":"assistant","content":"Hello, Alex!"},{"role":"user","content":"What is my name?"}],"max_tokens":64}
+```
+
+每行必须是完整请求体。工具不会将上一条的实际输出自动填入下一条；历史消息需要预先包含在请求中。所有请求发送到 chat completions 接口。
+
+## 执行回放
+
+```bash
+aib session-bench 'sessions/**/*.jsonl' \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --max-concurrency 16 \
+  --num-warmup-sessions 0 \
+  --disable-flush-cache \
+  --metric-path session-metrics.jsonl
+```
+
+`--max-concurrency 16` 指最多 16 个活跃会话。默认前 3 个会话用于预热并从正式阶段移除；只有少量文件时，使用 `--num-warmup-sessions 0` 避免全部被用于预热。`--num-sessions` 限制读取后参与运行的会话总数，包含预热会话。
+
+`--request-rate` 同时控制会话启动的到达速率和同一会话内相邻请求的间隔；它不是严格的全局 HTTP QPS 限制。导出的延迟和吞吐量是请求级别的聚合，不是会话总时长。
