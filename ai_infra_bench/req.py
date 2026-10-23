@@ -259,7 +259,8 @@ def main(argv=None):
         prog="aib req",
         description=(
             "Send a single inference request. With no arguments, read a JSON "
-            "request payload from stdin."
+            "payload from piped or redirected stdin; in a terminal, send the "
+            "default prompt 'Who are you'."
         ),
     )
     add_common_args(parser)
@@ -354,7 +355,7 @@ def main(argv=None):
     )
 
     args = parser.parse_args(argv)
-    if not argv:
+    if not argv and not sys.stdin.isatty():
         args.payload_stdin = True
     if (args.input_len is None) != (args.output_len is None):
         parser.error("--input-len and --output-len must be used together")

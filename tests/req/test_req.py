@@ -259,6 +259,24 @@ def test_no_arguments_read_stdin(monkeypatch, stream_handler):
     assert payload["stream"] is True
 
 
+@pytest.mark.parametrize("argv", [[], None])
+def test_no_arguments_in_terminal_send_default_prompt(
+    argv, monkeypatch, stream_handler
+):
+    stdin = Mock(spec=["isatty", "read"])
+    stdin.isatty.return_value = True
+    monkeypatch.setattr("ai_infra_bench.req.sys.argv", ["aib req"])
+    monkeypatch.setattr("ai_infra_bench.req.sys.stdin", stdin)
+
+    main(argv)
+
+    stream_handler.assert_awaited_once()
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url == "http://127.0.0.1:30000/v1/chat/completions"
+    assert payload["messages"] == [{"role": "user", "content": "Who are you"}]
+    stdin.read.assert_not_called()
+
+
 def test_payload_stdin_chat_request(monkeypatch, stream_handler):
     monkeypatch.setattr(
         "ai_infra_bench.req.sys.stdin",

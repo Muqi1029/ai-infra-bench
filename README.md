@@ -30,7 +30,9 @@ Send one request:
 aib req --base-url http://127.0.0.1:30000 --prompt "Who are you?"
 ```
 
-With no arguments, `aib req` reads a complete JSON request payload from stdin:
+With no arguments, `aib req` sends the default prompt `Who are you` when run
+directly in a terminal. With piped or redirected input, it reads a complete JSON
+request payload from stdin:
 
 ```bash
 cat payload.json | aib req
