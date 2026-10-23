@@ -5,6 +5,9 @@
 [![LICENSE](https://img.shields.io/badge/license-Apache_2.0-orange.svg)](LICENSE)
 [![PYTHON VERSION](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
 [![PYPI PROJECT](https://img.shields.io/pypi/v/ai-infra-bench?color=green)](https://pypi.org/project/ai-infra-bench/)
+[![Documentation](https://img.shields.io/badge/docs-online-blue)](https://muqi1029.github.io/ai-infra-bench/)
+
+**[中文文档](https://muqi1029.github.io/ai-infra-bench/) · [English Docs](https://muqi1029.github.io/ai-infra-bench/en/)**
 
 </div>
 
@@ -15,6 +18,8 @@ outputs, and finds the highest load that satisfies a service-level objective.
 It is backend-independent and does not require a serving framework SDK.
 
 ## Documentation
+
+Read the documentation: [简体中文](https://muqi1029.github.io/ai-infra-bench/) | [English](https://muqi1029.github.io/ai-infra-bench/en/).
 
 The [user documentation source](website/docs/intro.mdx) covers setup, benchmarking,
 SLO search, session replay, evaluation, and monitoring in Simplified Chinese and
