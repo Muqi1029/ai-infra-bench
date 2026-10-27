@@ -203,7 +203,6 @@ def test_length_request(stream_handler):
     "argv",
     [
         ["--input-len", "4"],
-        ["--output-len", "8"],
         ["--input-len", "0", "--output-len", "8"],
         ["--input-len", "4", "--output-len", "0"],
         ["--input-len", "4", "--output-len", "8", "--tools"],

@@ -98,6 +98,13 @@ def get_request_url(base_url: str, dataset: str | None) -> str:
     return api_url(base_url, endpoint)
 
 
+def request_url_for_payloads(base_url: str, requests: List[Mapping[str, Any]]) -> str:
+    """Choose the OpenAI endpoint from the loaded payload shape."""
+    if requests and "prompt" in requests[0] and "messages" not in requests[0]:
+        return api_url(base_url, "/v1/completions")
+    return api_url(base_url, "/v1/chat/completions")
+
+
 def read_packaged_requests(dataset: str) -> List[Dict]:
     try:
         data_package = resources.files("ai_infra_bench_dataset")
@@ -198,7 +205,12 @@ def resize_sharegpt_requests(
 def load_requests(args: Namespace) -> List[Dict]:
 
     if getattr(args, "payload_regex_path", None):
-        if args.with_ts:
+        if getattr(args, "payload_path", None):
+            payload = _read_json(args.payload_path)
+            if not isinstance(payload, Mapping):
+                raise ValueError("--payload-path must contain one JSON object")
+            requests = [dict(payload) for _ in range(args.num_requests)]
+        elif args.with_ts:
             requests = read_requests_with_ts(args.payload_regex_path)
         else:
             requests = read_requests(args.payload_regex_path)
@@ -207,7 +219,14 @@ def load_requests(args: Namespace) -> List[Dict]:
             logger.error(
                 f"Read 0 requests! Please check your --payload-regex-path ({args.payload_regex_path=})"
             )
-
+    elif getattr(args, "prompt", None) is not None:
+        requests = [
+            {
+                "messages": [{"role": "user", "content": args.prompt}],
+                "max_tokens": args.output_len,
+            }
+            for _ in range(args.num_requests)
+        ]
     elif getattr(args, "dataset", None) == "random":
         cache_ratio = getattr(args, "cache_ratio", 0.0)
         requests = generate_random_requests(
@@ -377,10 +396,7 @@ async def run_benchmark(args: Namespace) -> None:
         logger.info(f"Debug mode: only use {args.num_warmup_requests} warmup requests")
 
     requests = load_requests(args)
-    request_url = get_request_url(
-        args.base_url,
-        getattr(args, "dataset", None),
-    )
+    request_url = request_url_for_payloads(args.base_url, requests)
     flush_cache_endpoint = api_url(args.base_url, "/flush_cache")
 
     # prune

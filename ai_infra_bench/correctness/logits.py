@@ -14,7 +14,7 @@ from itertools import zip_longest
 from typing import Any, Optional, Sequence
 
 from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.req import sanitize_url
+from ai_infra_bench.utils.req import add_request_args, prepare_payload
 
 logger = logging.getLogger(__name__)
 
@@ -199,25 +199,9 @@ def _top_k(value: str) -> int:
     return number
 
 
-def _json_object(value: str) -> dict[str, Any]:
-    try:
-        result = json.loads(value)
-    except json.JSONDecodeError as exc:
-        raise argparse.ArgumentTypeError(f"invalid JSON: {exc.msg}") from exc
-    if not isinstance(result, dict):
-        raise argparse.ArgumentTypeError("must be a JSON object")
-    return result
-
-
 def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--base-urls",
-        nargs="+",
-        required=True,
-        type=sanitize_url,
-        help="OpenAI-compatible base URLs; the first endpoint is the reference",
-    )
+    parser = argparse.ArgumentParser(prog="aib eval-logits", description=__doc__)
+    add_request_args(parser, multiple_base_urls=True)
     parser.add_argument(
         "--rtol",
         type=_nonnegative_float,
@@ -230,9 +214,10 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=1e-2,
         help="Absolute tolerance for logprob comparison (default: %(default)s)",
     )
-    parser.add_argument("--prompt", "--user-prompt", default=PROMPT, help="User prompt")
+    parser.add_argument("--prompt", "--user-prompt", help="User prompt")
     parser.add_argument(
         "--max-tokens",
+        "--output-len",
         type=_positive_int,
         default=PAYLOAD["max_tokens"],
         help="Maximum output tokens (default: %(default)s)",
@@ -243,18 +228,6 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=PAYLOAD["top_logprobs"],
         help="Number of Top-K candidates to compare (default: %(default)s)",
     )
-    parser.add_argument(
-        "--override-payload",
-        type=_json_object,
-        metavar="JSON",
-        help="JSON object merged into the request payload",
-    )
-    parser.add_argument(
-        "--api-key",
-        default=os.environ.get("OPENAI_API_KEY", "EMPTY"),
-        help="Bearer token (default: OPENAI_API_KEY or EMPTY)",
-    )
-
     parser.add_argument(
         "--no-color", action="store_true", help="Disable ANSI colors in terminal output"
     )
@@ -267,12 +240,11 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def build_payload(args: argparse.Namespace) -> dict[str, Any]:
     payload = {
         **PAYLOAD,
-        "messages": [{"role": "user", "content": args.prompt}],
+        "messages": [{"role": "user", "content": args.prompt or PROMPT}],
         "max_tokens": args.max_tokens,
         "top_logprobs": args.top_logprobs,
     }
-    if args.override_payload:
-        payload.update(args.override_payload)
+    payload = prepare_payload(payload, args.model, args.override_payload)
     if payload.get("stream"):
         raise ValueError("streaming responses are not supported; set stream to false")
     return payload

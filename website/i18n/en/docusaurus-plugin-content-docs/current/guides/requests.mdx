@@ -16,7 +16,7 @@ aib req \
   --prompt "What is prefix caching?"
 ```
 
-Set `AIB_API_KEY` in your shell first. This is an example shell variable; common AIB options do not read it automatically, so pass it explicitly. `--base-url` accepts a trailing `/v1`; do not provide the full chat completions path.
+`--api-key` reads `OPENAI_API_KEY` by default, falling back to `JustKeepMe`. `--base-url` accepts a trailing `/v1`; do not provide the full chat completions path.
 
 Streaming is the default. Use `--disable-stream` to inspect a non-streaming JSON response, `--raw` to inspect raw SSE data, or `--no-print` to hide streamed text.
 
@@ -42,8 +42,8 @@ A payload containing `prompt` without `messages` is sent to `/v1/completions`.
 ## Override fields
 
 ```bash
-aib req --prompt "What is a GPU?" \
-  --override-payload '{"temperature":0,"max_tokens":128}'
+aib req --prompt "What is a GPU?" --output-len 128 \
+  --override-payload '{"temperature":0}'
 ```
 
 Overrides merge at the top level. Nested objects are replaced, not recursively merged. An overridden `model` takes precedence over `--model`. The tool then sets streaming and statistics fields; overrides cannot switch a benchmark to non-streaming mode.

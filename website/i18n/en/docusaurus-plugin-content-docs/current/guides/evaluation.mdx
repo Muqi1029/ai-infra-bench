@@ -60,7 +60,9 @@ Requires Python 3.12+, `ai-infra-bench[deepswe]`, and the Docker or Modal enviro
 ```bash
 aib eval-logits \
   --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 \
-  --prompt "The capital of France is" --atol 0.01
+  --model your-model --prompt "The capital of France is" \
+  --output-len 1 --override-payload '{"chat_template_kwargs":{"enable_thinking":false}}' \
+  --atol 0.01
 ```
 
 `aib eval-hidden-states` requires a server extension for hidden states; it is not a standard OpenAI API feature. Check its `--help` and your server configuration before use.

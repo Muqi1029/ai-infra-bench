@@ -1,5 +1,6 @@
 import json
-from argparse import ArgumentParser
+import os
+from argparse import ArgumentParser, ArgumentTypeError
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
 
@@ -179,23 +180,50 @@ def update_metrics(metrics: Dict[str, Any], new_metrics: Mapping[str, Any]) -> N
     )
 
 
-def add_common_args(parser: ArgumentParser) -> None:
+def _override_payload_arg(value: str) -> str:
+    try:
+        parse_override_payload(value)
+    except ValueError as error:
+        raise ArgumentTypeError(str(error)) from error
+    return value
+
+
+def add_request_args(
+    parser: ArgumentParser, *, multiple_base_urls: bool = False
+) -> None:
+    if multiple_base_urls:
+        parser.add_argument(
+            "--base-urls",
+            "--base-url",
+            dest="base_urls",
+            nargs="+",
+            required=True,
+            type=sanitize_url,
+            help="Endpoint base URLs; the first endpoint is the reference",
+        )
+    else:
+        parser.add_argument(
+            "--base-url",
+            default="127.0.0.1:30000",
+            type=sanitize_url,
+            help="The base URL of the endpoint service",
+        )
     parser.add_argument(
-        "--base-url",
-        default="127.0.0.1:30000",
-        type=sanitize_url,
-        help="The base URL of the endpoint service",
-    )
-    parser.add_argument(
-        "--api-key", default="JustKeepMe", help="The API key of the endpoint service"
+        "--api-key",
+        default=os.environ.get("OPENAI_API_KEY", "JustKeepMe"),
+        help="Bearer token (default: OPENAI_API_KEY or JustKeepMe)",
     )
     parser.add_argument("--model", type=str, help="The model to request")
 
     parser.add_argument(
         "--override-payload",
-        type=str,
-        help="Override request fields with a JSON object",
+        type=_override_payload_arg,
+        help="JSON object overriding top-level request fields, including --model",
     )
+
+
+def add_common_args(parser: ArgumentParser) -> None:
+    add_request_args(parser)
     parser.add_argument(
         "--seed", type=int, default=42, help="Random request generation seed"
     )

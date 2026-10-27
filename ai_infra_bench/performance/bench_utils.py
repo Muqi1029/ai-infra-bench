@@ -127,6 +127,14 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     # dataset
     mutex_data_group = parser.add_mutually_exclusive_group(required=False)
     mutex_data_group.add_argument(
+        "--prompt",
+        "--user-prompt",
+        help="Repeat this user prompt using chat completions",
+    )
+    mutex_data_group.add_argument(
+        "--payload-path", help="Path to one JSON request payload"
+    )
+    mutex_data_group.add_argument(
         "--dataset",
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
         help="use the dataset to benchmark (default: random)",
@@ -151,9 +159,10 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
     parser.add_argument(
         "--output-len",
+        "--max-tokens",
         type=int,
         default=1024,
-        help="Target output token length for random or ShareGPT datasets",
+        help="Maximum output tokens; for random/ShareGPT, the target output length",
     )
     parser.add_argument(
         "--random-range-ratio",
@@ -222,6 +231,23 @@ def validate_args(args: Namespace) -> None:
     if override_payload := getattr(args, "override_payload", None):
         parse_override_payload(override_payload)
 
+    if getattr(args, "prompt", None) is not None and getattr(
+        args, "payload_regex_path", None
+    ):
+        raise ValueError("--prompt cannot be combined with --payload-regex-path")
+    if getattr(args, "payload_path", None):
+        if args.dataset or args.payload_regex_path:
+            raise ValueError(
+                "--payload-path cannot be combined with --dataset or --payload-regex-path"
+            )
+        args.payload_regex_path = args.payload_path
+        args.dataset = None
+        args.with_ts = False
+    if getattr(args, "payload_path", None):
+        args.payload_regex_path = args.payload_path
+        args.dataset = None
+        args.with_ts = False
+
     max_concurrencies = (
         args.max_concurrency
         if isinstance(args.max_concurrency, (list, tuple))
@@ -277,13 +303,15 @@ def validate_args(args: Namespace) -> None:
             )
 
     # validate dataset
-    if not getattr(args, "payload_regex_path", None) and not getattr(
-        args, "dataset", None
+    if (
+        getattr(args, "prompt", None) is None
+        and not getattr(args, "payload_regex_path", None)
+        and not getattr(args, "dataset", None)
     ):
         args.dataset = "random"
 
     dataset = getattr(args, "dataset", None)
-    if dataset in ["random", "sharegpt"]:
+    if dataset in ["random", "sharegpt"] or getattr(args, "prompt", None) is not None:
         if args.num_requests is None:
             args.num_requests = 100
             logger.warning(

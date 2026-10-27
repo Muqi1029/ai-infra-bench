@@ -165,6 +165,8 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         payload["chat_template_kwargs"] = {"enable_thinking": False, "thinking": False}
         payload["thinking"] = {"type": "disabled"}
 
+    if args.output_len is not None:
+        payload["max_tokens"] = args.output_len
     prepared = prepare_payload(
         payload, args.model, args.override_payload, stream=not args.disable_stream
     )
@@ -286,11 +288,12 @@ def main(argv=None):
     parser.add_argument(
         "--disable-stream", action="store_true", help="Disable streaming"
     )
-    parser.add_argument("--prompt", type=str, default="Who are you", help="User prompt")
+    parser.add_argument("--prompt", "--user-prompt", type=str, help="User prompt")
     parser.add_argument(
         "--output-len",
+        "--max-tokens",
         type=int,
-        help="Target output token length for a random-token request",
+        help="Maximum output tokens; required with --input-len",
     )
 
     parser.add_argument(
@@ -357,8 +360,20 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not argv and not sys.stdin.isatty():
         args.payload_stdin = True
-    if (args.input_len is None) != (args.output_len is None):
-        parser.error("--input-len and --output-len must be used together")
+    if args.prompt is not None and any(
+        (
+            args.dataset,
+            args.payload_stdin,
+            args.payload_path,
+            args.input_len is not None,
+            args.input_ids_path,
+        )
+    ):
+        parser.error("--prompt cannot be combined with another request input")
+    if args.prompt is None:
+        args.prompt = "Who are you"
+    if args.input_len is not None and args.output_len is None:
+        parser.error("--input-len requires --output-len or --max-tokens")
     if args.input_len is not None and args.input_len < 1:
         parser.error("--input-len must be at least 1")
     if args.output_len is not None and args.output_len < 1:

@@ -16,7 +16,7 @@ aib req \
   --prompt "What is prefix caching?"
 ```
 
-在终端中先设置 `AIB_API_KEY`。这是示例中的 shell 变量；AIB 的通用参数不会自动读取该变量，需要显式传入。`--base-url` 可包含末尾的 `/v1`，不要填完整的 chat completions 路径。
+`--api-key` 默认读取 `OPENAI_API_KEY`，未设置时为 `JustKeepMe`。`--base-url` 可包含末尾的 `/v1`，不要填完整的 chat completions 路径。
 
 默认使用流式响应。加上 `--disable-stream` 可检查非流式 JSON 响应；加上 `--raw` 查看 SSE 原始内容，`--no-print` 隐藏流式文本。
 
@@ -42,8 +42,8 @@ aib req --base-url http://127.0.0.1:30000 \
 ## 覆盖字段
 
 ```bash
-aib req --prompt "What is a GPU?" \
-  --override-payload '{"temperature":0,"max_tokens":128}'
+aib req --prompt "What is a GPU?" --output-len 128 \
+  --override-payload '{"temperature":0}'
 ```
 
 覆盖为顶层合并；嵌套对象整体替换，不会递归合并。覆盖中的 `model` 优先于 `--model`。流式控制与统计字段随后由工具设置，不能通过覆盖将压测改为非流式。

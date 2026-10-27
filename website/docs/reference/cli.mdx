@@ -28,15 +28,19 @@ title: 命令行参考
 
 ## 通用连接参数
 
-以下参数适用于 `req`、`bench`、`session-bench` 和 HTTP 数据集评测；其他命令可能使用不同接口。
+以下参数适用于 `req`、`bench`、`eval-logits`、`session-bench` 和 HTTP 数据集评测。`eval-logits` 使用 `--base-urls` 指定一个或多个端点，也接受 `--base-url` 别名；必须显式提供地址。
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--base-url` | `127.0.0.1:30000` | 服务根地址，可带 `/v1` |
-| `--api-key` | `JustKeepMe` | Bearer token；真实鉴权服务需自行传入 |
+| `--api-key` | `OPENAI_API_KEY` 或 `JustKeepMe` | 显式参数优先于环境变量 |
 | `--model` | 未设置 | 请求模型名；要求 model 的服务必须设置 |
 | `--override-payload` | 未设置 | JSON 对象，覆盖请求顶层字段 |
-| `--seed` | `42` | 随机种子 |
+| `--seed` | `42` | 随机请求生成种子；`eval-logits` 不使用此参数 |
+
+`req`、`bench`、`eval-logits` 均支持 `--prompt`（别名 `--user-prompt`）和 `--output-len`（别名 `--max-tokens`）。文本 prompt 通过 chat completions 发送；bench 会重复该 prompt，默认 100 个请求，不能同时指定 dataset 或 payload 文件。`--input-len` 不控制文本 prompt 的长度。重复 prompt 可能命中服务端前缀缓存。
+
+请求字段优先级：`输入请求体/默认值 < 显式参数 < --override-payload`。JSON 必须是对象，按顶层覆盖，嵌套对象整体替换。流式模式按工具职责控制：bench 使用流式统计，req 使用 `--disable-stream` 切换，eval-logits 仅支持非流式，拒绝 `stream:true`。
 
 SLO 通过 YAML 中的 `endpoint` 配置连接信息，不使用上述 CLI 参数。
 

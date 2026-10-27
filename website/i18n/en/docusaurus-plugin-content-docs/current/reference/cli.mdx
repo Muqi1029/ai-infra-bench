@@ -28,15 +28,19 @@ Some advanced commands need server extensions or additional dependencies. Check 
 
 ## Common connection options
 
-These options apply to `req`, `bench`, `session-bench`, and HTTP dataset evaluation. Other commands may use different interfaces.
+These options apply to `req`, `bench`, `eval-logits`, `session-bench`, and HTTP dataset evaluation. `eval-logits` requires one or more explicit addresses using `--base-urls`, also accepting the alias `--base-url`.
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `--base-url` | `127.0.0.1:30000` | Service root URL; trailing `/v1` accepted |
-| `--api-key` | `JustKeepMe` | Bearer token; pass the real key for authenticated services |
+| `--api-key` | `OPENAI_API_KEY` or `JustKeepMe` | Explicit CLI value takes precedence over the environment |
 | `--model` | Unset | Model name; required if your server requires a model field |
 | `--override-payload` | Unset | JSON object overriding top-level payload fields |
-| `--seed` | `42` | Random seed |
+| `--seed` | `42` | Random request generation seed; not used by `eval-logits` |
+
+`req`, `bench`, and `eval-logits` all accept `--prompt` (alias `--user-prompt`) and `--output-len` (alias `--max-tokens`). Text prompts use chat completions. Bench repeats the prompt for 100 requests by default, mutually exclusive with dataset and payload files. `--input-len` does not resize text prompts. Repeated prompts may hit the server's prefix cache.
+
+Payload precedence: `input body/defaults < explicit options < --override-payload`. Overrides must be JSON objects; merging is shallow, replacing entire nested objects. Streaming follows command requirements: bench uses streaming statistics, req switches with `--disable-stream`, and eval-logits requires non-streaming responses and rejects `stream:true`.
 
 SLO configures connections in the YAML `endpoint` section instead of these CLI options.
 

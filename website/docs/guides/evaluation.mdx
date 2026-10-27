@@ -60,7 +60,9 @@ aib eval-dataset --evals hle \
 ```bash
 aib eval-logits \
   --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 \
-  --prompt "The capital of France is" --atol 0.01
+  --model your-model --prompt "The capital of France is" \
+  --output-len 1 --override-payload '{"chat_template_kwargs":{"enable_thinking":false}}' \
+  --atol 0.01
 ```
 
 `aib eval-hidden-states` 需要服务端支持隐藏状态扩展接口；它不是通用 OpenAI API 功能。使用前查看对应 `--help` 并确认服务端配置。
