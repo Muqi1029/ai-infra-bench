@@ -23,7 +23,7 @@ from ai_infra_bench.utils.req import (
 )
 
 RANDOM_TOKEN_UPPER_BOUND = 10_000
-json_schema_response_format = {
+response_format_json_schema = {
     "name": "require_named",
     "description": "a schema for the response format",
     "schema": {
@@ -143,10 +143,10 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         payload = {"messages": [{"role": "user", "content": args.prompt}]}
         if args.ebnf:
             payload["ebnf"] = ebnf_content
-        elif args.json_schema_response_format:
+        elif args.response_format_json_schema:
             payload["response_format"] = {
                 "type": "json_schema",
-                "json_schema": json_schema_response_format,
+                "json_schema": response_format_json_schema,
             }
         elif args.tools:
             payload["tools"] = tools
@@ -338,7 +338,7 @@ def main(argv=None):
         "--ebnf", action="store_true", help="Constrained Decoding for EBNF format"
     )
     mutex_group.add_argument(
-        "--json-schema-response-format",
+        "--response-format-json-schema",
         action="store_true",
         help="JSON Schema Response Format",
     )
