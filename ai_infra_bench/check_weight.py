@@ -1,13 +1,11 @@
 import argparse
 import json
+import math
 import os
 import re
+import sys
 from dataclasses import dataclass
 from glob import glob
-
-import torch
-from huggingface_hub import snapshot_download
-from safetensors.torch import load_file
 
 from ai_infra_bench.utils.draw import print_table
 
@@ -232,10 +230,12 @@ def load_model_config(model_dir):
 
 
 def get_tensor_items(state_dict):
+    torch = sys.modules.get("torch")
     return [
         (key, value)
         for key, value in state_dict.items()
-        if isinstance(value, torch.Tensor)
+        if isinstance(value, TensorInfo)
+        or (torch is not None and isinstance(value, torch.Tensor))
     ]
 
 
@@ -254,7 +254,11 @@ def format_scalar(value):
 
 def is_modelopt_nvfp4_weight(key, value, state_dict):
     """Detect ModelOpt NVFP4 weights without treating every uint8 tensor as FP4."""
-    if value.dtype != torch.uint8 or value.ndim == 0 or not key.endswith(".weight"):
+    if (
+        str(value.dtype) not in ("U8", "torch.uint8")
+        or value.ndim == 0
+        or not key.endswith(".weight")
+    ):
         return False
 
     prefix = key.removesuffix(".weight")
@@ -271,7 +275,7 @@ def is_configured_expert_fp4_weight(key, value, model_config):
     return (
         isinstance(expert_dtype, str)
         and expert_dtype.lower() == "fp4"
-        and value.dtype in (torch.int8, torch.uint8)
+        and str(value.dtype) in ("I8", "U8", "torch.int8", "torch.uint8")
         and value.ndim > 0
         and key.endswith(".weight")
         and ROUTED_EXPERT_PATTERN.search(key) is not None
@@ -374,7 +378,60 @@ def print_weight_summary(
     return len(items), total_bytes
 
 
+@dataclass
+class TensorInfo:
+    """Only metadata and scalar values are needed for a weight summary."""
+
+    shape: tuple
+    dtype: str
+    scalar: object = None
+
+    @property
+    def ndim(self):
+        return len(self.shape)
+
+    def numel(self):
+        return math.prod(self.shape)
+
+    def element_size(self):
+        # Safetensors dtype names encode their bit width (except BOOL).
+        if self.dtype == "BOOL":
+            return 1
+        return int(re.search(r"\d+", self.dtype).group()) // 8
+
+    def item(self):
+        return self.scalar
+
+
+def load_file(path):
+    try:
+        import ml_dtypes  # Registers BF16/FP8 NumPy dtypes for scalar values.
+        from safetensors import safe_open
+    except ImportError as exc:
+        raise ImportError(
+            'Safetensors inspection requires: pip install "ai-infra-bench[weight]"'
+        ) from exc
+
+    with safe_open(path, framework="np") as stream:
+        result = {}
+        for key in stream.keys():
+            tensor = stream.get_slice(key)
+            shape = tuple(tensor.get_shape())
+            result[key] = TensorInfo(
+                shape,
+                tensor.get_dtype(),
+                stream.get_tensor(key).item() if not shape else None,
+            )
+        return result
+
+
 def load_bin_file(path):
+    try:
+        import torch
+    except ImportError as exc:
+        raise ImportError(
+            "PyTorch .bin checkpoints require torch; install torch or use safetensors."
+        ) from exc
     try:
         return torch.load(path, map_location="cpu", weights_only=True)
     except TypeError:
@@ -415,6 +472,12 @@ def download_from_hub(
 ):
     # If cache_dir is None, Hugging Face uses "${HF_HOME}/hub".
     if not os.path.isdir(model_path):
+        try:
+            from huggingface_hub import snapshot_download
+        except ImportError as exc:
+            raise ImportError(
+                "Downloading remote models requires: pip install huggingface-hub"
+            ) from exc
         dir_path = snapshot_download(model_path, cache_dir=cache_dir)
     else:
         dir_path = model_path

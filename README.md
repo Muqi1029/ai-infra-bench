@@ -158,6 +158,23 @@ SLO runs write a YAML report with every probe, its metrics, and condition result
 Request benchmarks can also write machine-readable JSON or JSONL metrics for
 later visualization.
 
+## Inspect model weights
+
+```bash
+pip install 'ai-infra-bench[weight]'
+aib check-weight --path /path/to/model
+```
+
+Local safetensors inspection needs only the lightweight `safetensors` and
+`ml-dtypes` extras, in addition to the base package. It reads tensor metadata and
+scalar values without loading full weight tensors. BF16, FP8, and packed FP4
+parameter accounting do not require PyTorch. Dtypes are displayed using
+safetensors names such as `BF16`, `F32`, and `U8`.
+
+For a Hugging Face model ID, also install `huggingface-hub`. Legacy `.bin`
+checkpoints still require a separately installed `torch`; it is only imported
+when reading that format.
+
 ## Development
 
 ```bash

@@ -34,7 +34,7 @@ jobs:
         run: |
           pip install -U pip setuptools wheel
           pip install -e ./aib-dataset
-          pip install -e . pytest
+          pip install -e '.[weight]' pytest
 
       - name: Run tests
         run: |
