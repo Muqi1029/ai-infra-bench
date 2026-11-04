@@ -140,7 +140,8 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
         payload = {"prompt": input_ids}
         url = api_url(args.base_url, "/v1/completions")
     else:
-        payload = {"messages": [{"role": "user", "content": args.prompt}]}
+        prompt = sys.stdin.read() if args.prompt == "-" else args.prompt
+        payload = {"messages": [{"role": "user", "content": prompt}]}
         if args.ebnf:
             payload["ebnf"] = ebnf_content
         elif args.response_format_json_schema:
@@ -288,7 +289,12 @@ def main(argv=None):
     parser.add_argument(
         "--disable-stream", action="store_true", help="Disable streaming"
     )
-    parser.add_argument("--prompt", "--user-prompt", type=str, help="User prompt")
+    parser.add_argument(
+        "--prompt",
+        "--user-prompt",
+        type=str,
+        help="User prompt, or '-' to read plain text from stdin",
+    )
     parser.add_argument(
         "--output-len",
         "--max-tokens",

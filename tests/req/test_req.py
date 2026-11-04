@@ -183,6 +183,31 @@ def test_stream_request(stream_handler):
     assert raw is False
 
 
+@pytest.mark.parametrize("option", ["--prompt", "--user-prompt"])
+@pytest.mark.parametrize("text", ["你好\n第二行\n", '{"prompt":"literal JSON"}', ""])
+def test_prompt_stdin(option, text, monkeypatch, stream_handler):
+    monkeypatch.setattr("ai_infra_bench.req.sys.stdin", io.StringIO(text))
+
+    main([option, "-", "--model", "test-model", "--max-tokens", "8"])
+
+    url, _, payload, _, _ = stream_handler.await_args.args
+    assert url.endswith("/v1/chat/completions")
+    assert payload["messages"] == [{"role": "user", "content": text}]
+    assert payload["model"] == "test-model"
+    assert payload["max_tokens"] == 8
+
+
+def test_prompt_stdin_rejects_conflicting_input_before_reading(monkeypatch):
+    stdin = Mock(spec=["read"])
+    monkeypatch.setattr("ai_infra_bench.req.sys.stdin", stdin)
+
+    with pytest.raises(SystemExit) as error:
+        main(["--prompt", "-", "--payload-stdin"])
+
+    assert error.value.code == 2
+    stdin.read.assert_not_called()
+
+
 def test_length_request(stream_handler):
     argv = ["--input-len", "4", "--output-len", "8", "--seed", "7"]
     main(argv)

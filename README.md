@@ -53,6 +53,14 @@ cat payload.json | aib req
 Use `--payload-stdin` or `--payload-path -` to read from stdin when passing other
 options. The input must be a single JSON object.
 
+Use `--prompt -` (or `--user-prompt -`) for plain text from a pipe or file
+redirection. Whitespace and newlines are preserved:
+
+```bash
+cat prompt.txt | aib req --prompt - --max-tokens 128
+aib req --prompt - < prompt.txt
+```
+
 Run a random-token benchmark:
 
 ```bash

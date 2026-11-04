@@ -22,6 +22,16 @@ Streaming is the default. Use `--disable-stream` to inspect a non-streaming JSON
 
 ## Use your own payload
 
+Use `--prompt -` (or `--user-prompt -`) to read plain text from a pipe or file
+redirection, preserving whitespace and newlines:
+
+```bash
+cat prompt.txt | aib req --prompt - --max-tokens 128
+aib req --prompt - < prompt.txt
+```
+
+For a complete JSON request body, use `--payload-stdin` or `--payload-path -`.
+
 Create `request.json`:
 
 ```json

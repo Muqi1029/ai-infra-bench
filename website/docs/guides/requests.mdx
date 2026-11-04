@@ -22,6 +22,15 @@ aib req \
 
 ## 使用自己的请求体
 
+纯文本 prompt 可通过 `--prompt -`（或 `--user-prompt -`）从管道或文件重定向读取，空格和换行会原样保留：
+
+```bash
+cat prompt.txt | aib req --prompt - --max-tokens 128
+aib req --prompt - < prompt.txt
+```
+
+这里的 stdin 是纯文本；传入完整 JSON 请求体请使用 `--payload-stdin` 或 `--payload-path -`。
+
 创建 `request.json`：
 
 ```json
