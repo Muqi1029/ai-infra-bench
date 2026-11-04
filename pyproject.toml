@@ -19,7 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 weight = ["safetensors>=0.5", "ml-dtypes>=0.5"]
-data = ["datasets", "transformers", "ai-infra-bench-dataset==0.1.4.post6"]
+data = ["datasets", "transformers", "ai-infra-bench-dataset==0.1.4.post8"]
 deepswe = ["datacurve-pier>=0.3.0; python_version >= '3.12'"]
 
 [tool.setuptools.dynamic]
