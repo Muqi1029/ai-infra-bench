@@ -28,6 +28,10 @@ _COMMANDS: dict[str, SubcommandSpec] = {
         "ai_infra_bench.reply:main",
         "Reply Payloads for only Input Ids and Output Ids",
     ),
+    "check-device": SubcommandSpec(
+        "ai_infra_bench.check_device:main",
+        "Inspect NVIDIA GPU capabilities without torch",
+    ),
     "check-weight": SubcommandSpec(
         "ai_infra_bench.check_weight:main",
         "Check model weights from safetensors",

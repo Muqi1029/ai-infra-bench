@@ -20,11 +20,35 @@ Run `aib --help` to list commands and `aib <command> --help` for the complete op
 | `plot-metrics` | Export aggregate metrics to interactive HTML |
 | `monitor` | Manage a local monitoring stack |
 | `reply` | Replay token-ID input/output data |
+| `check-device` | Inspect NVIDIA GPU hardware properties without torch |
 | `check-weight` | Inspect safetensors model weights |
 | `profile-sgl` | Start or stop SGLang profiling |
 | `token` | Encode/decode using a Hugging Face tokenizer; alias `tokenize` |
 
 Some advanced commands need server extensions or additional dependencies. Check their individual help before use.
+
+## GPU hardware inspection
+
+```bash
+aib check-device                         # All CUDA-visible GPUs (default)
+aib check-device --device 0              # One CUDA device ordinal
+aib check-device --device 0 --device 1    # Multiple devices
+aib check-device --json                  # JSON output
+```
+
+Uses only the Python standard library and NVIDIA driver; no extra Python dependencies, torch, or CUDA Toolkit.
+Reports compute capability (`sm_XX`), SM count, shared memory limits per block/SM, L1 support, L2 capacity, memory capacity/bus width, clock rates/periods, and estimated memory bandwidth.
+CUDA provides no portable L1 capacity query, so that field is `N/A` (`null` in JSON), as are unsupported attributes.
+Clocks are driver-reported device attributes, not live samples; periods are inverse frequencies, not instruction latencies.
+Bandwidth uses the DDR estimate `2 × memory clock × bus width / 8`, not a measurement; that assumption may not match every memory technology.
+Device ordinals respect `CUDA_VISIBLE_DEVICES` and may differ from `nvidia-smi`. Missing drivers, no visible GPUs, and invalid indices produce a nonzero exit status.
+
+CUDA Core (FP32 lane) and Tensor Core counts are estimated from known per-SM configurations and the visible SM count.
+Theoretical throughput includes CUDA FP32 and Tensor TF32, FP16, BF16, FP8 (TFLOPS), and INT8 (TOPS), with separate dense and 2:4 structured-sparse peaks.
+Floating-point Tensor modes use FP32 accumulation; INT8 uses INT32 accumulation. FMA counts as two operations.
+The formula is `SM count × operations per SM per cycle × clock(kHz) / 10^9`; this is not a benchmark.
+Tensor profiles cover V100, T4, A100/A800/A30, A10/A40, L4/L40/L40S, and H100/H200/H800. Unmatched products and unsupported precisions display `N/A`.
+L40 and L40S have the same SM version but different Tensor throughput and use separate profiles. Unknown SM versions do not inherit core counts from nearby architectures.
 
 ## Common connection options
 

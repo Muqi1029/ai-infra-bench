@@ -20,11 +20,35 @@ title: 命令行参考
 | `plot-metrics` | 将聚合指标导出为交互 HTML |
 | `monitor` | 管理本地监控栈 |
 | `reply` | 回放 token ID 输入/输出数据 |
+| `check-device` | 检查 NVIDIA GPU 的硬件属性，无需 torch |
 | `check-weight` | 检查 safetensors 模型权重 |
 | `profile-sgl` | 启动或停止 SGLang profiling |
 | `token` | 使用 Hugging Face tokenizer 编码/解码；别名 `tokenize` |
 
 部分高级命令需要服务端扩展或额外依赖，使用前请查看各自帮助。
+
+## GPU 硬件检查
+
+```bash
+aib check-device                         # 默认检查全部 CUDA 可见 GPU
+aib check-device --device 0              # 指定一个 CUDA 设备编号
+aib check-device --device 0 --device 1    # 指定多个设备
+aib check-device --json                  # 输出 JSON
+```
+
+仅使用 Python 标准库和 NVIDIA 驱动，无需额外 Python 依赖、torch 或 CUDA Toolkit。
+输出包括计算能力（`sm_XX`）、SM 数量、每 block/SM 的共享内存限制、L1 支持情况、L2 容量、显存容量与位宽、时钟频率与周期，以及估算显存带宽。
+CUDA 没有通用的 L1 容量查询接口，因此该字段显示 `N/A`（JSON 为 `null`）；不支持的属性也以此表示。
+时钟是驱动报告的设备属性，并非实时采样；周期是频率的倒数，不代表指令延迟。
+带宽按 DDR 公式 `2 × 显存时钟 × 位宽 / 8` 估算，并非实测值，该假设未必适用于所有显存技术。
+设备编号遵循 `CUDA_VISIBLE_DEVICES`，可能与 `nvidia-smi` 不同。无可见 GPU、驱动不可用或设备编号越界时返回非零退出码。
+
+核心数量按已知架构的每 SM 配置乘以可见 SM 数量估算，包含 CUDA Core（FP32 单元）和 Tensor Core。
+理论吞吐包括 CUDA FP32，以及 Tensor TF32、FP16、BF16、FP8（TFLOPS）和 INT8（TOPS），分别列出稠密与 2:4 结构化稀疏峰值。
+浮点 Tensor 模式使用 FP32 累加，INT8 使用 INT32 累加；FMA 计作两次运算。
+计算公式为 `SM 数量 × 每 SM 每周期运算次数 × 时钟(kHz) / 10^9`，并非实测吞吐。
+Tensor 吞吐按型号匹配：V100、T4、A100/A800/A30、A10/A40、L4/L40/L40S、H100/H200/H800；未匹配的型号或不支持的精度显示 `N/A`。
+L40 与 L40S 虽然具有相同的 SM 版本，但 Tensor 吞吐不同，使用独立配置。未知 SM 版本不会套用相近架构的核心数量。
 
 ## 通用连接参数
 

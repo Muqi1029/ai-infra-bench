@@ -36,6 +36,25 @@ Python 3.10 or newer is required.
 
 ## CLI
 
+Inspect NVIDIA GPUs using only the Python standard library and the installed NVIDIA driver
+(no torch or CUDA Toolkit required):
+
+```bash
+aib check-device                         # All CUDA-visible GPUs
+aib check-device --device 0              # One CUDA device
+aib check-device --device 0 --device 1    # Selected devices
+aib check-device --json                  # Machine-readable output
+```
+
+Reports SM version/count, shared memory limits, L1 support, L2 size, memory size/bus
+width, clock rates/periods, and estimated memory bandwidth. Also estimates CUDA Core /
+Tensor Core counts and theoretical FP32 / Tensor throughput, with separate dense
+and 2:4 sparse values. Tensor estimates use known product profiles; unmatched
+models display N/A. L1 capacity is reported
+as unavailable because CUDA has no portable query for it. Clocks are device
+attributes, not live measurements; bandwidth is a DDR estimate, not a benchmark.
+Device indices respect `CUDA_VISIBLE_DEVICES`.
+
 Send one request:
 
 ```bash
