@@ -141,7 +141,7 @@ def test_non_stream_response(argv, response_json, expected, non_stream_handler):
     response, post, report = non_stream_handler
     response.json.return_value = response_json
 
-    main(argv)
+    assert main(argv) == 0
 
     assert post.call_args.kwargs["json"]["return_meta_info"] is True
     report_args = report.call_args.kwargs
@@ -161,13 +161,27 @@ def test_non_stream_error(non_stream_handler):
     response.text = "server error"
     response.raise_for_status.side_effect = RuntimeError("request failed")
 
-    main(["--disable-stream"])
+    assert main(["--disable-stream"]) == 1
 
     output = report.call_args.kwargs["outputs"][0]
     assert output.success is False
     assert output.latency_ms >= 0
     assert "Status Code=500" in output.error_message
     assert "server error" in output.error_message
+
+
+def test_connection_error_exits_nonzero():
+    with patch(
+        "ai_infra_bench.req.requests.post",
+        side_effect=OSError("connection refused"),
+    ):
+        assert main(["--disable-stream", "--base-url", "localhost:8000"]) == 1
+
+
+def test_stream_failure_exits_nonzero(stream_handler):
+    stream_handler.return_value = OutputMetric(success=False, error_message="down")
+
+    assert main(["--prompt", "hi"]) == 1
 
 
 def test_stream_request(stream_handler):

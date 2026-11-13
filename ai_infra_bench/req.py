@@ -194,7 +194,7 @@ def _handle_request_output(output_metric: OutputMetric, duration_s: float) -> No
     )
 
 
-def _handle_non_stream_request(url, headers, payload) -> None:
+def _handle_non_stream_request(url, headers, payload) -> OutputMetric:
     output_metric = OutputMetric(payload=payload)
     start_time = time.perf_counter()
     response = None
@@ -222,11 +222,12 @@ def _handle_non_stream_request(url, headers, payload) -> None:
     duration_s = time.perf_counter() - start_time
     output_metric.latency_ms = duration_s * 1000
     _handle_request_output(output_metric, duration_s)
+    return output_metric
 
 
 async def _handle_stream_request(
     url, headers, payload, raw: bool, no_print: bool
-) -> None:
+) -> OutputMetric:
     start_time = time.perf_counter()
 
     async with _create_bench_client_session() as session:
@@ -240,20 +241,22 @@ async def _handle_stream_request(
         )
     duration_s = time.perf_counter() - start_time
     _handle_request_output(output_metric, duration_s)
+    return output_metric
 
 
-def http_request(args):
+def http_request(args) -> int:
     url, payload = build_request(args)
     headers = {"Authorization": f"Bearer {args.api_key}"}
 
     if args.verbose:
         info_print(headers, payload, url)
     if args.disable_stream:
-        _handle_non_stream_request(url, headers, payload)
+        output = _handle_non_stream_request(url, headers, payload)
     else:
-        asyncio.run(
+        output = asyncio.run(
             _handle_stream_request(url, headers, payload, args.raw, args.no_print)
         )
+    return 0 if output.success else 1
 
 
 def main(argv=None):
@@ -391,10 +394,10 @@ def main(argv=None):
             parser.error(str(error))
 
     try:
-        http_request(args)
+        return http_request(args)
     except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
         parser.error(str(error))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
