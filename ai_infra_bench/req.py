@@ -259,7 +259,7 @@ def http_request(args) -> int:
     return 0 if output.success else 1
 
 
-def main(argv=None):
+def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(
         prog="aib req",
