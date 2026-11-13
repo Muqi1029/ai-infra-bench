@@ -423,6 +423,71 @@ def test_regular_warmup_flushes_before_formal_run(monkeypatch):
     ]
 
 
+def test_repeat_flushes_cache_before_each_round(monkeypatch):
+    requests = [{"prompt": [index], "max_tokens": 1} for index in range(3)]
+    events = _patch_benchmark_run(monkeypatch, requests)
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "1",
+            "--output-len",
+            "1",
+            "--num-requests",
+            "3",
+            "--num-warmup-requests",
+            "1",
+            "--repeat",
+            "2",
+        ]
+    )
+
+    asyncio.run(bench.run_benchmark(args))
+
+    assert events == [
+        ("run", requests[:1]),
+        ("flush", None),
+        ("run", requests),
+        ("flush", None),
+        ("run", requests),
+    ]
+
+
+def test_repeat_flushes_cache_when_warmup_is_disabled(monkeypatch):
+    requests = [{"prompt": [index], "max_tokens": 1} for index in range(3)]
+    events = _patch_benchmark_run(monkeypatch, requests)
+    args = bench_utils.parse_args(
+        [
+            "--base-url",
+            "http://localhost:8888",
+            "--dataset",
+            "random",
+            "--input-len",
+            "1",
+            "--output-len",
+            "1",
+            "--num-requests",
+            "3",
+            "--disable-warmup",
+            "--repeat",
+            "2",
+        ]
+    )
+    validate_args(args)
+
+    asyncio.run(bench.run_benchmark(args))
+
+    assert events == [
+        ("flush", None),
+        ("run", requests),
+        ("flush", None),
+        ("run", requests),
+    ]
+
+
 def test_disable_flush_cache_skips_preparation_across_concurrency_sweeps(monkeypatch):
     requests = [{"prompt": [index], "max_tokens": 1} for index in range(5)]
     events = _patch_benchmark_run(monkeypatch, requests)

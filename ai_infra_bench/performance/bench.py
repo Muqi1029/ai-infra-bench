@@ -275,31 +275,9 @@ def load_requests(args: Namespace) -> List[Dict]:
     return requests
 
 
-async def prepare_benchmark_run(
-    session,
-    warmup_requests: List,
-    prefix_len: int,
-    warmed_up: bool,
-    request_url: str,
-    flush_cache_endpoint: str,
-    args: Namespace,
+async def _run_warmup(
+    session, request_url: str, warmup_requests: List, args: Namespace
 ) -> None:
-    """Warm the runtime and leave KV cache ready for the measured run."""
-    if args.disable_flush_cache or not warmup_requests:
-        return
-
-    has_shared_prefix = prefix_len > 0
-
-    if not has_shared_prefix and warmed_up:
-        return
-
-    if has_shared_prefix:
-        # Prefix priming must survive into the measured run.
-        await flush_cache(session, flush_cache_endpoint)
-        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
-    else:
-        logger.info(f"Warming up {len(warmup_requests)} requests")
-
     with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
         await run_requests(
             session,
@@ -311,10 +289,6 @@ async def prepare_benchmark_run(
             pbar=pbar,
         )
     logger.info("Warming up done")
-
-    if not has_shared_prefix:
-        # Ordinary warmups must not affect measured KV-cache hits.
-        await flush_cache(session, flush_cache_endpoint)
 
 
 async def run_requests(
@@ -411,23 +385,26 @@ async def run_benchmark(args: Namespace) -> None:
     warmup_requests = prepare_warmup_requests(requests, args)
     formal_requests = requests
 
-    warmed_up = False
+    # Ordinary warmup runs once, ahead of the loop. Each measured round flushes
+    # first, so that warmup does not stay in the KV cache.
+    if warmup_requests and prefix_len == 0 and not args.disable_flush_cache:
+        logger.info(f"Warming up {len(warmup_requests)} requests")
+        async with _create_bench_client_session(
+            args.max_concurrency[0], args.api_key, args.request_timeout
+        ) as session:
+            await _run_warmup(session, request_url, warmup_requests, args)
+
     for max_concurrency in args.max_concurrency:
         for _ in range(args.repeat):
             semaphore = asyncio.Semaphore(max_concurrency)
             async with _create_bench_client_session(
                 max_concurrency, args.api_key, args.request_timeout
             ) as session:
-                await prepare_benchmark_run(
-                    session,
-                    warmup_requests=warmup_requests,
-                    prefix_len=prefix_len,
-                    warmed_up=warmed_up,
-                    request_url=request_url,
-                    flush_cache_endpoint=flush_cache_endpoint,
-                    args=args,
-                )
-                warmed_up = True
+                if not args.disable_flush_cache:
+                    await flush_cache(session, flush_cache_endpoint)
+                    if prefix_len > 0 and warmup_requests:
+                        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
+                        await _run_warmup(session, request_url, warmup_requests, args)
 
                 # formal run
                 with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:
