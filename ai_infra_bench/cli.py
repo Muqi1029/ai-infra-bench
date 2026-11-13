@@ -4,6 +4,8 @@ import argparse
 import importlib
 from typing import Any, Callable, NamedTuple, Sequence
 
+from ai_infra_bench.version import __version__
+
 
 class SubcommandSpec(NamedTuple):
     target: str  # format: "module_path:function_name"
@@ -81,6 +83,12 @@ def _load_command(target: str) -> Callable[[Sequence[str]], Any]:
 
 def main(argv: Sequence[str] | None = None):
     parser = argparse.ArgumentParser(prog="aib")
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=__version__,
+    )
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     for name, spec in _COMMANDS.items():
