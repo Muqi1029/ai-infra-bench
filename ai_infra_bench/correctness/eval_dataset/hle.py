@@ -15,14 +15,11 @@ import unicodedata
 from collections.abc import Iterable, Mapping
 from typing import Any, Dict, Tuple
 
-from omegaconf import OmegaConf
-
 from ai_infra_bench.correctness.eval_dataset.base import Eval
 from ai_infra_bench.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
     read_jsonl,
-    resolve_config_path,
     resolve_dataset_path,
 )
 
@@ -157,7 +154,7 @@ class HLEEval(Eval):
         dataset_path: str | None = None,
         num_shots: int = 0,
     ):
-        cfg = OmegaConf.load(resolve_config_path(config_path))
+        cfg = self.load_config(config_path)
         self.name = cfg.get("name", name.replace("_", " ").title())
         self.results = []
         if num_shots:
@@ -224,22 +221,13 @@ class HLEEval(Eval):
             )
 
         self.prompt_template = cfg.get("prompt_template", "")
-        self.default_payload = OmegaConf.to_container(
-            cfg.get("payload", {}), resolve=True
-        )
+        self.default_payload = dict(cfg.get("payload") or {})
         if self.default_payload:
             logger.info(
                 "[%s] Default Payload: %s",
                 self.name,
                 json.dumps(self.default_payload, indent=2, ensure_ascii=False),
             )
-
-    def maybe_truncate(self, num_questions: int | None):
-        if num_questions is not None:
-            self.rows = self.rows[:num_questions]
-
-    def get_length(self) -> int:
-        return len(self.rows)
 
     def get_payload_and_answer(
         self, override_payload: Dict

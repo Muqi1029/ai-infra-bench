@@ -1,11 +1,8 @@
-import ast
 import json
 import logging
 import os
 import re
 from typing import Any, Dict, Tuple
-
-from omegaconf import OmegaConf
 
 from ai_infra_bench.correctness.eval_dataset.base import Eval
 from ai_infra_bench.correctness.eval_dataset.utils import (
@@ -13,23 +10,35 @@ from ai_infra_bench.correctness.eval_dataset.utils import (
     generate_payload,
     generate_payload_from_content,
     read_jsonl,
-    resolve_config_path,
     resolve_dataset_path,
 )
 
 INVALID = -9999999
 logger = logging.getLogger(__name__)
 
+_FINAL_GSM8K_RE = re.compile(
+    r"(?is)(?:####|(?:final\s+)?answer\b[*_\s]*(?:is)?[*_\s:]+|\\boxed\s*\{)\s*([-+]?\d+(?:\.\d+)?)"
+)
+_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _parse_number(raw: str):
+    try:
+        value = float(raw)
+    except ValueError:
+        return INVALID
+    return int(value) if value.is_integer() else value
+
 
 def get_answer_value(answer_str):
-    answer_str = answer_str.replace(",", "")
-    numbers = re.findall(r"-?\d+\.?\d*", answer_str)
-    if len(numbers) < 1:
+    cleaned = str(answer_str or "").replace(",", "").replace("$", "")
+    marker_matches = list(_FINAL_GSM8K_RE.finditer(cleaned))
+    if marker_matches:
+        return _parse_number(marker_matches[-1].group(1))
+    numbers = _NUMBER_RE.findall(cleaned)
+    if not numbers:
         return INVALID
-    try:
-        return ast.literal_eval(numbers[-1])
-    except (SyntaxError, ValueError):
-        return INVALID
+    return _parse_number(numbers[-1])
 
 
 def get_one_example(row, include_answer: bool) -> str:
@@ -57,7 +66,7 @@ class GSM8KEval(Eval):
         self.name = name.replace("_", " ").title()
         self.results = []
         self.num_shots = num_shots
-        cfg = OmegaConf.load(resolve_config_path(config_path))
+        cfg = self.load_config(config_path)
 
         dataset_path = resolve_dataset_path(dataset_path or cfg.get("dataset_path", ""))
         if not os.path.exists(dataset_path):
@@ -83,26 +92,11 @@ class GSM8KEval(Eval):
             self.rows = rows
 
         self.prompt_template = cfg.get("prompt_template", "")
-        self.default_payload = OmegaConf.to_container(
-            cfg.get("payload", {}), resolve=True
-        )
+        self.default_payload = dict(cfg.get("payload") or {})
         if self.default_payload:
             logger.info(
                 f"[{self.name}] Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
             )
-
-    def maybe_truncate(self, num_questions: int | None):
-        if num_questions is None:
-            return
-
-        if hasattr(self.rows, "select"):
-            count = min(num_questions, len(self.rows))
-            self.rows = self.rows.select(range(count))
-        else:
-            self.rows = self.rows[:num_questions]
-
-    def get_length(self) -> int:
-        return len(self.rows)
 
     def get_payload_and_answer(self, override_payload) -> Tuple[Dict, Any]:
         for row in self.rows:

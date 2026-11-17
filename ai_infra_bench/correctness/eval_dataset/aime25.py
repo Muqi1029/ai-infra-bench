@@ -4,20 +4,18 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
-from omegaconf import OmegaConf
-
 from ai_infra_bench.correctness.eval_dataset.base import Eval
 from ai_infra_bench.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
     read_jsonl,
-    resolve_config_path,
     resolve_dataset_path,
 )
 
 logger = logging.getLogger(__name__)
 
-ANSWER_PATTERN = r"(?i)Answer\s*:\s*([^\n]+)"
+_BOXED_RE = re.compile(r"(?is)\\boxed\s*\{\s*([^}]+?)\s*\}")
+ANSWER_PATTERN = re.compile(r"(?is)(?:final\s+)?answer\b[*_\s]*(?:is)?[*_\s:]+([^\n]+)")
 
 
 def normalize_aime_answer(answer: str) -> Optional[str]:
@@ -27,17 +25,27 @@ def normalize_aime_answer(answer: str) -> Optional[str]:
     """
     if answer is None:
         return None
-    # Remove whitespace and convert to string
-    answer = str(answer).strip()
-    # Try to extract integer from answer
+    answer = str(answer).strip().strip("$*")
+    boxed = _BOXED_RE.search(answer)
+    if boxed:
+        answer = boxed.group(1).strip()
     try:
-        # Handle various formats like "42", "042", "42.0", etc.
         num = int(float(answer))
         if 0 <= num <= 999:
             return str(num)
     except (ValueError, TypeError):
         pass
     return answer
+
+
+def extract_aime_answer(text: str) -> Optional[str]:
+    boxed = list(_BOXED_RE.finditer(text))
+    if boxed:
+        return normalize_aime_answer(boxed[-1].group(1))
+    matches = list(ANSWER_PATTERN.finditer(text))
+    if matches:
+        return normalize_aime_answer(matches[-1].group(1))
+    return None
 
 
 class AIME25Eval(Eval):
@@ -50,7 +58,7 @@ class AIME25Eval(Eval):
     ):
         self.name = name.replace("_", " ").title()
         self.results = []
-        cfg = OmegaConf.load(resolve_config_path(config_path))
+        cfg = self.load_config(config_path)
 
         dataset_path = resolve_dataset_path(dataset_path or cfg.get("dataset_path", ""))
         if os.path.isdir(dataset_path):
@@ -72,26 +80,11 @@ class AIME25Eval(Eval):
         self.rows = examples1 + examples2
 
         self.prompt_template = cfg.get("prompt_template", "")
-        self.default_payload = OmegaConf.to_container(
-            cfg.get("payload", {}), resolve=True
-        )
+        self.default_payload = dict(cfg.get("payload") or {})
         if self.default_payload:
             logger.info(
                 f"[{self.name}] Default Payload: {json.dumps(self.default_payload, indent=2, ensure_ascii=False)}"
             )
-
-    def maybe_truncate(self, num_questions: int | None):
-        if num_questions is None:
-            return
-
-        if hasattr(self.rows, "select"):
-            count = min(num_questions, len(self.rows))
-            self.rows = self.rows.select(range(count))
-        else:
-            self.rows = self.rows[:num_questions]
-
-    def get_length(self) -> int:
-        return len(self.rows)
 
     def get_payload_and_answer(self, override_payload) -> Tuple[Dict, Any]:
         for row in self.rows:
@@ -104,6 +97,4 @@ class AIME25Eval(Eval):
             yield payload, normalize_aime_answer(row["answer"])
 
     def _eval(self, response_json, answer, payload=None):
-        match = re.search(ANSWER_PATTERN, extract_response_text(response_json))
-        extracted_answer = match.group(1).strip() if match else None
-        return normalize_aime_answer(extracted_answer) == answer
+        return extract_aime_answer(extract_response_text(response_json)) == answer

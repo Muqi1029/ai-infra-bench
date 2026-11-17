@@ -1,16 +1,13 @@
-import asyncio
 import logging
 from argparse import ArgumentParser
 
-from ai_infra_bench.correctness.eval_dataset.base import (
-    AGENT_DATASET_CHOICES,
-    DATASET_CHOICES,
-    DEEPSWE_EVAL,
-    EvalRuntime,
-)
 from ai_infra_bench.utils.req import add_common_args
 
 logger = logging.getLogger(__name__)
+
+DATASET_CHOICES = ["gsm8k", "aime25", "gpqa", "hle", "constrained_decoding"]
+DEEPSWE_EVAL = "deepswe"
+AGENT_DATASET_CHOICES = [DEEPSWE_EVAL]
 
 
 def parse_args(argv=None):
@@ -128,6 +125,10 @@ def main(argv=None):
         except (RuntimeError, ValueError) as error:
             logger.error("DeepSWE evaluation failed: %s", error)
             return 1
+
+    import asyncio
+
+    from ai_infra_bench.correctness.eval_dataset.base import EvalRuntime
 
     eval_runtime = EvalRuntime(runtime_args)
     return asyncio.run(eval_runtime.run())

@@ -3,28 +3,51 @@ title: 项目介绍
 slug: /
 ---
 
+import Link from '@docusaurus/Link';
+
 # AI Infra Bench
 
-AI Infra Bench（AIB）是面向模型推理服务的命令行工具。通过 OpenAI 兼容接口，你可以测试响应速度与吞吐量、评估模型回答，并寻找满足服务等级目标（SLO）的负载上限。
+面向 OpenAI 兼容推理服务的轻量 CLI 工具：测性能、找 SLO 容量上限、做正确性评测与本地监控，无需安装服务端 SDK。
 
-无需安装特定推理框架的 SDK；先启动你的推理服务，再从客户端运行 `aib`。
+## 快速导航
 
-## 选择你的任务
+<div className="aib-card-grid">
+  <Link className="aib-card" to="/quickstart/">
+    <div className="aib-card-title">快速开始</div>
+    <div className="aib-card-desc">安装 AIB 并跑通首条请求与压测。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/requests/">
+    <div className="aib-card-title">发送请求</div>
+    <div className="aib-card-desc">连通性检查、流式查看与 stdin 输入。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/benchmark/">
+    <div className="aib-card-title">性能压测</div>
+    <div className="aib-card-desc">TTFT / ITL / TPOT、Goodput 与前缀缓存。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/slo/">
+    <div className="aib-card-title">SLO 容量搜索</div>
+    <div className="aib-card-desc">YAML 驱动二分搜索并发与 QPS 上限。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/sessions/">
+    <div className="aib-card-title">会话回放</div>
+    <div className="aib-card-desc">按会话顺序与会话级并发回放多轮对话。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/evaluation/">
+    <div className="aib-card-title">正确性评测</div>
+    <div className="aib-card-desc">GSM8K / GPQA / AIME25 / HLE 与 Logits 对比。</div>
+  </Link>
+  <Link className="aib-card" to="/guides/monitoring/">
+    <div className="aib-card-title">本地监控</div>
+    <div className="aib-card-desc">一键拉起 Prometheus + Grafana 看板。</div>
+  </Link>
+  <Link className="aib-card" to="/reference/cli/">
+    <div className="aib-card-title">命令与指标</div>
+    <div className="aib-card-desc">CLI 参数速查与指标定义说明。</div>
+  </Link>
+</div>
 
-| 我想要 | 从这里开始 |
-| --- | --- |
-| 安装并完成第一次测试 | [快速开始](./quickstart.mdx) |
-| 检查模型是否能正常回复 | [发送请求](./guides/requests.mdx) |
-| 比较不同并发下的性能 | [性能压测](./guides/benchmark.mdx) |
-| 找到满足延迟目标的容量 | [SLO 容量搜索](./guides/slo.mdx) |
-| 回放多轮对话请求 | [会话回放](./guides/sessions.mdx) |
-| 测试回答正确率 | [正确性评测](./guides/evaluation.mdx) |
-| 观察 SGLang 服务指标 | [本地监控](./guides/monitoring.mdx) |
-
-## 服务端需要支持什么
-
-文本请求使用 `/v1/chat/completions`；随机 token 压测使用 `/v1/completions`。压测需要 SSE 流式响应。token 用量、缓存与推测解码指标取决于服务端返回的数据。
-
-:::info 兼容范围
-随机 token ID、`ignore_eos`、扩展统计字段以及 `/flush_cache` 并非所有 OpenAI 兼容服务都支持。首次连接时建议先发送普通文本请求，再逐步启用压测功能。详见[常见问题](./troubleshooting.mdx)。
+:::info 端点兼容说明
+- 普通文本使用 `/v1/chat/completions`，随机 token ID 压测使用 `/v1/completions`。
+- `aib bench` 需要 SSE 流式响应；缓存详情、推测解码与 `/flush_cache` 取决于服务端支持。
+- 遇到字段校验或接口报错，见[常见问题](./troubleshooting.mdx)。
 :::

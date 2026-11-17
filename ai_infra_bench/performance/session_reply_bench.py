@@ -14,19 +14,19 @@ import time
 from argparse import ArgumentParser, Namespace
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
-
-from tqdm import tqdm
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Sequence
 
 from ai_infra_bench.performance.bench_utils import (
+    BENCH_AIOHTTP_TIMEOUT_SECONDS,
+    add_output_args,
     get_request,
     handle_outputs,
+    parse_goodput,
     set_seed,
+    validate_output_args,
     wait_for_request_interval,
 )
-from ai_infra_bench.performance.core import flush_cache, request_func
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.utils.client import _create_bench_client_session
 from ai_infra_bench.utils.req import (
     add_common_args,
     api_url,
@@ -34,7 +34,30 @@ from ai_infra_bench.utils.req import (
     prepare_payload,
 )
 
+if TYPE_CHECKING:
+    from tqdm import tqdm
+
 logger = logging.getLogger(__name__)
+
+
+def _create_bench_client_session(*args, **kwargs):
+    from ai_infra_bench.utils.client import (
+        _create_bench_client_session as _create_session,
+    )
+
+    return _create_session(*args, **kwargs)
+
+
+async def request_func(*args, **kwargs):
+    from ai_infra_bench.performance.core import request_func as _request_func
+
+    return await _request_func(*args, **kwargs)
+
+
+async def flush_cache(*args, **kwargs):
+    from ai_infra_bench.performance.core import flush_cache as _flush_cache
+
+    return await _flush_cache(*args, **kwargs)
 
 
 def read_session_requests(payload_regex_path: str) -> List[List[Dict[str, Any]]]:
@@ -78,7 +101,7 @@ async def request_func_wrapper(
     request_url: str,
     session_payloads: Iterable[Mapping[str, Any]],
     semaphore: asyncio.Semaphore,
-    pbar: tqdm | None = None,
+    pbar: "tqdm | None" = None,
 ) -> List[OutputMetric]:
     """Run one session while holding exactly one semaphore slot."""
     outputs: List[OutputMetric] = []
@@ -112,12 +135,14 @@ def parse_args(argv: Sequence[str] | None = None) -> Namespace:
         description="Replay JSONL request sessions with session-level concurrency",
     )
     add_common_args(parser)
+    add_output_args(parser)
     parser.add_argument(
         "payload_regex_path",
         nargs="?",
         help="Glob matching JSONL session files (one request per line)",
     )
     parser.add_argument(
+        "--payload-path",
         "--payload-regex-path",
         dest="payload_regex_path_option",
         help="Glob matching JSONL session files",
@@ -141,20 +166,12 @@ def parse_args(argv: Sequence[str] | None = None) -> Namespace:
         default=float("inf"),
         help="Session start/request rate; defaults to unlimited",
     )
-    parser.add_argument("--dump-path", help="Optional JSONL output dump path")
     parser.add_argument(
-        "--dump-content",
-        choices=["all", "msg"],
-        default="all",
-        help="Output dump format",
+        "--request-timeout",
+        default=BENCH_AIOHTTP_TIMEOUT_SECONDS,
+        type=float,
+        help="Total timeout in seconds for each request",
     )
-    parser.add_argument(
-        "--dump-finish-reason-length",
-        action="store_true",
-        help="Dump requests whose finish reason is length",
-    )
-    parser.add_argument("--metric-path", help="Optional JSON/JSONL metrics path")
-    parser.add_argument("--label", help="Label for exported metrics")
     parser.add_argument(
         "--disable-flush-cache",
         action="store_true",
@@ -165,6 +182,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Namespace:
     args.payload_regex_path = args.payload_regex_path_option or args.payload_regex_path
     if not args.payload_regex_path:
         parser.error("a session payload glob is required")
+    args.payload_path = args.payload_regex_path
     return args
 
 
@@ -175,19 +193,18 @@ def validate_args(args: Namespace) -> None:
         raise ValueError("--max-concurrency must be >= 1")
     if args.request_rate <= 0:
         raise ValueError("--request-rate must be > 0")
+    if getattr(args, "request_timeout", BENCH_AIOHTTP_TIMEOUT_SECONDS) <= 0:
+        raise ValueError("--request-timeout must be > 0")
     if args.num_warmup_sessions < 0:
         raise ValueError("--num-warmup-sessions must be >= 0")
     if args.num_sessions is not None and args.num_sessions < 1:
         raise ValueError("--num-sessions must be >= 1")
-    if args.metric_path and not args.metric_path.lower().endswith((".json", ".jsonl")):
-        raise ValueError("--metric-path must end with .json or .jsonl")
-    if getattr(args, "dump_finish_reason_length", False) and not args.dump_path:
-        args.dump_path = "aib-dump.jsonl"
-    if args.dump_path and not args.dump_path.lower().endswith(".jsonl"):
-        args.dump_path = f"{args.dump_path}.jsonl"
+    validate_output_args(args)
 
 
 async def run_benchmark(args: Namespace) -> None:
+    from tqdm import tqdm
+
     session_requests = read_session_requests(args.payload_regex_path)
     if args.debug:
         args.num_sessions = 3
@@ -197,12 +214,19 @@ async def run_benchmark(args: Namespace) -> None:
 
     warmup = session_requests[: args.num_warmup_sessions]
     formal = session_requests[args.num_warmup_sessions :]
-    request_url = api_url(args.base_url, "/v1/chat/completions")
+    first_payload = next((s[0] for s in session_requests if s), {})
+    endpoint = (
+        "/v1/completions"
+        if "prompt" in first_payload and "messages" not in first_payload
+        else "/v1/chat/completions"
+    )
+    request_url = api_url(args.base_url, endpoint)
     flush_cache_endpoint = api_url(args.base_url, "/flush_cache")
     semaphore = asyncio.Semaphore(args.max_concurrency)
+    request_timeout = getattr(args, "request_timeout", BENCH_AIOHTTP_TIMEOUT_SECONDS)
 
     async with _create_bench_client_session(
-        args.max_concurrency, args.api_key
+        args.max_concurrency, args.api_key, request_timeout
     ) as client:
         if warmup:
             logger.info("Warming up %d sessions", len(warmup))
@@ -245,6 +269,7 @@ async def run_benchmark(args: Namespace) -> None:
         dump_finish_reason_length=getattr(args, "dump_finish_reason_length", False),
         metric_path=args.metric_path,
         label=args.label,
+        goodput_thresholds=parse_goodput(getattr(args, "goodput", None)),
     )
 
 

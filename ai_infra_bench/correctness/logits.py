@@ -7,18 +7,26 @@ import asyncio
 import json
 import logging
 import math
-import os
-import sys
 from dataclasses import dataclass
 from itertools import zip_longest
 from typing import Any, Optional, Sequence
 
-from ai_infra_bench.utils.client import _create_bench_client_session
+from ai_infra_bench.correctness.common import (
+    DEFAULT_PROMPT,
+    fetch_chat_completions,
+    nonnegative_float,
+    positive_int,
+    print_section,
+    read_prompt_arg,
+    should_use_color,
+    status_badge,
+    style,
+)
 from ai_infra_bench.utils.req import add_request_args, prepare_payload
 
 logger = logging.getLogger(__name__)
 
-PROMPT = "Hello, ai-infra-bench! I am Muqi Li, who are you?"
+PROMPT = DEFAULT_PROMPT
 PAYLOAD = {
     "messages": [{"role": "user", "content": PROMPT}],
     "temperature": 0.0,
@@ -177,19 +185,16 @@ class ComparisonResult:
     def passed(self) -> bool:
         return self.tokens_match and self.selected_logprobs_close and self.top_k_passed
 
-
-def _nonnegative_float(value: str) -> float:
-    number = float(value)
-    if number < 0:
-        raise argparse.ArgumentTypeError("must be non-negative")
-    return number
-
-
-def _positive_int(value: str) -> int:
-    number = int(value)
-    if number < 1:
-        raise argparse.ArgumentTypeError("must be at least 1")
-    return number
+    @property
+    def mean_selected_diff(self) -> Optional[float]:
+        differences = [
+            abs(diff.reference.logprob - diff.target.logprob)
+            for diff in self.token_diffs
+            if diff.reference is not None and diff.target is not None
+        ]
+        if not differences:
+            return None
+        return math.fsum(differences) / len(differences)
 
 
 def _top_k(value: str) -> int:
@@ -204,21 +209,23 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
     add_request_args(parser, multiple_base_urls=True)
     parser.add_argument(
         "--rtol",
-        type=_nonnegative_float,
+        type=nonnegative_float,
         default=0.0,
         help="Relative tolerance for logprob comparison (default: %(default)s)",
     )
     parser.add_argument(
         "--atol",
-        type=_nonnegative_float,
+        type=nonnegative_float,
         default=1e-2,
         help="Absolute tolerance for logprob comparison (default: %(default)s)",
     )
-    parser.add_argument("--prompt", "--user-prompt", help="User prompt")
+    parser.add_argument(
+        "--prompt", "--user-prompt", help="User prompt, or '-' to read from stdin"
+    )
     parser.add_argument(
         "--max-tokens",
         "--output-len",
-        type=_positive_int,
+        type=positive_int,
         default=PAYLOAD["max_tokens"],
         help="Maximum output tokens (default: %(default)s)",
     )
@@ -238,9 +245,10 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def build_payload(args: argparse.Namespace) -> dict[str, Any]:
+    prompt_text = read_prompt_arg(getattr(args, "prompt", None), PROMPT)
     payload = {
         **PAYLOAD,
-        "messages": [{"role": "user", "content": args.prompt or PROMPT}],
+        "messages": [{"role": "user", "content": prompt_text}],
         "max_tokens": args.max_tokens,
         "top_logprobs": args.top_logprobs,
     }
@@ -248,41 +256,6 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
     if payload.get("stream"):
         raise ValueError("streaming responses are not supported; set stream to false")
     return payload
-
-
-async def _request_completion(
-    session: Any, base_url: str, payload: dict[str, Any]
-) -> dict[str, Any]:
-    url = f"{base_url.rstrip('/')}/v1/chat/completions"
-    async with session.post(url, json=payload) as response:
-        raw_body = await response.text()
-        try:
-            body = json.loads(raw_body)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"{base_url} returned invalid JSON (HTTP {response.status}): "
-                f"{raw_body[:300]!r}"
-            ) from exc
-        if response.status != 200:
-            raise RuntimeError(
-                f"{base_url} returned HTTP {response.status}: "
-                f"{json.dumps(body, ensure_ascii=False)[:500]}"
-            )
-        logger.debug("Response from %s:\n%s", base_url, json.dumps(body, indent=2))
-        return body
-
-
-async def fetch_chat_completions(
-    base_urls: Sequence[str], payload: dict[str, Any], api_key: str = "EMPTY"
-) -> list[dict[str, Any]]:
-    session = _create_bench_client_session(
-        max_concurrency=max(1, len(base_urls)), api_key=api_key
-    )
-    async with session:
-        requests = [
-            _request_completion(session, base_url, payload) for base_url in base_urls
-        ]
-        return await asyncio.gather(*requests)
 
 
 def extract_logprobs(base_url: str, response: dict[str, Any]) -> LogProbResult:
@@ -344,15 +317,15 @@ def compare_results(
 
 
 def _style(text: str, code: str) -> str:
-    return f"\033[{code}m{text}\033[0m" if _USE_COLOR else text
+    return style(text, code, _USE_COLOR)
 
 
 def _status(passed: bool) -> str:
-    return _style("✓ PASS", "32;1") if passed else _style("✗ FAIL", "31;1")
+    return status_badge(passed, _USE_COLOR)
 
 
 def _section(title: str) -> None:
-    print(f"\n{_style(title, '36;1')}\n{'-' * len(title)}")
+    print_section(title, _USE_COLOR)
 
 
 def _quoted(text: str) -> str:
@@ -443,7 +416,10 @@ def print_comparison(comparison: ComparisonResult, index: int) -> None:
     _print_check(
         "Selected logprobs",
         comparison.selected_logprobs_close,
-        f"max |Δ| = {_difference(0.0, _max_selected_diff(comparison))}",
+        (
+            f"max |Δ| = {_difference(0.0, _max_selected_diff(comparison))}, "
+            f"mean |Δ| = {_difference(0.0, comparison.mean_selected_diff)}"
+        ),
     )
     if comparison.compare_top_logprobs:
         matched_top_tokens = sum(
@@ -577,12 +553,10 @@ async def run(args: argparse.Namespace) -> bool:
 
 def main(args: Optional[Sequence[str]] = None) -> int:
     global _USE_COLOR
+    import sys
+
     parsed_args = parse_args(args)
-    _USE_COLOR = (
-        not parsed_args.no_color
-        and sys.stdout.isatty()
-        and "NO_COLOR" not in os.environ
-    )
+    _USE_COLOR = should_use_color(parsed_args.no_color)
     if parsed_args.verbose:
         logger.setLevel(logging.DEBUG)
     try:

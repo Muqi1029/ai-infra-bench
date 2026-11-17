@@ -47,7 +47,7 @@ module.exports = {
       ],
     },
     footer: {
-      style: 'dark',
+      style: 'light',
       copyright: 'AI Infra Bench · Apache-2.0',
     },
     prism: {

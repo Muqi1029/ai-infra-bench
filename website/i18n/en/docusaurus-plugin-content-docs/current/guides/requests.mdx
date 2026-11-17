@@ -1,65 +1,47 @@
 ---
-title: Send requests
+title: Send Requests
 ---
 
-# Send requests
+# Send Requests
 
-Use `aib req` to check connectivity, inspect model output, and debug request bodies.
+Use `aib req` to verify connectivity, inspect streamed output, and debug payloads.
 
-## Text and authentication
+## Text & Streaming
 
 ```bash
 aib req \
-  --base-url https://your-inference-host.example \
-  --api-key "$AIB_API_KEY" \
+  --base-url http://127.0.0.1:30000 \
+  --api-key "$OPENAI_API_KEY" \
   --model your-model \
   --prompt "What is prefix caching?"
 ```
 
-`--api-key` reads `OPENAI_API_KEY` by default, falling back to `JustKeepMe`. `--base-url` accepts a trailing `/v1`; do not provide the full chat completions path.
+- Streaming is enabled by default; pass `--disable-stream` for JSON responses, `--raw` for raw SSE lines, or `--no-print` to suppress streamed text.
+- `--api-key` reads `OPENAI_API_KEY` by default (fallback `JustKeepMe`).
 
-Streaming is the default. Use `--disable-stream` to inspect a non-streaming JSON response, `--raw` to inspect raw SSE data, or `--no-print` to hide streamed text.
-
-## Use your own payload
-
-Use `--prompt -` (or `--user-prompt -`) to read plain text from a pipe or file
-redirection, preserving whitespace and newlines:
+## Files & Stdin
 
 ```bash
+# Send from a JSON file
+aib req --payload-path request.json
+
+# Read a JSON payload from stdin
+cat request.json | aib req --payload-path - --model your-model
+cat request.json | aib req
+
+# Read a plain-text prompt from stdin
 cat prompt.txt | aib req --prompt - --max-tokens 128
-aib req --prompt - < prompt.txt
 ```
 
-For a complete JSON request body, use `--payload-stdin` or `--payload-path -`.
+Payloads with `prompt` (and without `messages`) automatically route to `/v1/completions`.
 
-Create `request.json`:
-
-```json
-{
-  "messages": [{"role": "user", "content": "Explain batching."}],
-  "temperature": 0,
-  "max_tokens": 128
-}
-```
+## Overrides & Extra Flags
 
 ```bash
-aib req --base-url http://127.0.0.1:30000 \
-  --model your-model --payload-path request.json
-```
-
-A payload containing `prompt` without `messages` is sent to `/v1/completions`.
-
-## Override fields
-
-```bash
-aib req --prompt "What is a GPU?" --output-len 128 \
+aib req --prompt "What is a GPU?" --max-tokens 128 \
   --override-payload '{"temperature":0}'
 ```
 
-Overrides merge at the top level. Nested objects are replaced, not recursively merged. An overridden `model` takes precedence over `--model`. The tool then sets streaming and statistics fields; overrides cannot switch a benchmark to non-streaming mode.
-
-`--enable-thinking`, `--disable-thinking`, `--tools`, `--json-schema-response-format`, and `--ebnf` require server support. The last three use built-in demonstration structures; use a payload file for custom structures.
-
-:::tip Debug output
-`--verbose` prints headers and payloads, including authentication details. Remove keys before sharing logs.
-:::
+- `--override-payload` merges at the top level (taking precedence over `--model`).
+- `--enable-thinking`, `--disable-thinking`, `--tools`, `--response-format-json-schema`, and `--ebnf` depend on server support.
+- `--verbose` prints headers and payload (redact keys before sharing).

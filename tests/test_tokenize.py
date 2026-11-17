@@ -79,10 +79,13 @@ def test_decode_reads_input_ids_from_stdin(monkeypatch, capsys):
     monkeypatch.setattr(
         token_mod.sys,
         "stdin",
-        types.SimpleNamespace(read=lambda: '{"input_ids": [[97, 98], [99]]}\n'),
+        types.SimpleNamespace(
+            isatty=lambda: False,
+            read=lambda: '{"input_ids": [[97, 98], [99]]}\n',
+        ),
     )
 
-    assert token_mod.main(["--tokenizer", "dummy", "--decode", "--from-stdin"]) == 0
+    assert token_mod.main(["--tokenizer", "dummy", "--decode", "-"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "text": ["ab", "c"],
         "ids": [[97, 98], [99]],
@@ -90,13 +93,15 @@ def test_decode_reads_input_ids_from_stdin(monkeypatch, capsys):
     }
 
 
-def test_encode_reads_text_from_stdin(monkeypatch, capsys):
+def test_encode_reads_text_from_piped_stdin(monkeypatch, capsys):
     monkeypatch.setattr(token_mod, "load_tokenizer", lambda _: FakeTokenizer())
     monkeypatch.setattr(
-        token_mod.sys, "stdin", types.SimpleNamespace(read=lambda: "ab\n")
+        token_mod.sys,
+        "stdin",
+        types.SimpleNamespace(isatty=lambda: False, read=lambda: "ab\n"),
     )
 
-    assert token_mod.main(["--tokenizer", "dummy", "--from-stdin"]) == 0
+    assert token_mod.main(["--tokenizer", "dummy"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "text": "ab",
         "ids": [97, 98],
@@ -104,6 +109,11 @@ def test_encode_reads_text_from_stdin(monkeypatch, capsys):
     }
 
 
-def test_from_stdin_rejects_a_positional_argument():
+def test_tty_without_text_errors(monkeypatch):
+    monkeypatch.setattr(
+        token_mod.sys,
+        "stdin",
+        types.SimpleNamespace(isatty=lambda: True, read=lambda: ""),
+    )
     with pytest.raises(SystemExit):
-        token_mod.main(["--tokenizer", "dummy", "--from-stdin", "ab"])
+        token_mod.main(["--tokenizer", "dummy"])

@@ -1,23 +1,21 @@
 ---
-title: Session replay
+title: Session Replay
 ---
 
-# Session replay
+# Session Replay
 
-`aib session-bench` treats each JSONL file as a session. Requests within a file run in order; different sessions can run concurrently. A concurrency slot is held for the entire session.
+`aib session-bench` treats each JSONL file as one session: requests within a file run sequentially while sessions run concurrently up to `--max-concurrency`.
 
-## Prepare session files
+## Session Format
 
-Create `sessions/session-01.jsonl`:
+`sessions/session-01.jsonl`:
 
 ```jsonl
 {"messages":[{"role":"user","content":"My name is Alex."}],"max_tokens":64}
 {"messages":[{"role":"user","content":"My name is Alex."},{"role":"assistant","content":"Hello, Alex!"},{"role":"user","content":"What is my name?"}],"max_tokens":64}
 ```
 
-Each line must be a complete payload. AIB does not insert the previous request's actual response into the next payload; include conversation history in advance. All requests use chat completions.
-
-## Run replay
+## Run Replay
 
 ```bash
 aib session-bench 'sessions/**/*.jsonl' \
@@ -29,6 +27,5 @@ aib session-bench 'sessions/**/*.jsonl' \
   --metric-path session-metrics.jsonl
 ```
 
-`--max-concurrency 16` allows up to 16 active sessions. By default, the first 3 sessions are used for warmup and removed from the measured phase. For small workloads, use `--num-warmup-sessions 0` to retain measured sessions. `--num-sessions` caps the total selected sessions, including warmup.
-
-`--request-rate` controls both session arrivals and spacing between requests within a session. It is not a strict global HTTP QPS cap. Exported latency and throughput aggregate individual requests, not total session durations.
+- By default, the first 3 sessions are warmup-only; pass `--num-warmup-sessions 0` for small workloads.
+- `--request-rate` controls both session arrivals and inter-turn spacing.

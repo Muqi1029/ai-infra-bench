@@ -7,13 +7,8 @@ import time
 import uuid
 from argparse import Namespace
 from contextlib import nullcontext
-from datetime import datetime
-from glob import glob
-from importlib import resources
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
-
-from tqdm import tqdm
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping
 
 from ai_infra_bench.performance.bench_utils import (
     compute_random_lens,
@@ -21,47 +16,47 @@ from ai_infra_bench.performance.bench_utils import (
     get_request,
     handle_outputs,
     parse_args,
+    parse_goodput,
     prepare_warmup_requests,
     set_seed,
     validate_args,
 )
-from ai_infra_bench.performance.core import flush_cache, request_func
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.io import _read_json, _read_jsonl
+from ai_infra_bench.utils.io import (
+    DATE_FORMAT,
+    _read_json,
+    read_packaged_requests,
+    read_requests,
+    read_requests_with_ts,
+)
 from ai_infra_bench.utils.req import api_url, prepare_payload, tool_filter_request
+
+if TYPE_CHECKING:
+    from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-
-DATE_FORMAT = "%Y-%m-%d_%H-%M-%S.%f"
 RANDOM_TOKEN_UPPER_BOUND = 10_000
 
 
-def read_requests_with_ts(
-    payload_regex_path: str, args: Namespace | None = None
-) -> List[Dict]:
-    timestamped_requests = []
-    for file_path in sorted(glob(payload_regex_path, recursive=True)):
-        logger.info(f"Reading {file_path}")
-        timestamped_requests.extend(_read_json(file_path))
+def _create_bench_client_session(*args, **kwargs):
+    from ai_infra_bench.utils.client import (
+        _create_bench_client_session as _create_session,
+    )
 
-    timestamped_requests.sort(key=lambda item: datetime.strptime(item[0], DATE_FORMAT))
-    requests = [json.loads(content) for _, content in timestamped_requests]
-    return requests
+    return _create_session(*args, **kwargs)
 
 
-def read_requests(payload_regex_path: str) -> List[Dict]:
-    requests = []
-    for file_path in sorted(glob(payload_regex_path, recursive=True)):
-        logger.info(f"Reading {file_path}")
-        if file_path.endswith(".json"):
-            requests.extend(_read_json(file_path))
-        elif file_path.endswith(".jsonl"):
-            requests.extend(_read_jsonl(file_path))
-        else:
-            logger.error(f"{file_path} cannot be read. Only support json/jsonl suffix")
-    return requests
+async def request_func(*args, **kwargs):
+    from ai_infra_bench.performance.core import request_func as _request_func
+
+    return await _request_func(*args, **kwargs)
+
+
+async def flush_cache(*args, **kwargs):
+    from ai_infra_bench.performance.core import flush_cache as _flush_cache
+
+    return await _flush_cache(*args, **kwargs)
 
 
 def generate_random_requests(
@@ -103,47 +98,6 @@ def request_url_for_payloads(base_url: str, requests: List[Mapping[str, Any]]) -
     if requests and "prompt" in requests[0] and "messages" not in requests[0]:
         return api_url(base_url, "/v1/completions")
     return api_url(base_url, "/v1/chat/completions")
-
-
-def read_packaged_requests(dataset: str) -> List[Dict]:
-    try:
-        data_package = resources.files("ai_infra_bench_dataset")
-    except ModuleNotFoundError as error:
-        raise RuntimeError(
-            "The packaged datasets are unavailable; install ai-infra-bench[data]"
-        ) from error
-
-    data_directory = data_package.joinpath("data", dataset)
-    if not data_directory.is_dir():
-        raise FileNotFoundError(
-            f"Payload dataset {dataset!r} is not included in ai-infra-bench-dataset"
-        )
-
-    payload_resource = data_directory.joinpath("payload.jsonl")
-    shard_resources = sorted(
-        (
-            resource
-            for resource in data_directory.iterdir()
-            if resource.is_file()
-            and resource.name.startswith("payload-")
-            and resource.name.endswith(".jsonl")
-            and resource.name[len("payload-") : -len(".jsonl")].isdigit()
-        ),
-        key=lambda resource: resource.name,
-    )
-    payload_resources = shard_resources or (
-        [payload_resource] if payload_resource.is_file() else []
-    )
-    if not payload_resources:
-        raise FileNotFoundError(
-            f"Payload dataset {dataset!r} is not included in ai-infra-bench-dataset"
-        )
-
-    requests = []
-    for payload_resource in payload_resources:
-        with resources.as_file(payload_resource) as payload_path:
-            requests.extend(read_requests(str(Path(payload_path))))
-    return requests
 
 
 def load_tokenizer(tokenizer_id: str):
@@ -203,21 +157,34 @@ def resize_sharegpt_requests(
 
 
 def load_requests(args: Namespace) -> List[Dict]:
-
-    if getattr(args, "payload_regex_path", None):
-        if getattr(args, "payload_path", None):
-            payload = _read_json(args.payload_path)
-            if not isinstance(payload, Mapping):
-                raise ValueError("--payload-path must contain one JSON object")
-            requests = [dict(payload) for _ in range(args.num_requests)]
-        elif args.with_ts:
-            requests = read_requests_with_ts(args.payload_regex_path)
+    payload_path = getattr(args, "payload_path", None) or getattr(
+        args, "payload_regex_path", None
+    )
+    if payload_path:
+        if getattr(args, "with_ts", False):
+            requests = read_requests_with_ts(payload_path)
         else:
-            requests = read_requests(args.payload_regex_path)
+            requests = read_requests(payload_path)
+            if (
+                len(requests) == 1
+                and getattr(args, "num_requests", None)
+                and (
+                    payload_path == "-"
+                    or Path(payload_path).is_file()
+                    and payload_path.endswith(".json")
+                )
+            ):
+                loaded_single = (
+                    isinstance(_read_json(payload_path), Mapping)
+                    if payload_path != "-"
+                    else True
+                )
+                if loaded_single:
+                    requests = [dict(requests[0]) for _ in range(args.num_requests)]
         logger.info(f"Read {len(requests)} requests")
         if len(requests) == 0:
             logger.error(
-                f"Read 0 requests! Please check your --payload-regex-path ({args.payload_regex_path=})"
+                f"Read 0 requests! Please check your --payload-path ({payload_path=})"
             )
     elif getattr(args, "prompt", None) is not None:
         requests = [
@@ -263,7 +230,7 @@ def load_requests(args: Namespace) -> List[Dict]:
                 f"input_len={args.input_len}, output_len={args.output_len}"
             )
     else:
-        raise ValueError("one of --dataset or --payload-regex-path is required")
+        raise ValueError("one of --dataset or --payload-path is required")
 
     if getattr(args, "filter_constrained_grammar_requests", False):
         filtered_requests = [
@@ -278,6 +245,8 @@ def load_requests(args: Namespace) -> List[Dict]:
 async def _run_warmup(
     session, request_url: str, warmup_requests: List, args: Namespace
 ) -> None:
+    from tqdm import tqdm
+
     with tqdm(total=len(warmup_requests), desc="Warmup") as pbar:
         await run_requests(
             session,
@@ -298,7 +267,7 @@ async def run_requests(
     model: str,
     override_payload: str,
     semaphore: asyncio.Semaphore | None = None,
-    pbar: tqdm | None = None,
+    pbar: "tqdm | None" = None,
     request_rate: float = float("inf"),
     benchmark_start_time: float | None = None,
     max_concurrency: int = 32,
@@ -363,6 +332,8 @@ async def run_requests(
 
 
 async def run_benchmark(args: Namespace) -> None:
+    from tqdm import tqdm
+
     if args.debug:
         args.num_requests = 10
         args.num_warmup_requests = 3
@@ -393,6 +364,8 @@ async def run_benchmark(args: Namespace) -> None:
             args.max_concurrency[0], args.api_key, args.request_timeout
         ) as session:
             await _run_warmup(session, request_url, warmup_requests, args)
+
+    goodput_thresholds = parse_goodput(getattr(args, "goodput", None))
 
     for max_concurrency in args.max_concurrency:
         for _ in range(args.repeat):
@@ -433,6 +406,7 @@ async def run_benchmark(args: Namespace) -> None:
                 dump_finish_reason_length=args.dump_finish_reason_length,
                 metric_path=args.metric_path,
                 label=args.label,
+                goodput_thresholds=goodput_thresholds,
             )
 
 

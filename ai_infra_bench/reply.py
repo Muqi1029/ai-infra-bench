@@ -7,19 +7,18 @@ from argparse import ArgumentParser
 from copy import deepcopy
 from typing import Optional, Sequence
 
-from tqdm import tqdm
-
-from ai_infra_bench.performance.bench import load_requests
-from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.req import api_url, normalize_payload, sanitize_url
+from ai_infra_bench.utils.io import read_requests
+from ai_infra_bench.utils.req import add_request_args, api_url, normalize_payload
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
-    parser = ArgumentParser()
-    parser.add_argument("--base-url", type=sanitize_url, required=True)
-    parser.add_argument("--api-key", default=None)
+    parser = ArgumentParser(
+        prog="aib reply",
+        description="Replay payloads and record input/output token IDs",
+    )
+    add_request_args(parser)
     parser.add_argument("--num-requests", type=int)
     parser.add_argument(
         "--resume-from",
@@ -27,7 +26,13 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         type=int,
         help="Skip requests before this original input index",
     )
-    parser.add_argument("--payload-regex-path", required=True)
+    parser.add_argument(
+        "--payload-path",
+        "--payload-regex-path",
+        dest="payload_path",
+        required=True,
+        help="Path or glob to JSON/JSONL payloads",
+    )
     parser.add_argument("--output-file", default="reply_results.jsonl")
     parser.add_argument("--max-concurrency", default=32, type=int)
     parser.add_argument(
@@ -35,17 +40,26 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         action="store_true",
         help="Filter constrained grammar requests",
     )
-    parser.add_argument("--with-ts", action="store_true")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.payload_regex_path = args.payload_path
+    return args
 
 
-def prepare_payload(record):
+def prepare_payload(
+    record, model: str | None = None, override_payload: str | None = None
+):
     raw_payload = record.get("payload", record)
     if not isinstance(raw_payload, dict):
         raise ValueError("payload must be a JSON object")
 
     payload = deepcopy(raw_payload)
     payload = normalize_payload(payload)
+    if model:
+        payload["model"] = model
+    if override_payload is not None:
+        from ai_infra_bench.utils.req import parse_override_payload
+
+        payload.update(parse_override_payload(override_payload))
     payload["stream"] = False
     payload["return_token_ids"] = True
     payload.pop("stream_options", None)
@@ -90,11 +104,22 @@ async def write_result(file_obj, lock: asyncio.Lock, record):
 
 
 async def send_request(
-    session, request_url, semaphore, file_lock, file_obj, payload, req_id, pbar
+    session,
+    request_url,
+    semaphore,
+    file_lock,
+    file_obj,
+    payload,
+    req_id,
+    pbar,
+    model: str | None = None,
+    override_payload: str | None = None,
 ):
     start_time = time.perf_counter()
     try:
-        payload = prepare_payload(payload)
+        payload = prepare_payload(
+            payload, model=model, override_payload=override_payload
+        )
         status = "success"
         async with semaphore:
             async with session.post(request_url, json=payload) as response:
@@ -130,6 +155,11 @@ async def send_request(
 
 
 async def async_main(args):
+    from tqdm import tqdm
+
+    from ai_infra_bench.utils.client import _create_bench_client_session
+    from ai_infra_bench.utils.req import tool_filter_request
+
     if args.max_concurrency < 1:
         raise ValueError("--max-concurrency must be >= 1")
     if args.num_requests is not None and args.num_requests < 1:
@@ -137,13 +167,23 @@ async def async_main(args):
     if args.resume_from < 0:
         raise ValueError("--resume-from must be >= 0")
 
-    payloads = load_requests(args)
+    payloads = read_requests(args.payload_path)
+    if args.filter_constrained_grammar_requests:
+        payloads = [p for p in payloads if tool_filter_request(p)]
     indexed_payloads = select_payloads(
         payloads,
         resume_from=args.resume_from,
         num_requests=args.num_requests,
     )
-    request_url = api_url(args.base_url, "/v1/chat/completions")
+    first_raw = payloads[0].get("payload", payloads[0]) if payloads else {}
+    endpoint = (
+        "/v1/completions"
+        if isinstance(first_raw, dict)
+        and "prompt" in first_raw
+        and "messages" not in first_raw
+        else "/v1/chat/completions"
+    )
+    request_url = api_url(args.base_url, endpoint)
     api_key = args.api_key or os.getenv("OPENAI_API_KEY", "EMPTY")
 
     semaphore = asyncio.Semaphore(args.max_concurrency)
@@ -177,6 +217,8 @@ async def async_main(args):
                         payload,
                         req_id=req_id,
                         pbar=pbar,
+                        model=getattr(args, "model", None),
+                        override_payload=getattr(args, "override_payload", None),
                     )
                     for req_id, payload in indexed_payloads
                 )

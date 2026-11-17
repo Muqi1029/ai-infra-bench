@@ -6,62 +6,37 @@ title: Quickstart
 
 ## 1. Install
 
-Use Python 3.10 or newer, preferably in a virtual environment:
+Requires Python 3.10+:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade ai-infra-bench
-aib --help
+pip install ai-infra-bench
+# Optional datasets & tokenizer utilities:
+pip install 'ai-infra-bench[data]'
 ```
 
-On Windows, activate the environment with `.venv\Scripts\activate`.
-
-For packaged datasets or Hugging Face tokenizers:
+## 2. Check Connectivity
 
 ```bash
-python -m pip install --upgrade 'ai-infra-bench[data]'
+aib req --base-url http://127.0.0.1:30000 --model your-model --prompt "Who are you?"
 ```
 
-## 2. Connect to your service
-
-The examples assume a running service at `http://127.0.0.1:30000`. Replace `your-model` with the model name exposed by your server. For an authenticated service, also pass `--api-key`.
-
-```bash
-aib req \
-  --base-url http://127.0.0.1:30000 \
-  --model your-model \
-  --prompt "Introduce yourself in one sentence."
-```
-
-You should see a streamed reply and request metrics. If the request fails, check the URL, model name, and server logs.
-
-## 3. Benchmark text requests
-
-Create `requests.jsonl` with one complete request body per line:
-
-```jsonl
-{"messages":[{"role":"user","content":"Explain what a GPU does."}],"max_tokens":128}
-{"messages":[{"role":"user","content":"Explain what a KV cache does."}],"max_tokens":128}
-```
+## 3. Run a Benchmark
 
 ```bash
 aib bench \
   --base-url http://127.0.0.1:30000 \
   --model your-model \
-  --payload-regex-path requests.jsonl \
-  --max-concurrency 1 2 \
-  --num-warmup-requests 1 \
+  --dataset random \
+  --input-len 1024 --output-len 256 \
+  --num-requests 100 --max-concurrency 1 4 16 \
   --disable-flush-cache \
   --metric-path metrics.jsonl
 ```
 
-This checks connectivity and the output workflow. Two measured requests are too few for performance conclusions. Use a larger workload for actual testing; see [Benchmarking](./guides/benchmark.mdx). `--disable-flush-cache` is useful for services without a cache-flush endpoint.
+For custom payloads, pass `--payload-path requests.jsonl` (one JSON object per line).
 
-## 4. View results
+## 4. Plot Metrics
 
 ```bash
 aib plot-metrics metrics.jsonl -o metrics.html
 ```
-
-Open `metrics.html` in a browser to compare latency and throughput across concurrency levels. See [Metrics and results](./reference/metrics.mdx) for definitions.

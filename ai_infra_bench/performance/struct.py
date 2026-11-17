@@ -3,19 +3,18 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, List, Mapping
 
-import numpy as np
-
-from ai_infra_bench.utils.draw import (
-    Color,
-    color_print,
-    format_histogram_percentages,
-    format_mean,
-    format_percentile,
-)
+from ai_infra_bench.utils.color import Color, color_print
 from ai_infra_bench.utils.req import (
     SPEC_METRIC_KEYS,
     USAGE_METRIC_KEYS,
     extract_response_metrics,
+)
+from ai_infra_bench.utils.table import (
+    format_histogram_percentages,
+    format_mean,
+    format_percentile,
+    mean_value,
+    percentile_value,
 )
 
 
@@ -44,6 +43,7 @@ class OutputMetric:
     ttft_ms: float = 0.0
     latency_ms: float = 0.0
     tpot_ms: float = 0.0
+    itl_ms: List[float] = field(default_factory=list)
 
     # status
     success: bool = False
@@ -125,8 +125,12 @@ class OutputMetric:
         if not text_or_tool_calls:
             return
 
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
         if self.ttft_ms == 0.0:
-            self.ttft_ms = (time.perf_counter() - start_time) * 1000
+            self.ttft_ms = elapsed_ms
+        else:
+            prev_ms = self.ttft_ms + sum(self.itl_ms)
+            self.itl_ms.append(max(0.0, elapsed_ms - prev_ms))
         self.update_output(text_or_tool_calls, text_type, render_content)
 
     def update_non_stream_response(
@@ -207,6 +211,7 @@ class _OutputStats:
     request_rate: float
     label: str
     ts: str
+    goodput_thresholds: Mapping[str, float] | None = None
     outputs: List[OutputMetric] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -246,6 +251,11 @@ class _OutputStats:
                     for output in self.outputs
                     if (tpot_ms := output.calculate_tpot_ms()) is not None
                 ],
+                "ms",
+            ),
+            (
+                "ITL",
+                [itl for output in self.outputs for itl in output.itl_ms],
                 "ms",
             ),
             ("Latency", [output.latency_ms for output in self.outputs], "ms"),
@@ -306,7 +316,7 @@ class _OutputStats:
                 ["Metric", "Value"],
                 ["Total Proposed Drafts", total_proposed_drafts],
                 ["Total Correct Drafts", total_correct_drafts],
-                ["Toral Verify Count", total_spec_verify_ct],
+                ["Total Verify Count", total_spec_verify_ct],
                 ["Avg Spec Accept Rate(All Verify)", avg_spec_accept_rate],
                 [
                     "Avg Spec Accept Length(All Verify)",
@@ -359,13 +369,34 @@ class _OutputStats:
         table[1] += cap_info
         return table
 
+    def _meets_goodput(self, output: OutputMetric) -> bool:
+        if not self.goodput_thresholds:
+            return True
+        for metric, limit in self.goodput_thresholds.items():
+            if metric == "ttft":
+                if output.ttft_ms <= 0 or output.ttft_ms > limit:
+                    return False
+            elif metric == "tpot":
+                tpot = output.calculate_tpot_ms()
+                if output.completion_tokens > 1 and (tpot is None or tpot > limit):
+                    return False
+                if tpot is not None and tpot > limit:
+                    return False
+            elif metric == "itl":
+                if any(val > limit for val in output.itl_ms):
+                    return False
+            elif metric == "e2el":
+                if output.latency_ms > limit:
+                    return False
+        return True
+
     def build_finish_reason_table(self):
-        finish_reason_counts = {
-            finish_reason: sum(
-                output.finish_reason == finish_reason for output in self.outputs
-            )
-            for finish_reason in FinishReason
-        }
+        counts: Dict[str, int] = {str(reason): 0 for reason in FinishReason}
+        for output in self.outputs:
+            key = str(output.finish_reason) if output.finish_reason else "none"
+            counts[key] = counts.get(key, 0) + 1
+        if counts.get("none", 0) == 0:
+            counts.pop("none", None)
         return (
             "Finish Reason Statistics",
             [
@@ -376,7 +407,7 @@ class _OutputStats:
                         str(count),
                         f"{count / self.num_success_requests:.2%}",
                     ]
-                    for finish_reason, count in finish_reason_counts.items()
+                    for finish_reason, count in counts.items()
                 ],
             ],
         )
@@ -416,23 +447,42 @@ class _OutputStats:
             else f"{self.request_rate:g} req/s"
         )
         summary_context = " ".join(value for value in (self.label, self.ts) if value)
-        return (
-            f"Benchmark Summary ({summary_context})",
+        rows = [
+            ["Metric", "Value"],
+            ["Total requests", str(self.num_total_requests)],
+            ["Successful requests", str(self.num_success_requests)],
+            ["Failed requests", str(self.num_failed_requests)],
+            ["Max concurrency", str(self.max_concurrency)],
+            ["Request rate", request_rate_display],
             [
-                ["Metric", "Value"],
-                ["Total requests", str(self.num_total_requests)],
-                ["Successful requests", str(self.num_success_requests)],
-                ["Failed requests", str(self.num_failed_requests)],
-                ["Max concurrency", str(self.max_concurrency)],
-                ["Request rate", request_rate_display],
+                "Request Throughput",
+                f"{self.num_success_requests / self.duration_s:.2f} req/s",
+            ],
+        ]
+        if self.goodput_thresholds:
+            good_count = sum(
+                1 for output in self.outputs if self._meets_goodput(output)
+            )
+            rows.append(
                 [
-                    "Request Throughput",
-                    f"{self.num_success_requests / self.duration_s:.2f} req/s",
-                ],
+                    "Request goodput",
+                    f"{good_count / self.duration_s:.2f} req/s ({good_count / max(self.num_total_requests, 1):.2%})",
+                ]
+            )
+        rows.extend(
+            [
                 ["Duration", f"{self.duration_s:.2f} s"],
+                [
+                    "Input throughput",
+                    f"{total_prompt_tokens / self.duration_s:.2f} tokens/s",
+                ],
                 [
                     "Output throughput",
                     f"{total_completion_tokens / self.duration_s:.2f} tokens/s",
+                ],
+                [
+                    "Total token throughput",
+                    f"{(total_prompt_tokens + total_completion_tokens) / self.duration_s:.2f} tokens/s",
                 ],
                 ["Total prompt tokens", f"{total_prompt_tokens} tokens"],
                 ["Total completion tokens", f"{total_completion_tokens} tokens"],
@@ -447,10 +497,16 @@ class _OutputStats:
                     f"{total_cached_tokens_host} ({cached_tokens_host_ratio:.2%}) tokens",
                 ],
                 ["Global cache ratio", f"{global_cache_ratio:.2%}"],
-            ],
+            ]
         )
+        return (f"Benchmark Summary ({summary_context})", rows)
 
     def build_latency_token_table(self):
+        ratios = self.cached_token_ratios
+        ratio_mean = mean_value(ratios)
+        ratio_p50 = percentile_value(ratios, 50)
+        ratio_p95 = percentile_value(ratios, 95)
+        ratio_p99 = percentile_value(ratios, 99)
         return (
             "Latency & Token Metrics",
             [
@@ -461,10 +517,10 @@ class _OutputStats:
                 ],
                 [
                     "Cached token ratio",
-                    f"{np.mean(self.cached_token_ratios):.2%}",
-                    f"{np.percentile(self.cached_token_ratios, 50):.2%}",
-                    f"{np.percentile(self.cached_token_ratios, 95):.2%}",
-                    f"{np.percentile(self.cached_token_ratios, 99):.2%}",
+                    f"{ratio_mean:.2%}" if ratio_mean is not None else "N/A",
+                    f"{ratio_p50:.2%}" if ratio_p50 is not None else "N/A",
+                    f"{ratio_p95:.2%}" if ratio_p95 is not None else "N/A",
+                    f"{ratio_p99:.2%}" if ratio_p99 is not None else "N/A",
                     "ratio",
                 ],
             ],

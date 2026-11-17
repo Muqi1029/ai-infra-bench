@@ -1,20 +1,187 @@
 :root {
-  --ifm-color-primary: #2563a6;
-  --ifm-color-primary-dark: #215995;
-  --ifm-color-primary-darker: #1f548d;
-  --ifm-color-primary-darkest: #1a4574;
-  --ifm-color-primary-light: #296db7;
-  --ifm-color-primary-lighter: #2b72bf;
-  --ifm-color-primary-lightest: #3f84d0;
-  --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif;
-  --ifm-code-font-size: 90%;
+  --ifm-color-primary: #0b7ec1;
+  --ifm-color-primary-dark: #0a71ad;
+  --ifm-color-primary-darker: #096aa3;
+  --ifm-color-primary-darkest: #075786;
+  --ifm-color-primary-light: #168bd1;
+  --ifm-color-primary-lighter: #2393d7;
+  --ifm-color-primary-lightest: #47a6e0;
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #f8fafc;
+  --ifm-navbar-background-color: rgba(255, 255, 255, 0.85);
+  --ifm-navbar-shadow: none;
+  --ifm-toc-border-color: rgba(15, 23, 42, 0.08);
+  --ifm-hr-border-color: rgba(15, 23, 42, 0.08);
+  --ifm-font-family-base: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ifm-code-font-size: 88%;
+  --ifm-code-border-radius: 6px;
+  --ifm-pre-border-radius: 10px;
+  --ifm-heading-font-weight: 650;
+  --ifm-global-radius: 8px;
+  --aib-border: rgba(15, 23, 42, 0.08);
+  --aib-surface-muted: #f8fafc;
+  --aib-text-muted: #475569;
+  --aib-code-border: rgba(15, 23, 42, 0.1);
 }
+
 [data-theme='dark'] {
-  --ifm-color-primary: #79b8f5;
-  --ifm-color-primary-dark: #56a5f2;
-  --ifm-color-primary-darker: #459cf1;
-  --ifm-color-primary-darkest: #1480e9;
-  --ifm-color-primary-light: #9ccbf8;
-  --ifm-color-primary-lighter: #add4f9;
-  --ifm-color-primary-lightest: #e2f0fd;
+  --ifm-color-primary: #38bdf8;
+  --ifm-color-primary-dark: #1eb4f7;
+  --ifm-color-primary-darker: #11aff6;
+  --ifm-color-primary-darkest: #0891d0;
+  --ifm-color-primary-light: #52c6f9;
+  --ifm-color-primary-lighter: #5fcaf9;
+  --ifm-color-primary-lightest: #88d8fb;
+  --ifm-background-color: #0b0f17;
+  --ifm-background-surface-color: #111827;
+  --ifm-navbar-background-color: rgba(11, 15, 23, 0.85);
+  --ifm-toc-border-color: rgba(148, 163, 184, 0.14);
+  --ifm-hr-border-color: rgba(148, 163, 184, 0.14);
+  --aib-border: rgba(148, 163, 184, 0.14);
+  --aib-surface-muted: #111827;
+  --aib-text-muted: #94a3b8;
+  --aib-code-border: rgba(148, 163, 184, 0.16);
+}
+
+.navbar {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--aib-border);
+}
+
+.navbar__title {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--aib-border) !important;
+}
+
+.menu {
+  font-size: 0.875rem;
+  padding: 0.75rem 0.625rem !important;
+}
+
+.menu__link {
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  background: rgba(11, 126, 193, 0.1);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.theme-doc-markdown {
+  max-width: 840px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: -0.02em;
+}
+
+.markdown h1 {
+  font-size: 1.95rem;
+  margin-bottom: 0.9rem;
+}
+
+.markdown h2 {
+  font-size: 1.3rem;
+  margin-top: 2rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--aib-border);
+}
+
+.markdown table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.markdown table thead tr {
+  border-top: 0;
+  border-bottom: 1px solid var(--aib-border);
+  background: var(--aib-surface-muted);
+}
+
+.markdown table th,
+.markdown table td {
+  border-left: 0;
+  border-right: 0;
+  border-color: var(--aib-border);
+  padding: 0.55rem 0.75rem;
+}
+
+.theme-code-block {
+  border: 1px solid var(--aib-code-border);
+  box-shadow: none !important;
+}
+
+code {
+  border: 1px solid var(--aib-code-border);
+  padding: 0.12rem 0.35rem;
+}
+
+pre code {
+  border: 0;
+  padding: 0;
+}
+
+.alert {
+  border-width: 1px;
+  border-left-width: 3px;
+  box-shadow: none;
+}
+
+.footer {
+  background: transparent;
+  border-top: 1px solid var(--aib-border);
+  color: var(--aib-text-muted);
+  font-size: 0.85rem;
+  padding: 1.5rem 1rem;
+}
+
+.aib-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.aib-card {
+  display: block;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--aib-border);
+  border-radius: 10px;
+  background: var(--aib-surface-muted);
+  color: inherit !important;
+  text-decoration: none !important;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.aib-card:hover {
+  border-color: var(--ifm-color-primary);
+  transform: translateY(-1px);
+}
+
+.aib-card-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.aib-card-desc {
+  color: var(--aib-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
 }

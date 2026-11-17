@@ -1,19 +1,44 @@
 import asyncio
 import json
 import logging
+import math
 from asyncio import Semaphore
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Tuple, TypedDict
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, TypedDict
 
-from aiohttp import ClientSession
-from tqdm import tqdm
-
-from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.draw import format_mean, format_percentile, print_table
+from ai_infra_bench.correctness.eval_dataset.utils import resolve_config_path
 from ai_infra_bench.utils.req import extract_response_metrics
+from ai_infra_bench.utils.table import format_mean, format_percentile, print_table
+
+if TYPE_CHECKING:
+    from aiohttp import ClientSession
+    from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+
+def tqdm(*args, **kwargs):
+    from tqdm import tqdm as _tqdm
+
+    return _tqdm(*args, **kwargs)
+
+
+def _create_bench_client_session(*args, **kwargs):
+    from ai_infra_bench.utils.client import (
+        _create_bench_client_session as _create_session,
+    )
+
+    return _create_session(*args, **kwargs)
+
+
+def load_eval_config(config_path: str) -> Dict[str, Any]:
+    import yaml
+
+    with open(resolve_config_path(config_path), "r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    return dict(data) if isinstance(data, dict) else {}
+
 
 DATASET_CHOICES = ["gsm8k", "aime25", "gpqa", "hle", "constrained_decoding"]
 DEEPSWE_EVAL = "deepswe"
@@ -53,7 +78,7 @@ class EvalRuntime:
         self.num_questions = runtime_args.num_questions
 
         self.sem: Semaphore | None = None
-        self.session: ClientSession | None = None
+        self.session: "ClientSession | None" = None
         self.evals: List[Eval] = [
             Eval.create_from_name(
                 eval_name,
@@ -75,7 +100,7 @@ class EvalRuntime:
         for eval in self.evals:
             eval.maybe_truncate(self.num_questions)
 
-    async def _run_one(self, eval: "Eval", payload: Dict, answer: Any, pbar: tqdm):
+    async def _run_one(self, eval: "Eval", payload: Dict, answer: Any, pbar: "tqdm"):
         assert self.session is not None and self.sem is not None
         async with self.sem:
             try:
@@ -137,16 +162,18 @@ class EvalRuntime:
             finally:
                 pbar.update(1)
 
-    async def run(self):
+    async def run(self) -> int:
         # aiohttp connector / semaphore must be created inside a running loop.
         self.sem = Semaphore(self.max_concurrency)
         self.session = _create_bench_client_session(self.max_concurrency, self.api_key)
 
         total = self.repeat * sum(e.get_length() for e in self.evals)
         pbar = tqdm(total=total)
+        any_success = False
         try:
             async with self.session:
                 for eval in self.evals:
+                    round_rates: List[float] = []
                     for i in range(self.repeat):
                         if self.repeat == 1:
                             pbar.set_description(f"Eval {eval.name}")
@@ -167,16 +194,47 @@ class EvalRuntime:
                         await asyncio.gather(*tasks)
                         round_duration_s = max(perf_counter() - round_start_time, 1e-9)
 
+                        round_success = sum(not r.is_failed for r in eval.results)
+                        if round_success > 0:
+                            any_success = True
+                        round_total = len(eval.results)
+                        round_correct = sum(
+                            1 for r in eval.results if r.is_right and not r.is_failed
+                        )
+                        if round_total:
+                            round_rates.append(round_correct / round_total)
+
                         for title, rows in eval.build_summary_tables(
                             round_number=i + 1,
                             duration_s=round_duration_s,
                             max_concurrency=self.max_concurrency,
                         ):
                             print_table(title, rows)
+
+                    if self.repeat > 1 and round_rates:
+                        mean_rate = math.fsum(round_rates) / len(round_rates)
+                        var = math.fsum(
+                            (r - mean_rate) ** 2 for r in round_rates
+                        ) / len(round_rates)
+                        std_rate = math.sqrt(var)
+                        print_table(
+                            f"Multi-Round Summary ({eval.name})",
+                            [
+                                ["Metric", "Value"],
+                                ["Rounds", str(len(round_rates))],
+                                ["Mean correct rate", f"{mean_rate:.2%}"],
+                                ["Std correct rate", f"{std_rate:.2%}"],
+                                [
+                                    "Min / Max correct rate",
+                                    f"{min(round_rates):.2%} / {max(round_rates):.2%}",
+                                ],
+                            ],
+                        )
         finally:
             pbar.close()
             self.session = None
             self.sem = None
+        return 0 if (total == 0 or any_success) else 1
 
 
 @dataclass
@@ -185,6 +243,8 @@ class EvalResult:
     payload: Dict = field(default_factory=dict)
     is_right: bool = False
     is_failed: bool = False
+    is_truncated: bool = False
+    latency_ms: float = 0.0
     reasoning_tokens: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -193,11 +253,27 @@ class EvalResult:
 class Eval:
     name: str = ""
     results: List[EvalResult] = field(default_factory=list)
+    rows: Any = ()
+
+    @staticmethod
+    def load_config(config_path: str) -> Dict[str, Any]:
+        return load_eval_config(config_path)
+
+    def maybe_truncate(self, num_questions: int | None):
+        if num_questions is None:
+            return
+        if hasattr(self.rows, "select"):
+            count = min(num_questions, len(self.rows))
+            self.rows = self.rows.select(range(count))
+        else:
+            self.rows = self.rows[:num_questions]
 
     def get_length(self) -> int:
-        raise NotImplementedError()
+        return len(self.rows)
 
-    def get_payload_and_answer(self) -> Iterable[Tuple[Dict, Any]]:
+    def get_payload_and_answer(
+        self, override_payload=None
+    ) -> Iterable[Tuple[Dict, Any]]:
         raise NotImplementedError()
 
     def _eval(self, response_content, answer, payload=None):
@@ -211,18 +287,31 @@ class Eval:
             for key in ("reasoning_tokens", "prompt_tokens", "completion_tokens")
         }
 
-    def eval(self, response_content, answer, payload):
+    @staticmethod
+    def _is_truncated(response_content: Any) -> bool:
+        if not isinstance(response_content, dict):
+            return False
+        choices = response_content.get("choices") or []
+        return bool(
+            choices
+            and isinstance(choices[0], dict)
+            and choices[0].get("finish_reason") == "length"
+        )
+
+    def eval(self, response_content, answer, payload, latency_ms: float = 0.0):
         token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
                 response=response_content,
                 payload=payload,
                 is_right=self._eval(response_content, answer, payload),
+                is_truncated=self._is_truncated(response_content),
+                latency_ms=latency_ms,
                 **token_usage,
             )
         )
 
-    def add_failed_result(self, response_content, payload):
+    def add_failed_result(self, response_content, payload, latency_ms: float = 0.0):
         token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
@@ -230,6 +319,7 @@ class Eval:
                 payload=payload,
                 is_right=False,
                 is_failed=True,
+                latency_ms=latency_ms,
                 **token_usage,
             )
         )
@@ -253,6 +343,9 @@ class Eval:
     ) -> List[Tuple[str, List[List[Any]]]]:
         total_requests = len(self.results)
         successful_requests = sum(not result.is_failed for result in self.results)
+        truncated_count = sum(
+            result.is_truncated and not result.is_failed for result in self.results
+        )
         token_usage = self.token_usage()
         tps = token_usage["completion_tokens"]["total"] / max(duration_s, 1e-9)
         correct_rate, wrong_rate, failed_rate = self.summary()
@@ -267,17 +360,28 @@ class Eval:
             ["Correct rate", f"{correct_rate:.2%}"],
             ["Wrong rate", f"{wrong_rate:.2%}"],
             ["Failed rate", f"{failed_rate:.2%}"],
-            ["Max concurrency", str(max_concurrency)],
-            ["Duration", f"{duration_s:.2f} s"],
-            ["TPS", f"{tps:.2f} tokens/s"],
-            *[
-                [
-                    f"Total {label.lower()}",
-                    f"{token_usage[key]['total']} tokens",
-                ]
-                for key, label in TOKEN_METRICS
-            ],
         ]
+        if truncated_count > 0:
+            summary_rows.append(
+                [
+                    "Truncated (length)",
+                    f"{truncated_count} ({truncated_count / max(total_requests, 1):.2%})",
+                ]
+            )
+        summary_rows.extend(
+            [
+                ["Max concurrency", str(max_concurrency)],
+                ["Duration", f"{duration_s:.2f} s"],
+                ["TPS", f"{tps:.2f} tokens/s"],
+                *[
+                    [
+                        f"Total {label.lower()}",
+                        f"{token_usage[key]['total']} tokens",
+                    ]
+                    for key, label in TOKEN_METRICS
+                ],
+            ]
+        )
         token_rows = [
             ["Metric", "Mean", "P50", "P90", "P99", "Unit"],
             *[

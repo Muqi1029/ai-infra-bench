@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import re
 from importlib import resources
 from pathlib import Path
 from typing import Any, Dict
@@ -10,6 +11,12 @@ logger = logging.getLogger(__name__)
 EVAL_DATASET_PACKAGE = "ai_infra_bench.correctness.eval_dataset"
 DATA_PACKAGE_RESOURCE_PREFIX = "data-package://"
 DATA_PACKAGE = "ai_infra_bench_dataset"
+_THINK_BLOCK_RE = re.compile(r"(?is)<think>.*?(?:</think>|$)")
+
+
+def strip_thinking(text: str) -> str:
+    """Remove `<think>...</think>` reasoning blocks (including unclosed tails)."""
+    return _THINK_BLOCK_RE.sub("", text).strip()
 
 
 def resolve_config_path(config_path: str) -> str:
@@ -85,4 +92,7 @@ def extract_response_text(response_json: Dict[str, Any]) -> str:
         logger.warning(
             f"content is None, the full response choice is\n{json.dumps(choice, ensure_ascii=False, indent=4)}"
         )
-    return f"{content}"
+    text = f"{content}"
+    if "<think>" in text.lower():
+        return strip_thinking(text)
+    return text

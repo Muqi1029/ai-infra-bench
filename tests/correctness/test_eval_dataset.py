@@ -267,3 +267,88 @@ def test_eval_runtime_logs_authentication_failures(caplog):
     assert "invalid api key" in caplog.text
     assert "Authentication failed" in caplog.text
     assert "do-not-log-this" not in caplog.text
+
+
+def test_strip_thinking_and_answer_extractors():
+    from ai_infra_bench.correctness.eval_dataset.aime25 import extract_aime_answer
+    from ai_infra_bench.correctness.eval_dataset.gpqa import extract_answer
+    from ai_infra_bench.correctness.eval_dataset.gsm8k import get_answer_value
+    from ai_infra_bench.correctness.eval_dataset.utils import extract_response_text
+
+    assert (
+        extract_response_text(
+            {"choices": [{"message": {"content": "<think>work</think>\nAnswer: 42"}}]}
+        )
+        == "Answer: 42"
+    )
+    assert (
+        extract_response_text(
+            {"choices": [{"message": {"content": "Answer: 7<think>trailing"}}]}
+        )
+        == "Answer: 7"
+    )
+    assert (
+        extract_response_text(
+            {"choices": [{"message": {"content": "<think>unfinished 42"}}]}
+        )
+        == ""
+    )
+
+    assert get_answer_value("Total is #### 08") == 8
+    assert get_answer_value("Final answer: \\boxed{42.5}") == 42.5
+    assert get_answer_value("08") == 8
+
+    assert extract_aime_answer("Therefore \\boxed{042}") == "42"
+    assert extract_aime_answer("**Answer:** 007") == "7"
+
+    assert extract_answer("So \\boxed{C}") == "C"
+    assert extract_answer("**Answer:** (D)") == "D"
+
+
+def test_eval_tracks_truncation_and_multi_round_summary(monkeypatch):
+    progress_bar = RecordingProgressBar(total=2)
+    tables = []
+    runtime = object.__new__(base.EvalRuntime)
+    runtime.endpoint_url = "http://localhost/v1/chat/completions"
+    runtime.max_concurrency = 1
+    runtime.api_key = "EMPTY"
+    runtime.repeat = 2
+    runtime.evals = [StubEval()]
+    runtime.override_payload = {}
+    runtime.sem = None
+    runtime.session = None
+
+    class TruncatedResponse(FakeResponse):
+        async def text(self):
+            return json.dumps(
+                {
+                    "choices": [{"finish_reason": "length"}],
+                    "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+                }
+            )
+
+    class TruncatedSession(FakeSession):
+        def post(self, url, json):
+            return TruncatedResponse()
+
+    monkeypatch.setattr(base, "tqdm", lambda total: progress_bar)
+    monkeypatch.setattr(
+        base, "print_table", lambda title, rows: tables.append((title, rows))
+    )
+    monkeypatch.setattr(
+        base, "_create_bench_client_session", lambda *args: TruncatedSession()
+    )
+
+    rc = asyncio.run(runtime.run())
+    assert rc == 0
+    summary_rows = dict(tables[0][1][1:])
+    assert summary_rows["Truncated (length)"] == "1 (100.00%)"
+    assert any(title == "Multi-Round Summary (Stub)" for title, _ in tables)
+    multi_rows = dict(
+        next(rows for title, rows in tables if title == "Multi-Round Summary (Stub)")[
+            1:
+        ]
+    )
+    assert multi_rows["Rounds"] == "2"
+    assert multi_rows["Mean correct rate"] == "100.00%"
+    assert multi_rows["Std correct rate"] == "0.00%"

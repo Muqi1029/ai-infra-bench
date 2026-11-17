@@ -59,19 +59,19 @@ def main(argv: Sequence[str] | None = None):
         help="Decode token ids instead of encoding text",
     )
     parser.add_argument(
-        "--from-stdin", action="store_true", help="Read text or token ids from stdin"
-    )
-    parser.add_argument(
         "text",
         nargs="?",
-        help="Text to encode, or token ids / JSON when --decode is set",
+        help="Text to encode (or token ids / JSON with --decode); use '-' or pipe stdin",
     )
     args = parser.parse_args(argv)
 
-    if (args.text is None) == (not args.from_stdin):
-        parser.error("provide text or use --from-stdin")
-
-    source = sys.stdin.read().removesuffix("\n") if args.from_stdin else args.text
+    is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+    if args.text == "-" or (args.text is None and not is_tty):
+        source = sys.stdin.read().removesuffix("\n")
+    elif args.text is None:
+        parser.error("provide text, '-', or pipe stdin")
+    else:
+        source = args.text
 
     try:
         tokenizer = load_tokenizer(args.tokenizer)

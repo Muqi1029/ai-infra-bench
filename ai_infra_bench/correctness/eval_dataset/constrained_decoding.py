@@ -3,13 +3,8 @@ import json
 import logging
 from typing import Any, Dict, Tuple
 
-from omegaconf import OmegaConf
-
 from ai_infra_bench.correctness.eval_dataset.base import Eval
-from ai_infra_bench.correctness.eval_dataset.utils import (
-    generate_payload,
-    resolve_config_path,
-)
+from ai_infra_bench.correctness.eval_dataset.utils import generate_payload
 
 logger = logging.getLogger(__name__)
 schema = {
@@ -135,24 +130,16 @@ class ConstrainedDecodingEval(Eval):
     ):
         self.name = name.replace("_", " ").title()
         self.results = []
-        cfg = OmegaConf.load(resolve_config_path(config_path))
+        cfg = self.load_config(config_path)
 
         self.prompt_template = cfg.get("prompt_template", "")
-        self.default_payload = OmegaConf.to_container(
-            cfg.get("payload", {}), resolve=True
-        )
+        self.default_payload = dict(cfg.get("payload") or {})
 
         self.rows = [
             {"question": PROMPT, "is_thinking_and_mode": (is_thinking, mode)}
             for is_thinking in [True, False]
             for mode in MODE_TO_EXTRA_PAYLOAD.keys()
         ]
-
-    def maybe_truncate(self, num_questions: int | None):
-        pass
-
-    def get_length(self) -> int:
-        return len(self.rows)
 
     def get_payload_and_answer(self, override_payload: Dict) -> Tuple[Dict, Any]:
         for row in self.rows:
@@ -179,9 +166,11 @@ class ConstrainedDecodingEval(Eval):
         is_thinking, mode = is_thinking_and_mode
         is_right = check_answer(response_body, mode, is_thinking=is_thinking)
         if not is_right:
-            print(
-                f"\033[42mThinking: {is_thinking}, Constrained Decoding Mode: {mode} FAILED\033[0m"
-                f"\nResponse Body:{json.dumps(response_body, indent=2, ensure_ascii=False)}"
-                f"\nPayload: {json.dumps(payload, indent=2, ensure_ascii=False)}"
+            logger.warning(
+                "Thinking=%s, Constrained Decoding Mode=%s FAILED\nResponse Body: %s\nPayload: %s",
+                is_thinking,
+                mode,
+                json.dumps(response_body, indent=2, ensure_ascii=False),
+                json.dumps(payload, indent=2, ensure_ascii=False),
             )
         return is_right

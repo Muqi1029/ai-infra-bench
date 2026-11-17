@@ -7,13 +7,15 @@ import time
 import traceback
 from contextlib import nullcontext
 from copy import deepcopy
-from typing import AsyncIterator, Dict, Optional
+from typing import TYPE_CHECKING, AsyncIterator, Dict, Optional
 
 import aiohttp
-from tqdm import tqdm
 
 from ai_infra_bench.performance.struct import OutputMetric, TextType
 from ai_infra_bench.utils.req import STREAM_RETURN_PAYLOAD
+
+if TYPE_CHECKING:
+    from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ async def request_func(
     raw: bool = False,
     render_content: bool = False,
     sem: Optional[asyncio.Semaphore] = None,
-    pbar: Optional[tqdm] = None,
+    pbar: "Optional[tqdm]" = None,
 ) -> OutputMetric:
     render_content = render_content and not raw
     output = OutputMetric(payload=payload)
@@ -76,6 +78,22 @@ async def request_func(
                             continue
 
                         data = json.loads(chunk)
+                        if isinstance(data, dict) and data.get("error"):
+                            err = data["error"]
+                            output.error_message = (
+                                err.get("message")
+                                or json.dumps(err, ensure_ascii=False)
+                                if isinstance(err, dict)
+                                else str(err)
+                            )
+                            output.latency_ms = (time.perf_counter() - st) * 1000
+                            output.success = False
+                            logger.error(
+                                "Stream error from %s: %s",
+                                request_url,
+                                output.error_message,
+                            )
+                            return output
 
                         output.update_response_metrics(data)
 
@@ -152,6 +170,12 @@ async def flush_cache(session: aiohttp.ClientSession, flush_cache_endpoint: str)
             await asyncio.sleep(0.2)
             async with session.post(flush_cache_endpoint) as res:
                 response_text = await res.text()
+                if res.status in (404, 405):
+                    logger.warning(
+                        f"Cache flush endpoint {flush_cache_endpoint} returned "
+                        f"HTTP {res.status}; skipping"
+                    )
+                    return
                 if res.status != 200:
                     logger.warning(
                         f"Failed to send a flush_cache request in {i+1}/{FLUSH_CACHE_TRIES} tries. "

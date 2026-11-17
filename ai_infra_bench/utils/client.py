@@ -1,3 +1,5 @@
+import sys
+
 import aiohttp
 
 BENCH_AIOHTTP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours
@@ -12,15 +14,17 @@ def _create_bench_client_session(
     # When the pressure is big, the read buffer could be full before aio thread read
     # the content. We increase the read_bufsize from 64K to 10M.
     aiohttp_timeout = aiohttp.ClientTimeout(total=request_timeout)
-    connector = aiohttp.TCPConnector(
-        limit=max_concurrency,
-        limit_per_host=max_concurrency,
-        enable_cleanup_closed=True,
+    connector_kwargs = {
+        "limit": max_concurrency,
+        "limit_per_host": max_concurrency,
         # Expire pooled connections before SGLang's default 5s idle timeout.
         # Large payload preparation can block the loop from observing a peer's
         # close; aiohttp also checks this age synchronously before reuse.
-        keepalive_timeout=1.0,
-    )
+        "keepalive_timeout": 1.0,
+    }
+    if sys.version_info < (3, 12, 7):
+        connector_kwargs["enable_cleanup_closed"] = True
+    connector = aiohttp.TCPConnector(**connector_kwargs)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     return aiohttp.ClientSession(
         timeout=aiohttp_timeout,

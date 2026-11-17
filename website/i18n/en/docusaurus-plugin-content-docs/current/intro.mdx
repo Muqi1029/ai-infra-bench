@@ -3,28 +3,51 @@ title: Introduction
 slug: /
 ---
 
+import Link from '@docusaurus/Link';
+
 # AI Infra Bench
 
-AI Infra Bench (AIB) is a command-line tool for inference services. Use an OpenAI-compatible endpoint to measure latency and throughput, evaluate model answers, and find a load limit that meets your service-level objectives (SLOs).
+A lightweight CLI for OpenAI-compatible inference endpoints: benchmark latency and throughput, search SLO capacity, evaluate accuracy, and inspect hardware/weights without serving-framework SDKs.
 
-No serving-framework SDK is required. Start your inference service, then run `aib` from a client machine.
+## Quick Navigation
 
-## Choose a task
+<div className="aib-card-grid">
+  <Link className="aib-card" to="/quickstart/">
+    <div className="aib-card-title">Quickstart</div>
+    <div className="aib-card-desc">Install AIB and run your first request and benchmark.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/requests/">
+    <div className="aib-card-title">Send Requests</div>
+    <div className="aib-card-desc">Connectivity checks, streaming output, and stdin payloads.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/benchmark/">
+    <div className="aib-card-title">Benchmarking</div>
+    <div className="aib-card-desc">TTFT / ITL / TPOT, Goodput, and prefix cache ratio.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/slo/">
+    <div className="aib-card-title">SLO Search</div>
+    <div className="aib-card-desc">YAML-driven binary search for max concurrency or RPS.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/sessions/">
+    <div className="aib-card-title">Session Replay</div>
+    <div className="aib-card-desc">Ordered multi-turn replay with session-level concurrency.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/evaluation/">
+    <div className="aib-card-title">Evaluation</div>
+    <div className="aib-card-desc">GSM8K, GPQA, AIME25, HLE, and Logits comparison.</div>
+  </Link>
+  <Link className="aib-card" to="/guides/monitoring/">
+    <div className="aib-card-title">Local Monitoring</div>
+    <div className="aib-card-desc">Launch local Prometheus and Grafana dashboards.</div>
+  </Link>
+  <Link className="aib-card" to="/reference/cli/">
+    <div className="aib-card-title">CLI & Metrics</div>
+    <div className="aib-card-desc">Command flags and metric definitions.</div>
+  </Link>
+</div>
 
-| I want to | Start here |
-| --- | --- |
-| Install AIB and run a first test | [Quickstart](./quickstart.mdx) |
-| Check that a model responds | [Send requests](./guides/requests.mdx) |
-| Compare performance across concurrency levels | [Benchmarking](./guides/benchmark.mdx) |
-| Find capacity within a latency target | [SLO search](./guides/slo.mdx) |
-| Replay conversation workloads | [Session replay](./guides/sessions.mdx) |
-| Measure answer accuracy | [Evaluation](./guides/evaluation.mdx) |
-| Inspect SGLang server metrics | [Local monitoring](./guides/monitoring.mdx) |
-
-## Endpoint requirements
-
-Text requests use `/v1/chat/completions`; random-token benchmarks use `/v1/completions`. Benchmarks require SSE streaming. Token usage, cache metrics, and speculative-decoding metrics depend on what the server reports.
-
-:::info Compatibility
-Random token IDs, `ignore_eos`, extended statistics fields, and `/flush_cache` are not supported by every OpenAI-compatible service. Begin with a plain text request, then enable benchmark features. See [Troubleshooting](./troubleshooting.mdx).
+:::info Endpoint Compatibility
+- Text requests use `/v1/chat/completions`; random token-ID benchmarks use `/v1/completions`.
+- `aib bench` requires SSE streaming; cache details, speculative metrics, and `/flush_cache` require server support.
+- See [Troubleshooting](./troubleshooting.mdx) if strict endpoints reject extension fields.
 :::

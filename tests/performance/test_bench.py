@@ -145,7 +145,7 @@ def test_parse_args_mutually_exclusive_dataset_and_payload_path():
 
 def test_load_requests_requires_dataset_or_payload_path():
     with pytest.raises(
-        ValueError, match="one of --dataset or --payload-regex-path is required"
+        ValueError, match="one of --dataset or --payload-path is required"
     ):
         load_requests(Namespace(filter_constrained_grammar_requests=False))
 
@@ -471,7 +471,8 @@ def test_repeat_flushes_cache_when_warmup_is_disabled(monkeypatch):
             "1",
             "--num-requests",
             "3",
-            "--disable-warmup",
+            "--num-warmup-requests",
+            "0",
             "--repeat",
             "2",
         ]
@@ -1235,6 +1236,7 @@ def test_spec_accept_length_is_weighted_by_verify_ct(monkeypatch):
     assert "Avg Spec Accept Length" not in spec_metrics
     assert spec_metrics["Avg Spec Accept Rate(All Verify)"] == "88.89%"
     assert "Avg Spec Accept Rate" not in spec_metrics
+    assert "Total Verify Count" in spec_metrics
 
 
 def test_format_histogram_percentages():
@@ -1259,3 +1261,75 @@ def test_maybe_dump_outputs_with_finish_reason_length(tmp_path):
     record = json.loads(lines[0])
     assert record["finish_reason"] == "length"
     assert record["content"] == "cut off"
+
+
+def test_load_requests_reads_payload_from_stdin(monkeypatch):
+    import io
+
+    monkeypatch.setattr(
+        "ai_infra_bench.utils.io.sys.stdin",
+        io.StringIO('{"messages": [{"role": "user", "content": "hi"}]}\n'),
+    )
+    args = bench_utils.parse_args(["--payload-path", "-", "--num-requests", "3"])
+    validate_args(args)
+    loaded = load_requests(args)
+    assert len(loaded) == 3
+    assert loaded[0]["messages"][0]["content"] == "hi"
+
+
+def test_handle_outputs_computes_goodput_itl_and_total_throughput(monkeypatch):
+    tables = []
+    monkeypatch.setattr(
+        bench_utils,
+        "print_table",
+        lambda title, rows: tables.append((title, rows)),
+    )
+    outputs = [
+        OutputMetric(
+            success=True,
+            ttft_ms=100.0,
+            latency_ms=400.0,
+            itl_ms=[10.0, 20.0],
+            prompt_tokens=20,
+            completion_tokens=11,
+            finish_reason="stop",
+        ),
+        OutputMetric(
+            success=True,
+            ttft_ms=600.0,
+            latency_ms=900.0,
+            itl_ms=[30.0, 30.0],
+            prompt_tokens=20,
+            completion_tokens=11,
+            finish_reason="custom_stop",
+        ),
+    ]
+    returned = handle_outputs(
+        outputs,
+        duration_s=2.0,
+        max_concurrency=2,
+        request_rate=float("inf"),
+        goodput_thresholds={"ttft": 500.0, "itl": 25.0},
+    )
+    summary_rows = next(
+        rows for title, rows in tables if title.startswith("Benchmark Summary")
+    )
+    summary = {row[0]: row[1] for row in summary_rows[1:]}
+    assert summary["Input throughput"] == "20.00 tokens/s"
+    assert summary["Output throughput"] == "11.00 tokens/s"
+    assert summary["Total token throughput"] == "31.00 tokens/s"
+    assert summary["Request goodput"] == "0.50 req/s (50.00%)"
+
+    latency_rows = next(
+        rows for title, rows in tables if title == "Latency & Token Metrics"
+    )
+    latency = {row[0]: row[1:] for row in latency_rows[1:]}
+    assert latency["ITL"] == ["22.50", "25.00", "30.00", "30.00", "ms"]
+
+    finish_rows = next(
+        rows for title, rows in tables if title == "Finish Reason Statistics"
+    )
+    finish = {row[0]: row[1] for row in finish_rows[1:]}
+    assert finish["stop"] == "1"
+    assert finish["custom_stop"] == "1"
+    assert returned["max_concurrency"] == 2

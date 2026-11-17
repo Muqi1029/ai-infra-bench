@@ -1,3 +1,4 @@
+import asyncio
 import io
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -33,12 +34,29 @@ def stream_handler():
 
 @pytest.fixture
 def non_stream_handler():
-    response = Mock(status_code=200, text="")
+    response = AsyncMock()
+    response.status = 200
+    response.text = AsyncMock(return_value="{}")
+
+    post_cm = AsyncMock()
+    post_cm.__aenter__ = AsyncMock(return_value=response)
+    post_cm.__aexit__ = AsyncMock(return_value=False)
+
+    session = Mock()
+    session.post = Mock(return_value=post_cm)
+
+    session_cm = AsyncMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+
     with (
-        patch("ai_infra_bench.req.requests.post", return_value=response) as post,
+        patch(
+            "ai_infra_bench.utils.client._create_bench_client_session",
+            return_value=session_cm,
+        ),
         patch("ai_infra_bench.req.handle_outputs") as report,
     ):
-        yield response, post, report
+        yield response, session.post, report
 
 
 def test_request_metrics():
@@ -138,8 +156,10 @@ def test_extract_response_metrics_reads_standard_reasoning_token_details():
     ],
 )
 def test_non_stream_response(argv, response_json, expected, non_stream_handler):
+    import json
+
     response, post, report = non_stream_handler
-    response.json.return_value = response_json
+    response.text.return_value = json.dumps(response_json)
 
     assert main(argv) == 0
 
@@ -157,9 +177,8 @@ def test_non_stream_response(argv, response_json, expected, non_stream_handler):
 
 def test_non_stream_error(non_stream_handler):
     response, _, report = non_stream_handler
-    response.status_code = 500
-    response.text = "server error"
-    response.raise_for_status.side_effect = RuntimeError("request failed")
+    response.status = 500
+    response.text.return_value = "server error"
 
     assert main(["--disable-stream"]) == 1
 
@@ -170,10 +189,26 @@ def test_non_stream_error(non_stream_handler):
     assert "server error" in output.error_message
 
 
+def test_non_stream_json_error_payload(non_stream_handler):
+    response, _, report = non_stream_handler
+    response.status = 200
+    response.text.return_value = '{"error": {"message": "bad model"}}'
+
+    assert main(["--disable-stream"]) == 1
+
+    output = report.call_args.kwargs["outputs"][0]
+    assert output.success is False
+    assert "bad model" in output.error_message
+
+
 def test_connection_error_exits_nonzero():
+    session_cm = AsyncMock()
+    session_cm.__aenter__ = AsyncMock(side_effect=OSError("connection refused"))
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+
     with patch(
-        "ai_infra_bench.req.requests.post",
-        side_effect=OSError("connection refused"),
+        "ai_infra_bench.utils.client._create_bench_client_session",
+        return_value=session_cm,
     ):
         assert main(["--disable-stream", "--base-url", "localhost:8000"]) == 1
 
@@ -216,7 +251,7 @@ def test_prompt_stdin_rejects_conflicting_input_before_reading(monkeypatch):
     monkeypatch.setattr("ai_infra_bench.req.sys.stdin", stdin)
 
     with pytest.raises(SystemExit) as error:
-        main(["--prompt", "-", "--payload-stdin"])
+        main(["--prompt", "-", "--payload-path", "-"])
 
     assert error.value.code == 2
     stdin.read.assert_not_called()
@@ -266,7 +301,7 @@ def test_payload_prompt_uses_completions_api(tmp_path, stream_handler):
     assert payload["prompt"] == "hello"
 
 
-@pytest.mark.parametrize("argv", [[], ["--payload-stdin"], ["--payload-path", "-"]])
+@pytest.mark.parametrize("argv", [[], ["--payload-path", "-"]])
 def test_payload_stdin_uses_completions_api(argv, monkeypatch, stream_handler):
     monkeypatch.setattr(
         "ai_infra_bench.req.sys.stdin",
@@ -330,7 +365,8 @@ def test_payload_stdin_chat_request(monkeypatch, stream_handler):
 
     main(
         [
-            "--payload-stdin",
+            "--payload-path",
+            "-",
             "--model",
             "cli-model",
             "--override-payload",
@@ -348,7 +384,7 @@ def test_payload_stdin_chat_request(monkeypatch, stream_handler):
 
 
 @pytest.mark.parametrize("stdin", ["", "not-json", "[]", "null", "{}\n{}"])
-@pytest.mark.parametrize("argv", [[], ["--payload-stdin"]])
+@pytest.mark.parametrize("argv", [[], ["--payload-path", "-"]])
 def test_payload_stdin_rejects_invalid_json(
     stdin, argv, monkeypatch, stream_handler, capsys
 ):
@@ -362,12 +398,12 @@ def test_payload_stdin_rejects_invalid_json(
     stream_handler.assert_not_called()
 
 
-def test_payload_stdin_cannot_be_combined_with_another_input(tmp_path):
+def test_payload_path_cannot_be_combined_with_dataset(tmp_path):
     payload_path = tmp_path / "payload.json"
     payload_path.write_text("{}", encoding="utf-8")
 
     with pytest.raises(SystemExit):
-        main(["--payload-stdin", "--payload-path", str(payload_path)])
+        main(["--dataset", "gsm8k", "--payload-path", str(payload_path)])
 
 
 def test_dataset_request_is_deterministic(stream_handler):

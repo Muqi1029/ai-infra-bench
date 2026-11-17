@@ -11,16 +11,27 @@ from numbers import Real
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
-import numpy as np
-import yaml
-
 from ai_infra_bench.performance.bench_utils import get_request
-from ai_infra_bench.performance.core import request_func
 from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.utils.client import _create_bench_client_session
 from ai_infra_bench.utils.req import api_url, prepare_payload, sanitize_url
+from ai_infra_bench.utils.table import mean_value, percentile_value
 
 logger = logging.getLogger(__name__)
+
+
+def _create_bench_client_session(*args, **kwargs):
+    from ai_infra_bench.utils.client import (
+        _create_bench_client_session as _create_session,
+    )
+
+    return _create_session(*args, **kwargs)
+
+
+async def request_func(*args, **kwargs):
+    from ai_infra_bench.performance.core import request_func as _request_func
+
+    return await _request_func(*args, **kwargs)
+
 
 _OPERATORS = {
     "<": operator.lt,
@@ -48,7 +59,9 @@ SUPPORTED_METRICS = {
     "success_rate",
     "duration_s",
     "request_throughput",
+    "input_throughput",
     "output_throughput",
+    "total_token_throughput",
     "max_concurrency",
     "request_rate",
     *(
@@ -219,6 +232,8 @@ def parse_slo_config(data: Mapping[str, Any]) -> SLOConfig:
 
 
 def load_slo_config(path: str | Path) -> SLOConfig:
+    import yaml
+
     with open(path, encoding="utf-8") as file:
         data = yaml.safe_load(file)
     if not isinstance(data, Mapping):
@@ -285,6 +300,8 @@ def summarize_outputs(
 ) -> Dict[str, int | float]:
     successful = [output for output in outputs if output.success]
     duration_s = max(duration_s, 1e-9)
+    total_prompt = sum(output.prompt_tokens for output in successful)
+    total_completion = sum(output.completion_tokens for output in successful)
     metrics: Dict[str, int | float] = {
         "total_requests": len(outputs),
         "successful_requests": len(successful),
@@ -292,9 +309,9 @@ def summarize_outputs(
         "success_rate": len(successful) / len(outputs) if outputs else 0.0,
         "duration_s": duration_s,
         "request_throughput": len(successful) / duration_s,
-        "output_throughput": (
-            sum(output.completion_tokens for output in successful) / duration_s
-        ),
+        "input_throughput": total_prompt / duration_s,
+        "output_throughput": total_completion / duration_s,
+        "total_token_throughput": (total_prompt + total_completion) / duration_s,
         "max_concurrency": max_concurrency,
         "request_rate": request_rate,
     }
@@ -304,11 +321,11 @@ def summarize_outputs(
         for output in successful
         if (value := output.calculate_tpot_ms()) is not None
     ]
+    itl_values = [itl for output in successful for itl in output.itl_ms]
     series = {
         "ttft_ms": [output.ttft_ms for output in successful if output.ttft_ms > 0],
         "tpot_ms": tpot_values,
-        # request_func exposes TPOT rather than a separate per-token ITL stream.
-        "itl_ms": tpot_values,
+        "itl_ms": itl_values or tpot_values,
         "latency_ms": [output.latency_ms for output in successful],
         "e2e_latency_ms": [output.latency_ms for output in successful],
         **{
@@ -327,9 +344,13 @@ def summarize_outputs(
     for name, values in series.items():
         if not values:
             continue
-        metrics[f"mean_{name}"] = float(np.mean(values))
+        mean_val = mean_value(values)
+        if mean_val is not None:
+            metrics[f"mean_{name}"] = mean_val
         for percentile in (50, 95, 99):
-            metrics[f"p{percentile}_{name}"] = float(np.percentile(values, percentile))
+            p_val = percentile_value(values, percentile)
+            if p_val is not None:
+                metrics[f"p{percentile}_{name}"] = p_val
     return metrics
 
 
@@ -386,7 +407,7 @@ async def _run_probe(config: SLOConfig, candidate: int) -> Dict[str, int | float
 
 
 async def run_slo(config: SLOConfig) -> Dict[str, Any]:
-    np.random.seed(config.benchmark.seed)
+    random.seed(config.benchmark.seed)
     left, right = config.search.minimum, config.search.maximum
     best = None
     runs = []
@@ -429,6 +450,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("config", type=Path, help="SLO YAML configuration")
     parser.add_argument("-o", "--output", type=Path, help="Write result YAML")
     args = parser.parse_args(argv)
+
+    import yaml
 
     try:
         result = asyncio.run(run_slo(load_slo_config(args.config)))

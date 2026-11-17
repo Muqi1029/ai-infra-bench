@@ -5,16 +5,41 @@ import random
 from argparse import ArgumentParser, Namespace
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Dict, List, Sequence
-
-import numpy as np
+from typing import Any, Dict, List, Mapping, Sequence
 
 from ai_infra_bench.performance.struct import MetricTable, OutputMetric, _OutputStats
-from ai_infra_bench.utils.client import BENCH_AIOHTTP_TIMEOUT_SECONDS
-from ai_infra_bench.utils.draw import format_mean, print_table
 from ai_infra_bench.utils.req import add_common_args, parse_override_payload
+from ai_infra_bench.utils.table import format_mean, mean_value, print_table
 
 logger = logging.getLogger(__name__)
+
+BENCH_AIOHTTP_TIMEOUT_SECONDS = 6 * 60 * 60
+GOODPUT_METRICS = {"ttft", "tpot", "itl", "e2el", "latency"}
+
+
+def parse_goodput(items: Sequence[str] | None) -> Dict[str, float]:
+    if not items:
+        return {}
+    thresholds: Dict[str, float] = {}
+    for item in items:
+        if ":" not in item:
+            raise ValueError(f"--goodput must use METRIC:MS format, got {item!r}")
+        metric, raw_value = item.split(":", 1)
+        key = metric.strip().lower()
+        if key not in GOODPUT_METRICS:
+            raise ValueError(
+                f"--goodput metric must be one of {sorted(GOODPUT_METRICS)}, got {metric!r}"
+            )
+        try:
+            limit = float(raw_value)
+        except ValueError as error:
+            raise ValueError(
+                f"--goodput threshold must be numeric: {item!r}"
+            ) from error
+        if limit <= 0:
+            raise ValueError(f"--goodput threshold must be > 0: {item!r}")
+        thresholds["e2el" if key == "latency" else key] = limit
+    return thresholds
 
 
 def prepare_warmup_requests(requests: List[Dict], args: Namespace) -> List[Dict]:
@@ -45,11 +70,8 @@ def compute_random_lens(full_len: int, range_ratio: float, num: int) -> List[int
     """
     if full_len <= 0:
         return [0] * num
-    return np.random.randint(
-        max(int(full_len * range_ratio), 1),
-        full_len + 1,
-        size=num,
-    ).tolist()
+    low = max(int(full_len * range_ratio), 1)
+    return [random.randint(low, full_len) for _ in range(num)]
 
 
 def compute_shared_prefix_len(input_len: int, cache_ratio: float) -> int:
@@ -62,11 +84,9 @@ def compute_shared_prefix_len(input_len: int, cache_ratio: float) -> int:
     return int((input_len - 1) * cache_ratio)
 
 
-def parse_args(args: Sequence[str] | None = None) -> Namespace:
-    parser = ArgumentParser(prog="aib bench", description="Benchmark")
-    add_common_args(parser)
-
-    # for dump
+def add_output_args(
+    parser: ArgumentParser, *, default_metric_path: str | None = None
+) -> None:
     parser.add_argument("--dump-path", help="The dump path, jsonl format")
     parser.add_argument(
         "--dump-content",
@@ -79,14 +99,50 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         action="store_true",
         help="Dump requests whose finish reason is length",
     )
-
-    # for metrics record
     parser.add_argument(
         "--metric-path",
         type=str,
-        default="aib-metric.jsonl",
+        default=default_metric_path,
         help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
     )
+    parser.add_argument(
+        "--label", help="Label used to describe this benchmark, stored in metric files"
+    )
+    parser.add_argument(
+        "--goodput",
+        nargs="+",
+        metavar="METRIC:MS",
+        help="Per-request SLO thresholds in ms (e.g. ttft:500 tpot:50 itl:80 e2el:3000)",
+    )
+
+
+def validate_output_args(args: Namespace) -> None:
+    if (metric_path := getattr(args, "metric_path", None)) and not any(
+        metric_path.lower().endswith(suffix) for suffix in (".json", ".jsonl")
+    ):
+        raise ValueError("--metric-path must end with .json or .jsonl")
+
+    if getattr(args, "dump_finish_reason_length", False) and not args.dump_path:
+        args.dump_path = "aib-dump.jsonl"
+        logger.warning(
+            f"--dump-finish-reason-length has been set, but --dump-path not set. To ensure the dump process work as expected, --dump-path has been set to {args.dump_path}"
+        )
+
+    if (
+        dump_path := getattr(args, "dump_path", None)
+    ) and not dump_path.lower().endswith(".jsonl"):
+        logger.warning(
+            "Dump path only supports jsonl format; appending the .jsonl suffix"
+        )
+        args.dump_path = f"{dump_path}.jsonl"
+
+    parse_goodput(getattr(args, "goodput", None))
+
+
+def parse_args(args: Sequence[str] | None = None) -> Namespace:
+    parser = ArgumentParser(prog="aib bench", description="Benchmark")
+    add_common_args(parser)
+    add_output_args(parser, default_metric_path="aib-metric.jsonl")
 
     parser.add_argument(
         "--num-requests",
@@ -98,7 +154,7 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         "--num-warmup-requests",
         default=10,
         type=int,
-        help="The number of requests to warmup",
+        help="The number of requests to warmup (0 to disable)",
     )
 
     parser.add_argument(
@@ -132,22 +188,15 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         help="Repeat this user prompt using chat completions",
     )
     mutex_data_group.add_argument(
-        "--payload-path", help="Path to one JSON request payload"
+        "--payload-path",
+        "--payload-regex-path",
+        dest="payload_path",
+        help="Path/glob to JSON or JSONL payloads, or '-' for stdin",
     )
     mutex_data_group.add_argument(
         "--dataset",
         choices=["random", "gsm8k", "gpqa", "sharegpt"],
         help="use the dataset to benchmark (default: random)",
-    )
-    mutex_data_group.add_argument(
-        "--payload-regex-path",
-        type=str,
-        help="The path of payloads requests",
-    )
-    parser.add_argument(
-        "--start-pos",
-        type=int,
-        help="The start position when using --payload-regex-path, the requests will be sent starting from this position",
     )
 
     # for random dataset
@@ -200,10 +249,6 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
 
     parser.add_argument(
-        "--label", help="Label used for discribe this benchmark, stored in metric files"
-    )
-
-    parser.add_argument(
         "--with-ts", action="store_true", help="For payload data with timestamps"
     )
 
@@ -218,35 +263,26 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
         action="store_true",
         help="Whether to disable send a flush_cache before a benchmark",
     )
-    parser.add_argument(
-        "--disable-warmup",
-        action="store_true",
-        help="Whether to disable warmup before a benchmark",
-    )
 
-    return parser.parse_args(args)
+    parsed = parser.parse_args(args)
+    parsed.payload_regex_path = parsed.payload_path
+    return parsed
 
 
 def validate_args(args: Namespace) -> None:
     if override_payload := getattr(args, "override_payload", None):
         parse_override_payload(override_payload)
 
-    if getattr(args, "prompt", None) is not None and getattr(
+    payload_path = getattr(args, "payload_path", None) or getattr(
         args, "payload_regex_path", None
-    ):
-        raise ValueError("--prompt cannot be combined with --payload-regex-path")
-    if getattr(args, "payload_path", None):
-        if args.dataset or args.payload_regex_path:
-            raise ValueError(
-                "--payload-path cannot be combined with --dataset or --payload-regex-path"
-            )
-        args.payload_regex_path = args.payload_path
-        args.dataset = None
-        args.with_ts = False
-    if getattr(args, "payload_path", None):
-        args.payload_regex_path = args.payload_path
-        args.dataset = None
-        args.with_ts = False
+    )
+    if getattr(args, "prompt", None) is not None and payload_path:
+        raise ValueError("--prompt cannot be combined with --payload-path")
+    if payload_path:
+        if getattr(args, "dataset", None):
+            raise ValueError("--payload-path cannot be combined with --dataset")
+        args.payload_path = payload_path
+        args.payload_regex_path = payload_path
 
     max_concurrencies = (
         args.max_concurrency
@@ -265,20 +301,11 @@ def validate_args(args: Namespace) -> None:
     if args.num_requests is not None and args.num_requests < 1:
         raise ValueError("--num-requests must be >= 1")
 
-    if (metric_path := args.metric_path) and not (
-        any(metric_path.endswith(suffix) for suffix in [".json", ".jsonl"])
-    ):
-        raise ValueError("--metric-path must end with .json or .jsonl")
+    validate_output_args(args)
 
-    if (dump_path := args.dump_path) and not dump_path.endswith(".jsonl"):
-        logger.warning(
-            "Dump path only supports jsonl format; appending the .jsonl suffix"
-        )
-        args.dump_path = f"{dump_path}.jsonl"
-
-    if args.input_len < 1:
+    if getattr(args, "input_len", 1) < 1:
         raise ValueError("--input-len must be >= 1")
-    if args.output_len < 0:
+    if getattr(args, "output_len", 0) < 0:
         raise ValueError("--output-len must be >= 0")
 
     random_range_ratio = getattr(args, "random_range_ratio", 1.0)
@@ -305,7 +332,7 @@ def validate_args(args: Namespace) -> None:
     # validate dataset
     if (
         getattr(args, "prompt", None) is None
-        and not getattr(args, "payload_regex_path", None)
+        and not payload_path
         and not getattr(args, "dataset", None)
     ):
         args.dataset = "random"
@@ -323,18 +350,6 @@ def validate_args(args: Namespace) -> None:
             raise ValueError(
                 "--tokenizer or --model must be provided when setting ShareGPT lengths"
             )
-
-    # dump_finish_reason_length
-    if getattr(args, "dump_finish_reason_length", False):
-        if not args.dump_path:
-            args.dump_path = "aib-dump.jsonl"
-            logger.warning(
-                f"--dump-finish-reason-length has been set, but --dump-path not set. To ensure the dump process work as expected, --dump-path has been set to {args.dump_path}"
-            )
-
-    if args.disable_warmup:
-        args.num_warmup_requests = 0
-        logger.info("--disable-warmup has been set, set --num-warmup-requests 0")
 
 
 def maybe_dump_outputs(
@@ -403,6 +418,7 @@ def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
         ]
 
     total_completion_tokens = sum(output.completion_tokens for output in stats.outputs)
+    cached_mean = mean_value(stats.cached_token_ratios)
     tables = [
         (
             "Request Result",
@@ -426,7 +442,7 @@ def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
                 ],
                 [
                     "Cached token ratio",
-                    f"{np.mean(stats.cached_token_ratios):.2%}",
+                    f"{cached_mean:.2%}" if cached_mean is not None else "N/A",
                     "ratio",
                 ],
             ],
@@ -470,6 +486,7 @@ def handle_outputs(
     metric_path: str | None = None,
     label: str | None = None,
     benchmark_mode: bool = True,
+    goodput_thresholds: Mapping[str, float] | None = None,
 ) -> Dict:
     maybe_dump_outputs(outputs, dump_path, dump_content, dump_finish_reason_length)
 
@@ -496,6 +513,7 @@ def handle_outputs(
         request_rate,
         label=label,
         ts=now,
+        goodput_thresholds=goodput_thresholds,
     )
     if stats.num_failed_requests:
         logger.warning(f"Failed requests: {stats.num_failed_requests}")
@@ -513,7 +531,7 @@ async def wait_for_request_interval(request_rate: float) -> None:
     if request_rate == float("inf"):
         return
 
-    interval = np.random.exponential(1.0 / request_rate)
+    interval = random.expovariate(request_rate)
     await asyncio.sleep(interval)
 
 
@@ -531,4 +549,3 @@ async def get_request(requests, request_rate):
 
 def set_seed(seed: int):
     random.seed(seed)
-    np.random.seed(seed)

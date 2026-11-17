@@ -11,10 +11,8 @@ requires-python = ">=3.10"
 dependencies = [
     "aiohttp",
     "numpy",
-    "requests",
     "PyYAML",
     "tqdm",
-    "omegaconf",
 ]
 
 [project.optional-dependencies]

@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from glob import glob
 
-from ai_infra_bench.utils.draw import print_table
+from ai_infra_bench.utils.table import print_table
 
 MIN_NAME_WIDTH = 60
 SHAPE_WIDTH = 24

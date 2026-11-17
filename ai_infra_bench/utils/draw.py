@@ -7,70 +7,26 @@ from argparse import SUPPRESS, ArgumentParser
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-import numpy as np
+from ai_infra_bench.utils.table import (
+    fmt,
+    format_histogram_percentages,
+    format_mean,
+    format_percentile,
+    print_table,
+)
 
-from ai_infra_bench.utils.color import Color, color_print, colorize
-
-
-def print_table(title: str, rows: List[List[str]]) -> None:
-    print()
-    if not rows:
-        return
-
-    widths = [max(len(str(row[i])) for row in rows) for i in range(len(rows[0]))]
-    border = "+-" + "-+-".join("-" * width for width in widths) + "-+"
-    title_line = f"| {title.center(len(border) - 4)} |"
-
-    print(border)
-    print(title_line)
-    print(border)
-    for idx, row in enumerate(rows):
-        print(
-            "| "
-            + " | ".join(str(value).ljust(widths[i]) for i, value in enumerate(row))
-            + " |"
-        )
-        if idx == 0:
-            print(border)
-    print(border)
-    print()
-
-
-def fmt(value, fmt: str = ".2f", suffix: str = "") -> str:
-    """Format ``value`` with a printf-style format spec, e.g. ``fmt(1.23, ".2f")``."""
-    if value is None:
-        return "N/A"
-    if isinstance(value, bool):
-        return str(value)
-    if isinstance(value, int):
-        return f"{value}{suffix}"
-    if isinstance(value, float):
-        return f"{value:{fmt}}{suffix}"
-    if isinstance(value, (list, dict)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
-
-
-def format_histogram_percentages(histogram: Sequence[int]) -> str:
-    total = sum(histogram)
-    if total == 0:
-        return "[]"
-    percentages = (f"{count / total:.2%}" for count in histogram)
-    return f"[{', '.join(percentages)}]"
-
-
-def format_mean(values: List[float], precision: int = 2) -> str:
-    if not values:
-        return "N/A"
-    return f"{np.mean(values):.{precision}f}"
-
-
-def format_percentile(
-    values: List[float], percentile: float, precision: int = 2
-) -> str:
-    if not values:
-        return "N/A"
-    return f"{np.percentile(values, percentile):.{precision}f}"
+__all__ = [
+    "fmt",
+    "format_histogram_percentages",
+    "format_mean",
+    "format_percentile",
+    "print_table",
+    "export_metric_tables_html",
+    "plot_metric_tables",
+    "export_metrics_html",
+    "parse_plot_metrics_args",
+    "main",
+]
 
 
 _NUMBER_PATTERN = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
@@ -175,6 +131,10 @@ def _metric_sections(table_title: str, metric_name: str) -> List[str]:
     if is_summary and metric in {
         "duration",
         "output throughput",
+        "input throughput",
+        "total token throughput",
+        "request throughput",
+        "request goodput",
         "mean finished requests per second",
     }:
         sections.append("Overview")
@@ -189,7 +149,7 @@ def _metric_sections(table_title: str, metric_name: str) -> List[str]:
         for token in ("prompt tokens", "completion tokens", "reasoning tokens")
     ):
         sections.append("Token Usage")
-    elif any(token in metric for token in ("ttft", "tpot", "latency")):
+    elif any(token in metric for token in ("ttft", "tpot", "itl", "latency")):
         sections.append("Latency")
     if is_summary and not sections:
         return []

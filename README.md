@@ -13,194 +13,66 @@
 
 # AI Infra Bench
 
-AI Infra Bench measures OpenAI-compatible inference endpoints, evaluates model
-outputs, and finds the highest load that satisfies a service-level objective.
-It is backend-independent and does not require a serving framework SDK.
-
-## Documentation
-
-Read the documentation: [简体中文](https://muqi1029.github.io/ai-infra-bench/) | [English](https://muqi1029.github.io/ai-infra-bench/en/).
-
-The [user documentation source](website/docs/intro.mdx) covers setup, benchmarking,
-SLO search, session replay, evaluation, and monitoring in Simplified Chinese and
-English. The MDX site includes language switching and a GitHub Pages workflow.
-See [website development and publishing](website/README.md) to preview or deploy it.
+AI Infra Bench (`aib`) is a lightweight CLI for benchmarking OpenAI-compatible inference endpoints, evaluating correctness, and finding SLO capacity limits without serving-framework SDKs.
 
 ## Install
 
 ```bash
 pip install ai-infra-bench
+# Optional datasets & tokenizers:
+pip install 'ai-infra-bench[data]'
+# Optional safetensors weight inspection:
+pip install 'ai-infra-bench[weight]'
 ```
 
-Python 3.10 or newer is required.
+Python 3.10+ is required.
 
-## CLI
+## Quick Usage
 
-Inspect NVIDIA GPUs using only the Python standard library and the installed NVIDIA driver
-(no torch or CUDA Toolkit required):
-
-```bash
-aib check-device                         # All CUDA-visible GPUs
-aib check-device --device 0              # One CUDA device
-aib check-device --device 0 --device 1    # Selected devices
-aib check-device --json                  # Machine-readable output
-```
-
-Reports SM version/count, shared memory limits, L1 support, L2 size, memory size/bus
-width, clock rates/periods, and estimated memory bandwidth. Also estimates CUDA Core /
-Tensor Core counts and theoretical FP32 / Tensor throughput, with separate dense
-and 2:4 sparse values. Tensor estimates use known product profiles; unmatched
-models display N/A. L1 capacity is reported
-as unavailable because CUDA has no portable query for it. Clocks are device
-attributes, not live measurements; bandwidth is a DDR estimate, not a benchmark.
-Device indices respect `CUDA_VISIBLE_DEVICES`.
-
-Send one request:
+### Send a Request (`aib req`)
 
 ```bash
 aib req --base-url http://127.0.0.1:30000 --prompt "Who are you?"
-```
-
-With no arguments, `aib req` sends the default prompt `Who are you` when run
-directly in a terminal. With piped or redirected input, it reads a complete JSON
-request payload from stdin:
-
-```bash
-cat payload.json | aib req
-```
-
-Use `--payload-stdin` or `--payload-path -` to read from stdin when passing other
-options. The input must be a single JSON object.
-
-Use `--prompt -` (or `--user-prompt -`) for plain text from a pipe or file
-redirection. Whitespace and newlines are preserved:
-
-```bash
+cat payload.json | aib req --payload-path - --model your-model
 cat prompt.txt | aib req --prompt - --max-tokens 128
-aib req --prompt - < prompt.txt
 ```
 
-Run a random-token benchmark:
+### Benchmark Performance (`aib bench`)
 
 ```bash
 aib bench \
   --base-url http://127.0.0.1:30000 \
   --dataset random \
-  --input-len 1024 \
-  --output-len 256 \
-  --random-range-ratio 0.5 \
-  --num-requests 100 \
-  --max-concurrency 16
+  --input-len 1024 --output-len 256 \
+  --num-requests 100 --max-concurrency 16 \
+  --goodput ttft:500 tpot:50 \
+  --metric-path metrics.jsonl
+
+aib plot-metrics metrics.jsonl -o metrics.html
 ```
 
-When `--random-range-ratio` is set, each random request samples its input and
-output length uniformly from the configured ratio of the target length up to
-the target length. The default value of `1.0` preserves fixed-length requests.
+Reports TTFT, ITL, TPOT, latency percentiles, input/output/total token throughput, cache hit ratios, and Goodput.
 
-Run the packaged GPQA Diamond multiple-choice workload (198 questions):
+### Session Replay & SLO Search
 
 ```bash
-aib bench \
-  --base-url http://127.0.0.1:30000 \
-  --dataset gpqa \
-  --num-requests 198 \
-  --max-concurrency 16
-```
-
-Evaluate the text-only portion of Humanity's Last Exam directly through a
-chat-completions endpoint. Local JSONL files are supported; image questions
-are skipped because this adapter does not require a multimodal runtime:
-
-```bash
-aib eval-dataset \
-  --evals hle \
-  --dataset-path ./hle.jsonl \
-  --num-shots 0 \
-  --num-questions 20 \
-  --base-url http://127.0.0.1:30000 \
-  --model your-model
-```
-
-Other commands cover dataset evaluation, logits and hidden-state comparison,
-metric plotting, and local Prometheus monitoring:
-
-```bash
-aib --help
-```
-
-Replay session-shaped JSONL payloads with one concurrency slot per session:
-
-```bash
-aib session-bench 'sessions/**/*.jsonl' \
-  --max-concurrency 16 \
-  --num-warmup-sessions 3
-```
-
-Requests in each file are sent in order. Different files run concurrently up
-to `--max-concurrency`.
-
-## SLO Search
-
-SLO searches are configured in YAML. The command probes the configured range
-and returns the highest `max_concurrency` or `request_rate` that satisfies every
-condition:
-
-```yaml
-endpoint:
-  base_url: http://127.0.0.1:30000
-  api_key: EMPTY
-  model: null
-request:
-  payload:
-    messages:
-      - role: user
-        content: hello
-benchmark:
-  num_requests: 100
-  warmup_requests: 5
-  max_concurrency: 32
-  request_rate: inf
-search:
-  parameter: max_concurrency
-  min: 1
-  max: 64
-conditions:
-  - metric: success_rate
-    operator: ">="
-    value: 0.99
-  - metric: p99_latency_ms
-    operator: "<"
-    value: 3000
-```
-
-Run it with:
-
-```bash
+aib session-bench 'sessions/**/*.jsonl' --max-concurrency 16 --num-warmup-sessions 3
 aib slo examples/slo.yaml -o slo-result.yaml
 ```
 
-## Output
-
-SLO runs write a YAML report with every probe, its metrics, and condition results.
-Request benchmarks can also write machine-readable JSON or JSONL metrics for
-later visualization.
-
-## Inspect model weights
+### Correctness & Diagnostics
 
 ```bash
-pip install 'ai-infra-bench[weight]'
+aib eval-dataset --evals gsm8k --base-url http://127.0.0.1:30000 --model your-model --num-questions 20
+aib eval-logits --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 --model your-model
+aib check-device
 aib check-weight --path /path/to/model
+aib monitor --base-urls http://127.0.0.1:30000 --open
 ```
 
-Local safetensors inspection needs only the lightweight `safetensors` and
-`ml-dtypes` extras, in addition to the base package. It reads tensor metadata and
-scalar values without loading full weight tensors. BF16, FP8, and packed FP4
-parameter accounting do not require PyTorch. Dtypes are displayed using
-safetensors names such as `BF16`, `F32`, and `U8`.
+## Documentation
 
-For a Hugging Face model ID, also install `huggingface-hub`. Legacy `.bin`
-checkpoints still require a separately installed `torch`; it is only imported
-when reading that format.
+Read the full guides in [简体中文](https://muqi1029.github.io/ai-infra-bench/) or [English](https://muqi1029.github.io/ai-infra-bench/en/). See [website/README.md](website/README.md) to preview locally.
 
 ## Development
 

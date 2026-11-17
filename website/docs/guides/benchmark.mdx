@@ -4,11 +4,9 @@ title: 性能压测
 
 # 性能压测
 
-`aib bench` 支持随机 token、内置文本数据集和自定义请求回放。先固定请求内容，再比较不同负载，能让结果更容易复现。
+`aib bench` 支持随机 token、内置数据集与自定义请求回放，并统计 TTFT、ITL、TPOT、吞吐量与 Goodput。
 
-## 随机 token 工作负载
-
-服务端需支持整数 token ID 的 completions 请求和 `ignore_eos`，模型词表还需覆盖生成的 ID（0–9999）。
+## 随机 token 压测
 
 ```bash
 aib bench \
@@ -19,50 +17,27 @@ aib bench \
   --num-requests 100 \
   --max-concurrency 1 4 16 \
   --repeat 2 \
-  --disable-flush-cache \
-  --label baseline \
+  --goodput ttft:500 tpot:50 \
   --metric-path metrics.jsonl
 ```
 
-`--max-concurrency` 接受多个值，逐个测试；`--repeat` 为每个并发值重复测试。`--request-rate` 设置请求到达速率（请求/秒），默认为 `inf`，尽可能保持并发饱和。有限速率下，请求可能在客户端排队；请求延迟从实际发起 HTTP 请求时计时，不包括此前的客户端排队。
+- `--max-concurrency` 支持传入多个并发度依次测试；`--repeat` 控制每档重复次数。
+- `--num-warmup-requests 0` 可关闭预热；不支持 `/flush_cache` 的通用服务需传入 `--disable-flush-cache`。
+- `--goodput` 统计同时满足给定毫秒阈值的请求吞吐与占比（支持 `ttft`、`tpot`、`itl`、`e2el`）。
 
-`--num-requests` 是正式阶段请求数。启用普通预热时，最多使用前 10 条请求预热；预热不计入正式指标，正式阶段仍运行完整列表。当前 `--disable-flush-cache` 也会跳过 `bench` 的预热；如需预热，请使用支持清缓存的服务并去掉该选项。
+## 长度分布与前缀缓存
 
-## 长度分布和前缀缓存
+- `--random-range-ratio 0.5`：输入/输出长度在 `[0.5 * target, target]` 内均匀采样（默认 `1.0` 固定长度）。
+- `--cache-ratio 0.5`：所有请求共享 `int((input_len - 1) * 0.5)` 个前缀 token，每次正式运行前自动预热该前缀。
 
-`--random-range-ratio 0.5` 使输入、输出长度分别在目标长度的一半到目标长度之间均匀采样整数。默认 `1.0` 为固定长度。
-
-使用 `--dataset random --cache-ratio 0.5` 可共享前缀，长度为 `int((input_len - 1) * 0.5)`。启用预热和清缓存时，每次正式测试前会使用该前缀执行预热请求，数量由 `--num-warmup-requests` 决定；服务端是否命中缓存取决于缓存配置。若同时随机采样长度，共享前缀必须小于最短输入长度。
-
-默认会尝试调用 `/flush_cache`；通用服务可以使用 `--disable-flush-cache`，但测试间可能保留缓存。请记录该设置以便比较。
-
-## 使用内置数据集
+## 内置数据集与自定义回放
 
 ```bash
-python -m pip install 'ai-infra-bench[data]'
-aib bench --dataset gpqa --num-requests 198 \
-  --max-concurrency 16 --disable-flush-cache
+# 内置数据集（gsm8k / gpqa / sharegpt）
+aib bench --dataset sharegpt --model your-model \
+  --input-len 1024 --output-len 256 --num-requests 100 --disable-flush-cache
+
+# 自定义 JSON / JSONL / Glob / stdin(-)
+aib bench --payload-path 'requests/**/*.jsonl' --max-concurrency 16 --disable-flush-cache
+cat request.json | aib bench --payload-path - --num-requests 50 --disable-flush-cache
 ```
-
-支持 `gsm8k`、`gpqa` 和 `sharegpt`。这是性能测试；测回答正确率请用 [eval-dataset](./evaluation.mdx)。
-
-ShareGPT 按指定长度截断或重复文本，并设置输出长度，需要 tokenizer：
-
-```bash
-aib bench --dataset sharegpt \
-  --model your-model --tokenizer /path/to/tokenizer \
-  --input-len 1024 --output-len 256 \
-  --num-requests 100 --disable-flush-cache
-```
-
-## 回放自定义请求
-
-```bash
-aib bench --payload-regex-path 'requests/**/*.jsonl' \
-  --model your-model --max-concurrency 16 \
-  --disable-flush-cache --dump-path outputs.jsonl
-```
-
-文件格式为 JSON 数组（`.json`）或每行一个请求体（`.jsonl`）。路径使用 glob 模式，建议加引号；普通回放使用 chat completions 接口。请求数最多为实际加载的数据条数，不会通过 `--num-requests` 自动扩充数据。
-
-普通回放不保证同一会话的顺序；有顺序依赖时使用[会话回放](./sessions.mdx)。

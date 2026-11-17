@@ -9,13 +9,10 @@ import random
 import re
 from typing import Any, Dict, Iterable, Tuple
 
-from omegaconf import OmegaConf
-
 from ai_infra_bench.correctness.eval_dataset.base import Eval
 from ai_infra_bench.correctness.eval_dataset.utils import (
     extract_response_text,
     generate_payload,
-    resolve_config_path,
     resolve_dataset_path,
 )
 
@@ -28,13 +25,21 @@ GPQA_FIELDS = (
     "Incorrect Answer 2",
     "Incorrect Answer 3",
 )
-ANSWER_PATTERN = re.compile(r"(?i)(?:final\s+answer|answer)\s*:?\s*([ABCD])\b")
-FINAL_OPTION_PATTERN = re.compile(r"(?i)(?<![A-Z])([ABCD])\s*[.)]?\s*$")
+_BOXED_OPTION_PATTERN = re.compile(r"(?is)\\boxed\s*\{\s*([ABCD])\s*\}")
+ANSWER_PATTERN = re.compile(
+    r"(?i)(?:final\s+answer|answer)\b[*_\s]*(?:is\s*)?[:\-]?\s*[*_(\[]*([ABCD])\b"
+)
+FINAL_OPTION_PATTERN = re.compile(
+    r"(?i)(?<![A-Z])(?:\(|\[)?([ABCD])(?:\)|\])?[\s.)!?]*$"
+)
 
 
 def extract_answer(value: Any) -> str | None:
     """Extract a GPQA option letter from a model response."""
     text = str(value or "").strip()
+    boxed = list(_BOXED_OPTION_PATTERN.finditer(text))
+    if boxed:
+        return boxed[-1].group(1).upper()
     matches = list(ANSWER_PATTERN.finditer(text))
     if matches:
         return matches[-1].group(1).upper()
@@ -87,7 +92,7 @@ class GPQAEval(Eval):
                 self.name,
                 num_shots,
             )
-        cfg = OmegaConf.load(resolve_config_path(config_path))
+        cfg = self.load_config(config_path)
         resolved_path = resolve_dataset_path(
             dataset_path or cfg.get("dataset_path", "")
         )
@@ -125,16 +130,7 @@ class GPQAEval(Eval):
             raise ValueError(f"No valid GPQA records found in dataset: {resolved_path}")
 
         self.prompt_template = cfg.get("prompt_template", "")
-        self.default_payload = OmegaConf.to_container(
-            cfg.get("payload", {}), resolve=True
-        )
-
-    def maybe_truncate(self, num_questions: int | None):
-        if num_questions is not None:
-            self.rows = self.rows[:num_questions]
-
-    def get_length(self) -> int:
-        return len(self.rows)
+        self.default_payload = dict(cfg.get("payload") or {})
 
     def get_payload_and_answer(
         self, override_payload: Dict

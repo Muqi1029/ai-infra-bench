@@ -1,16 +1,22 @@
 """Start or stop an SGLang server profiler."""
 
-import asyncio
 import logging
 from argparse import ArgumentParser
 from typing import Any, Sequence
 
-from ai_infra_bench.utils.client import _create_bench_client_session
 from ai_infra_bench.utils.req import add_common_args, api_url
 
 logger = logging.getLogger(__name__)
 
 ACTIVITIES = ("CPU", "GPU", "MEM", "RPD")
+
+
+def _create_bench_client_session(*args, **kwargs):
+    from ai_infra_bench.utils.client import (
+        _create_bench_client_session as _create_session,
+    )
+
+    return _create_session(*args, **kwargs)
 
 
 def build_payload(args) -> dict[str, Any]:
@@ -135,6 +141,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--start-step must be >= 0")
     if args.num_steps < 1:
         parser.error("--num-steps must be >= 1")
+    import asyncio
+
     return asyncio.run(send_profile(args))
 
 

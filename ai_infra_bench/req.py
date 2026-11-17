@@ -1,20 +1,12 @@
 import argparse
-import asyncio
 import json
 import random
 import sys
 import time
 from typing import Any, Dict, Mapping, Tuple
 
-import requests
-
-from ai_infra_bench.performance.bench import read_packaged_requests
-from ai_infra_bench.performance.bench_utils import handle_outputs
-from ai_infra_bench.performance.core import request_func
-from ai_infra_bench.performance.struct import OutputMetric
-from ai_infra_bench.utils.client import _create_bench_client_session
-from ai_infra_bench.utils.draw import Color, color_print
-from ai_infra_bench.utils.io import _read_json
+from ai_infra_bench.utils.color import Color, color_print
+from ai_infra_bench.utils.io import _read_json, read_packaged_requests
 from ai_infra_bench.utils.req import (
     add_common_args,
     api_url,
@@ -117,7 +109,7 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
 
     if args.dataset:
         payload = _select_dataset_request(args.dataset, args.seed)
-    elif args.payload_stdin or args.payload_path == "-":
+    elif args.payload_path == "-":
         payload = _read_stdin_payload()
     elif args.payload_path:
         payload = _read_json(args.payload_path)
@@ -135,10 +127,6 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
             "ignore_eos": True,
         }
         url = api_url(args.base_url, "/v1/completions")
-    elif args.input_ids_path:
-        input_ids = _read_json(args.input_ids_path)
-        payload = {"prompt": input_ids}
-        url = api_url(args.base_url, "/v1/completions")
     else:
         prompt = sys.stdin.read() if args.prompt == "-" else args.prompt
         payload = {"messages": [{"role": "user", "content": prompt}]}
@@ -153,8 +141,6 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
             payload["tools"] = tools
             payload["tool_choice"] = "required"
 
-    if args.disable_separate_reasoning:
-        payload["separate_reasoning"] = False
     if args.enable_thinking:
         # for compatibility of different platforms
         payload["chat_template_kwargs"] = {
@@ -176,15 +162,23 @@ def build_request(args) -> Tuple[str, Dict[str, Any]]:
     return url, prepared
 
 
-def _print_request_error(response, error: Exception) -> None:
+def handle_outputs(*args, **kwargs):
+    from ai_infra_bench.performance.bench_utils import handle_outputs as _handle_outputs
+
+    return _handle_outputs(*args, **kwargs)
+
+
+def _print_request_error(
+    status_code: int, text: str, error: Exception | None = None
+) -> None:
+    suffix = f" Error: {error}" if error is not None else ""
     color_print(
-        f"Request Error, Status Code={response.status_code}, "
-        f"Reason: {response.text} Error: {error}",
+        f"Request Error, Status Code={status_code}, Reason: {text}{suffix}",
         Color.RED,
     )
 
 
-def _handle_request_output(output_metric: OutputMetric, duration_s: float) -> None:
+def _handle_request_output(output_metric, duration_s: float) -> None:
     handle_outputs(
         outputs=[output_metric],
         duration_s=duration_s,
@@ -194,30 +188,47 @@ def _handle_request_output(output_metric: OutputMetric, duration_s: float) -> No
     )
 
 
-def _handle_non_stream_request(url, headers, payload) -> OutputMetric:
+async def _handle_non_stream_request(url, headers, payload):
+    from ai_infra_bench.performance.struct import OutputMetric
+    from ai_infra_bench.utils.client import _create_bench_client_session
+
     output_metric = OutputMetric(payload=payload)
     start_time = time.perf_counter()
-    response = None
 
     try:
-        response = requests.post(url=url, headers=headers, json=payload)
-        response.raise_for_status()
-        response_json = response.json()
-        color_print(
-            json.dumps(response_json, indent=2, ensure_ascii=False),
-            Color.LIGHT_GREEN,
-        )
-        output_metric.update_non_stream_response(response_json)
-        output_metric.success = True
+        async with _create_bench_client_session(
+            max_concurrency=1, api_key=None
+        ) as session:
+            async with session.post(url=url, headers=headers, json=payload) as response:
+                raw_body = await response.text()
+                if response.status != 200:
+                    _print_request_error(response.status, raw_body)
+                    output_metric.error_message = (
+                        f"Status Code={response.status}, Reason: {raw_body}"
+                    )
+                else:
+                    response_json = json.loads(raw_body)
+                    if isinstance(response_json, Mapping) and response_json.get(
+                        "error"
+                    ):
+                        err = response_json["error"]
+                        detail = (
+                            err.get("message") or json.dumps(err, ensure_ascii=False)
+                            if isinstance(err, Mapping)
+                            else str(err)
+                        )
+                        color_print(f"Request Error: {detail}", Color.RED)
+                        output_metric.error_message = detail
+                    else:
+                        color_print(
+                            json.dumps(response_json, indent=2, ensure_ascii=False),
+                            Color.LIGHT_GREEN,
+                        )
+                        output_metric.update_non_stream_response(response_json)
+                        output_metric.success = True
     except Exception as error:
-        if response is not None:
-            _print_request_error(response, error)
-            output_metric.error_message = (
-                f"Status Code={response.status_code}, Reason: {response.text}; {error}"
-            )
-        else:
-            color_print(f"Request Error: {error}", Color.RED)
-            output_metric.error_message = str(error)
+        color_print(f"Request Error: {error}", Color.RED)
+        output_metric.error_message = str(error)
 
     duration_s = time.perf_counter() - start_time
     output_metric.latency_ms = duration_s * 1000
@@ -225,9 +236,10 @@ def _handle_non_stream_request(url, headers, payload) -> OutputMetric:
     return output_metric
 
 
-async def _handle_stream_request(
-    url, headers, payload, raw: bool, no_print: bool
-) -> OutputMetric:
+async def _handle_stream_request(url, headers, payload, raw: bool, no_print: bool):
+    from ai_infra_bench.performance.core import request_func
+    from ai_infra_bench.utils.client import _create_bench_client_session
+
     start_time = time.perf_counter()
 
     async with _create_bench_client_session() as session:
@@ -245,13 +257,15 @@ async def _handle_stream_request(
 
 
 def http_request(args) -> int:
+    import asyncio
+
     url, payload = build_request(args)
     headers = {"Authorization": f"Bearer {args.api_key}"}
 
     if args.verbose:
         info_print(headers, payload, url)
     if args.disable_stream:
-        output = _handle_non_stream_request(url, headers, payload)
+        output = asyncio.run(_handle_non_stream_request(url, headers, payload))
     else:
         output = asyncio.run(
             _handle_stream_request(url, headers, payload, args.raw, args.no_print)
@@ -270,20 +284,6 @@ def main(argv=None) -> int:
         ),
     )
     add_common_args(parser)
-
-    parser.add_argument("--dump-path", help="The dump path, jsonl format")
-    parser.add_argument(
-        "--dump-content",
-        default="all",
-        choices=["all", "msg"],
-        help="The dump Content, jsonl format",
-    )
-
-    parser.add_argument(
-        "--metric-path",
-        type=str,
-        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
-    )
 
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print request details"
@@ -323,12 +323,6 @@ def main(argv=None) -> int:
     )
 
     parser.add_argument(
-        "--disable-separate-reasoning",
-        action="store_true",
-        help="Whether to separate reasoning",
-    )
-
-    parser.add_argument(
         "--raw", action="store_true", help="Whether to print raw sse content"
     )
 
@@ -357,25 +351,15 @@ def main(argv=None) -> int:
         type=str,
         help="Path to one JSON request payload, or '-' to read from stdin",
     )
-    mutex_group.add_argument(
-        "--payload-stdin",
-        action="store_true",
-        help="Read one JSON request payload from stdin",
-    )
-    mutex_group.add_argument(
-        "--input-ids-path", type=str, help="Path to a JSON input token ID array"
-    )
 
     args = parser.parse_args(argv)
     if not argv and not sys.stdin.isatty():
-        args.payload_stdin = True
+        args.payload_path = "-"
     if args.prompt is not None and any(
         (
             args.dataset,
-            args.payload_stdin,
             args.payload_path,
             args.input_len is not None,
-            args.input_ids_path,
         )
     ):
         parser.error("--prompt cannot be combined with another request input")
