@@ -211,6 +211,7 @@ data
 # Documentation website
 website/node_modules/
 website/build/
-website/.docusaurus/
+website/.vitepress/cache/
+website/.vitepress/dist/
 package-lock.json
 !website/package-lock.json

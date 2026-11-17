@@ -1,0 +1,175 @@
+:root {
+  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --vp-c-brand-1: #0284c7;
+  --vp-c-brand-2: #0ea5e9;
+  --vp-c-brand-3: #0369a1;
+  --vp-c-brand-soft: rgba(14, 165, 233, 0.12);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 55%, #14b8a6 100%);
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(14, 165, 233, 0.24) 0%, rgba(20, 184, 166, 0.14) 45%, transparent 72%);
+  --vp-home-hero-image-filter: blur(44px);
+
+  --vp-code-block-bg: #f8fafc;
+}
+
+.dark {
+  --vp-c-brand-1: #38bdf8;
+  --vp-c-brand-2: #7dd3fc;
+  --vp-c-brand-3: #0ea5e9;
+  --vp-c-brand-soft: rgba(56, 189, 248, 0.14);
+
+  --vp-home-hero-name-background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 55%, #2dd4bf 100%);
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(56, 189, 248, 0.24) 0%, rgba(45, 212, 191, 0.14) 45%, transparent 72%);
+  --vp-code-block-bg: #0f172a;
+}
+
+/* Navbar & Hairlines */
+.VPNavBar.has-sidebar .content-body,
+.VPNavBar:not(.home) {
+  backdrop-filter: blur(12px);
+}
+
+/* Hero & Action Buttons */
+.VPHero .tagline {
+  font-size: 1.15rem;
+  line-height: 1.65;
+  max-width: 36rem;
+}
+
+.VPButton.brand,
+.VPButton.alt {
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+/* Crisp Feature Cards */
+.VPFeature {
+  border: 1px solid var(--vp-c-divider) !important;
+  border-radius: 14px !important;
+  background: var(--vp-c-bg-soft) !important;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-2) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px -12px rgba(2, 132, 199, 0.18);
+}
+
+.VPFeature .icon {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.VPFeature .icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+/* Home Quick Preview Section */
+.home-preview {
+  max-width: 820px;
+  margin: 2.25rem auto 0;
+}
+
+.home-preview-title {
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+  margin: 0 0 0.85rem !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* Clean Mintlify-style Typography & Code Blocks */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc h1 {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.vp-doc h2 {
+  font-size: 1.35rem;
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+}
+
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px -4px rgba(15, 23, 42, 0.06);
+}
+
+.vp-code-group {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px -4px rgba(15, 23, 42, 0.06);
+}
+
+.vp-code-group .tabs {
+  border-bottom: 1px solid var(--vp-c-divider);
+  border-radius: 0 !important;
+  padding: 0 8px;
+}
+
+.vp-code-group div[class*='language-'] {
+  border: none;
+  border-radius: 0 !important;
+  box-shadow: none;
+  margin: 0 !important;
+}
+
+/* Minimal Borderless-Vertical Tables */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.vp-doc tr {
+  background-color: transparent !important;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc th,
+.vp-doc td {
+  border: none;
+  padding: 0.62rem 0.75rem;
+  text-align: left;
+}
+
+.vp-doc th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  background: transparent;
+}
+
+.vp-doc tr:last-child td {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc :not(pre) > code {
+  border-radius: 5px;
+  padding: 0.14em 0.42em;
+  font-size: 0.86em;
+}
