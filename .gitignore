@@ -208,10 +208,20 @@ data
 !aib-dataset/ai_infra_bench_dataset/data/
 !aib-dataset/ai_infra_bench_dataset/data/**
 
-# Documentation website
+# Documentation website & Studio UI
 website/node_modules/
 website/build/
 website/.vitepress/cache/
 website/.vitepress/dist/
+studio-ui/node_modules/
+studio-ui/dist/
+*.tsbuildinfo
+!studio-ui/src/lib/
+!studio-ui/src/lib/**
 package-lock.json
 !website/package-lock.json
+!studio-ui/package-lock.json
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/questions/
+.impeccable/config.local.json

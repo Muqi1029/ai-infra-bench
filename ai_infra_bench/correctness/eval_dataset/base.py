@@ -2,12 +2,16 @@ import asyncio
 import json
 import logging
 import math
+import time
 from asyncio import Semaphore
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, TypedDict
 
-from ai_infra_bench.correctness.eval_dataset.utils import resolve_config_path
+from ai_infra_bench.correctness.eval_dataset.utils import (
+    resolve_config_path,
+    strip_thinking,
+)
 from ai_infra_bench.utils.req import extract_response_metrics
 from ai_infra_bench.utils.table import format_mean, format_percentile, print_table
 
@@ -100,7 +104,14 @@ class EvalRuntime:
         for eval in self.evals:
             eval.maybe_truncate(self.num_questions)
 
-    async def _run_one(self, eval: "Eval", payload: Dict, answer: Any, pbar: "tqdm"):
+    async def _run_one(
+        self,
+        eval: "Eval",
+        payload: Dict,
+        answer: Any,
+        pbar: "tqdm",
+        case_index: int | None = None,
+    ):
         assert self.session is not None and self.sem is not None
         async with self.sem:
             try:
@@ -134,7 +145,7 @@ class EvalRuntime:
                                 eval.name,
                                 response.status,
                             )
-                        eval.add_failed_result(body, payload)
+                        eval.add_failed_result(body, payload, case_index=case_index)
                         return
 
                     if body is None:
@@ -148,17 +159,17 @@ class EvalRuntime:
                             ),
                             _truncate_response_body(response_text),
                         )
-                        eval.add_failed_result(None, payload)
+                        eval.add_failed_result(None, payload, case_index=case_index)
                         return
 
-                    eval.eval(body, answer, payload)
+                    eval.eval(body, answer, payload, case_index=case_index)
             except Exception:
                 logger.exception(
                     "Request failed for eval=%s while calling %s",
                     eval.name,
                     self.endpoint_url,
                 )
-                eval.add_failed_result(None, payload)
+                eval.add_failed_result(None, payload, case_index=case_index)
             finally:
                 pbar.update(1)
 
@@ -166,6 +177,7 @@ class EvalRuntime:
         # aiohttp connector / semaphore must be created inside a running loop.
         self.sem = Semaphore(self.max_concurrency)
         self.session = _create_bench_client_session(self.max_concurrency, self.api_key)
+        self.recorded_runs: List[Dict[str, Any]] = []
 
         total = self.repeat * sum(e.get_length() for e in self.evals)
         pbar = tqdm(total=total)
@@ -174,6 +186,9 @@ class EvalRuntime:
             async with self.session:
                 for eval in self.evals:
                     round_rates: List[float] = []
+                    round_records: List[Dict[str, Any]] = []
+                    last_cases: List[Dict[str, Any]] = []
+                    eval_t_start = time.time()
                     for i in range(self.repeat):
                         if self.repeat == 1:
                             pbar.set_description(f"Eval {eval.name}")
@@ -184,10 +199,12 @@ class EvalRuntime:
 
                         tasks = [
                             asyncio.create_task(
-                                self._run_one(eval, payload, answer, pbar)
+                                self._run_one(
+                                    eval, payload, answer, pbar, case_index=q_idx
+                                )
                             )
-                            for payload, answer in eval.get_payload_and_answer(
-                                self.override_payload
+                            for q_idx, (payload, answer) in enumerate(
+                                eval.get_payload_and_answer(self.override_payload)
                             )
                         ]
                         round_start_time = perf_counter()
@@ -201,8 +218,48 @@ class EvalRuntime:
                         round_correct = sum(
                             1 for r in eval.results if r.is_right and not r.is_failed
                         )
+                        round_failed = sum(1 for r in eval.results if r.is_failed)
+                        round_trunc = sum(
+                            1
+                            for r in eval.results
+                            if r.is_truncated and not r.is_failed
+                        )
                         if round_total:
                             round_rates.append(round_correct / round_total)
+
+                        last_cases = eval.snapshot_cases()
+                        round_tok = eval.token_usage()
+                        round_records.append(
+                            {
+                                "round": i + 1,
+                                "total_requests": round_total,
+                                "successful_requests": round_success,
+                                "failed_requests": round_failed,
+                                "truncated_requests": round_trunc,
+                                "correct_rate": (
+                                    round_correct / round_total if round_total else 0.0
+                                ),
+                                "wrong_rate": (
+                                    (round_total - round_correct - round_failed)
+                                    / round_total
+                                    if round_total
+                                    else 0.0
+                                ),
+                                "failed_rate": (
+                                    round_failed / round_total if round_total else 0.0
+                                ),
+                                "truncated_rate": (
+                                    round_trunc / round_total if round_total else 0.0
+                                ),
+                                "duration_s": round(round_duration_s, 4),
+                                "tps": round(
+                                    round_tok["completion_tokens"]["total"]
+                                    / round_duration_s,
+                                    2,
+                                ),
+                                "token_usage": round_tok,
+                            }
+                        )
 
                         for title, rows in eval.build_summary_tables(
                             round_number=i + 1,
@@ -211,12 +268,21 @@ class EvalRuntime:
                         ):
                             print_table(title, rows)
 
+                    eval_t_end = time.time()
+                    multi_round: Dict[str, Any] | None = None
                     if self.repeat > 1 and round_rates:
                         mean_rate = math.fsum(round_rates) / len(round_rates)
                         var = math.fsum(
                             (r - mean_rate) ** 2 for r in round_rates
                         ) / len(round_rates)
                         std_rate = math.sqrt(var)
+                        multi_round = {
+                            "rounds": len(round_rates),
+                            "mean_correct_rate": round(mean_rate, 6),
+                            "std_correct_rate": round(std_rate, 6),
+                            "min_correct_rate": round(min(round_rates), 6),
+                            "max_correct_rate": round(max(round_rates), 6),
+                        }
                         print_table(
                             f"Multi-Round Summary ({eval.name})",
                             [
@@ -230,6 +296,36 @@ class EvalRuntime:
                                 ],
                             ],
                         )
+
+                    if round_records:
+                        final_round = round_records[-1]
+                        primary_rate = (
+                            multi_round["mean_correct_rate"]
+                            if multi_round
+                            else final_round["correct_rate"]
+                        )
+                        self.recorded_runs.append(
+                            {
+                                "eval_type": "dataset",
+                                "suite_name": eval.name,
+                                "passed": final_round["successful_requests"] > 0,
+                                "correct_rate": round(primary_rate, 6),
+                                "wrong_rate": round(final_round["wrong_rate"], 6),
+                                "failed_rate": round(final_round["failed_rate"], 6),
+                                "truncated_rate": round(
+                                    final_round["truncated_rate"], 6
+                                ),
+                                "t_start": eval_t_start,
+                                "t_end": eval_t_end,
+                                "summary": {
+                                    "max_concurrency": self.max_concurrency,
+                                    "repeat": self.repeat,
+                                    "rounds": round_records,
+                                    "multi_round": multi_round,
+                                },
+                                "cases": last_cases,
+                            }
+                        )
         finally:
             pbar.close()
             self.session = None
@@ -241,6 +337,7 @@ class EvalRuntime:
 class EvalResult:
     response: Any
     payload: Dict = field(default_factory=dict)
+    answer: Any = None
     is_right: bool = False
     is_failed: bool = False
     is_truncated: bool = False
@@ -248,6 +345,7 @@ class EvalResult:
     reasoning_tokens: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    case_index: int | None = None
 
 
 class Eval:
@@ -298,20 +396,99 @@ class Eval:
             and choices[0].get("finish_reason") == "length"
         )
 
-    def eval(self, response_content, answer, payload, latency_ms: float = 0.0):
+    def eval(
+        self,
+        response_content,
+        answer,
+        payload,
+        latency_ms: float = 0.0,
+        *,
+        case_index: int | None = None,
+    ):
         token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
                 response=response_content,
                 payload=payload,
+                answer=answer,
                 is_right=self._eval(response_content, answer, payload),
                 is_truncated=self._is_truncated(response_content),
                 latency_ms=latency_ms,
+                case_index=case_index,
                 **token_usage,
             )
         )
 
-    def add_failed_result(self, response_content, payload, latency_ms: float = 0.0):
+    def snapshot_cases(self, max_chars: int = 1200) -> List[Dict[str, Any]]:
+        cases: List[Dict[str, Any]] = []
+        ordered = sorted(
+            enumerate(self.results),
+            key=lambda pair: (
+                pair[1].case_index if pair[1].case_index is not None else pair[0]
+            ),
+        )
+        for fallback_idx, item in ordered:
+            idx = item.case_index if item.case_index is not None else fallback_idx
+            messages = (item.payload or {}).get("messages") or []
+            user_text = ""
+            for msg in reversed(messages):
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    user_text = str(msg.get("content") or "")
+                    break
+            finish_reason = None
+            raw_content = ""
+            reasoning_text = ""
+            if isinstance(item.response, dict):
+                choices = item.response.get("choices") or []
+                if choices and isinstance(choices[0], dict):
+                    finish_reason = choices[0].get("finish_reason")
+                    msg_obj = choices[0].get("message") or {}
+                    if isinstance(msg_obj, dict):
+                        raw_content = str(msg_obj.get("content") or "")
+                        reasoning_text = str(
+                            msg_obj.get("reasoning_content")
+                            or msg_obj.get("reasoning")
+                            or ""
+                        )
+            clean_content = (
+                strip_thinking(raw_content)
+                if "<think>" in raw_content.lower()
+                else raw_content.strip()
+            )
+            if not reasoning_text and "<think>" in raw_content.lower():
+                start = raw_content.lower().find("<think>") + 7
+                end = raw_content.lower().find("</think>")
+                reasoning_text = (
+                    raw_content[start:end] if end > start else raw_content[start:]
+                ).strip()
+            cases.append(
+                {
+                    "index": idx,
+                    "prompt": user_text[-max_chars:],
+                    "expected": (
+                        str(item.answer)[:300] if item.answer is not None else None
+                    ),
+                    "answer_text": clean_content[:max_chars],
+                    "thinking_snippet": reasoning_text[:max_chars],
+                    "finish_reason": finish_reason,
+                    "is_right": bool(item.is_right and not item.is_failed),
+                    "is_failed": bool(item.is_failed),
+                    "is_truncated": bool(item.is_truncated),
+                    "prompt_tokens": item.prompt_tokens,
+                    "completion_tokens": item.completion_tokens,
+                    "reasoning_tokens": item.reasoning_tokens,
+                }
+            )
+        return cases
+
+    def add_failed_result(
+        self,
+        response_content,
+        payload,
+        latency_ms: float = 0.0,
+        *,
+        case_index: int | None = None,
+    ):
         token_usage = self._token_usage(response_content)
         self.results.append(
             EvalResult(
@@ -320,6 +497,7 @@ class Eval:
                 is_right=False,
                 is_failed=True,
                 latency_ms=latency_ms,
+                case_index=case_index,
                 **token_usage,
             )
         )

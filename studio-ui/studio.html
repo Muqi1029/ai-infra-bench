@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    try {
+      const saved = localStorage.getItem("color-scheme");
+      if (saved === "light" || saved === "dark") {
+        document.querySelector('meta[name="color-scheme"]').content = saved;
+      }
+    } catch (_) {}
+  </script>
+  <title>AI Infra Bench Studio — 实时监控与压测工作台</title>
+</head>
+<body>
+  <div id="root">
+    <h1 style="position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;">AI Infra Bench Studio</h1>
+  </div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

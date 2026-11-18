@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 import random
 from argparse import ArgumentParser, Namespace
 from dataclasses import asdict
@@ -117,6 +118,11 @@ def add_output_args(
         nargs="+",
         metavar="METRIC:MS",
         help="Per-request SLO thresholds in ms (e.g. ttft:500 tpot:50 itl:80 e2el:3000)",
+    )
+    parser.add_argument(
+        "--report-to",
+        default=os.environ.get("AIB_REPORT_URL"),
+        help="Optional AIB platform URL to upload benchmark results ($AIB_REPORT_URL)",
     )
 
 

@@ -172,9 +172,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--prometheus-port", type=_port, default=9090)
     parser.add_argument(
         "--registry-port",
+        "--port",
+        dest="registry_port",
         type=_port,
         default=9091,
-        help="HTTP port for /api/register and /api/push (default: %(default)s)",
+        help="HTTP port for Studio Web UI, /api/register, and /api/push (default: %(default)s)",
     )
     parser.add_argument("--grafana-port", type=_port, default=3000)
     parser.add_argument(
@@ -195,7 +197,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--startup-timeout", type=_positive_float, default=30.0)
     parser.add_argument("--target-timeout", type=_positive_float, default=2.0)
     parser.add_argument("--skip-target-check", action="store_true")
-    parser.add_argument("--no-grafana", action="store_true", help="Run only Prometheus")
+    parser.add_argument(
+        "--no-prometheus",
+        action="store_true",
+        help="Run Studio Web UI & Registry without starting Prometheus/Grafana binaries",
+    )
+    parser.add_argument("--no-grafana", action="store_true", help="Run without Grafana")
     parser.add_argument(
         "--headless",
         action="store_true",
@@ -259,17 +266,20 @@ def probe_targets(targets: Sequence[ScrapeTarget], timeout: float) -> None:
 
 def _print_urls(
     listen_address: str,
-    prometheus_port: int,
+    prometheus_port: int | None,
     registry_port: int,
     grafana_port: int | None,
     custom_dashboard: bool = False,
-) -> tuple[str, str, str | None]:
+) -> tuple[str | None, str, str | None]:
     host = _display_host(listen_address)
-    prometheus_url = f"http://{host}:{prometheus_port}"
+    prometheus_url = (
+        f"http://{host}:{prometheus_port}" if prometheus_port is not None else None
+    )
     registry_url = f"http://{host}:{registry_port}"
     grafana_url = None
-    print(f"Prometheus: {prometheus_url}")
-    print(f"Registry:   {registry_url} (POST /api/register, POST /api/push)")
+    print(f"Studio Web: {registry_url} (Web UI, POST /api/register, POST /api/push)")
+    if prometheus_url is not None:
+        print(f"Prometheus: {prometheus_url}")
     if grafana_port is not None:
         grafana_url = (
             f"http://{host}:{grafana_port}"
@@ -367,11 +377,13 @@ def run(args: argparse.Namespace) -> int:
     if args.push_to:
         return _run_push_mode(args, labels)
 
-    service_ports = [
-        ("Prometheus", args.prometheus_port),
-        ("Registry", args.registry_port),
-    ]
-    if not args.no_grafana:
+    use_prometheus = not args.no_prometheus
+    use_grafana = use_prometheus and not args.no_grafana
+
+    service_ports = [("Registry", args.registry_port)]
+    if use_prometheus:
+        service_ports.insert(0, ("Prometheus", args.prometheus_port))
+    if use_grafana:
         service_ports.append(("Grafana", args.grafana_port))
     if len({port for _, port in service_ports}) != len(service_ports):
         raise ConfigurationError(
@@ -412,14 +424,16 @@ def run(args: argparse.Namespace) -> int:
     if targets and not args.skip_target_check:
         probe_targets(targets, args.target_timeout)
 
-    prometheus = resolve_binary(
-        "prometheus",
-        args.runtime,
-        args.cache_dir,
-        explicit=args.prometheus_bin,
-    )
+    prometheus = None
+    if use_prometheus:
+        prometheus = resolve_binary(
+            "prometheus",
+            args.runtime,
+            args.cache_dir,
+            explicit=args.prometheus_bin,
+        )
     grafana = None
-    if not args.no_grafana:
+    if use_grafana:
         grafana = resolve_binary(
             "grafana",
             args.runtime,
@@ -435,20 +449,21 @@ def run(args: argparse.Namespace) -> int:
     registry_server: RegistryServer | None = None
     try:
         with _sigterm_interrupt():
-            stack.start(
-                "Prometheus",
-                prometheus_command(
-                    prometheus.executable,
-                    layout.prometheus_config,
-                    layout.prometheus_data,
-                    args.listen_address,
-                    args.prometheus_port,
-                    args.retention_time,
-                ),
-                layout.logs / "prometheus.log",
-                prometheus_health,
-                args.startup_timeout,
-            )
+            if prometheus is not None:
+                stack.start(
+                    "Prometheus",
+                    prometheus_command(
+                        prometheus.executable,
+                        layout.prometheus_config,
+                        layout.prometheus_data,
+                        args.listen_address,
+                        args.prometheus_port,
+                        args.retention_time,
+                    ),
+                    layout.logs / "prometheus.log",
+                    prometheus_health,
+                    args.startup_timeout,
+                )
             if grafana is not None:
                 assert grafana.home_path is not None
                 environment = os.environ.copy()
@@ -464,11 +479,11 @@ def run(args: argparse.Namespace) -> int:
                     env=environment,
                 )
 
-            prometheus_url, _, grafana_url = _print_urls(
+            prometheus_url, registry_url, grafana_url = _print_urls(
                 args.listen_address,
-                args.prometheus_port,
+                args.prometheus_port if use_prometheus else None,
                 args.registry_port,
-                None if args.no_grafana else args.grafana_port,
+                args.grafana_port if use_grafana else None,
                 custom_dashboard=args.dashboard is not None,
             )
 
@@ -478,17 +493,39 @@ def run(args: argparse.Namespace) -> int:
                 config_path=layout.prometheus_config,
                 scrape_interval=args.scrape_interval,
                 metrics_path=args.metric_path,
-                prometheus_url=prometheus_url,
+                prometheus_url=prometheus_url
+                or f"http://{host}:{args.prometheus_port}",
                 sd_file_path=layout.targets_sd_path,
                 push_ttl_s=push_ttl_s,
             )
+
+            from ai_infra_bench.monitor.storage import PlatformStore
+
+            store = PlatformStore(layout.root / "platform.db")
+            # Restore previously registered online pull targets across daemon restarts.
+            for persisted in store.list_sessions(status="online"):
+                if persisted.get("mode") == "pull" and persisted.get("base_url"):
+                    try:
+                        registry.add(
+                            [persisted["base_url"]],
+                            labels=persisted.get("labels") or {},
+                        )
+                    except Exception:
+                        pass
+
             registry_server = RegistryServer(
-                registry, args.listen_address, args.registry_port
+                registry,
+                args.listen_address,
+                args.registry_port,
+                store=store,
+                prometheus_port=args.prometheus_port if use_prometheus else None,
+                grafana_port=args.grafana_port if use_grafana else None,
             )
+            registry_server._owns_store = True
             registry_server.start()
 
-            if args.open and grafana_url:
-                webbrowser.open(grafana_url)
+            if args.open:
+                webbrowser.open(registry_url)
 
             if args.headless or not sys.stdin.isatty():
                 print("Running in headless server mode (Ctrl+C to stop)...")

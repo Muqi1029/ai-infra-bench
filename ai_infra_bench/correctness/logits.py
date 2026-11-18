@@ -7,8 +7,10 @@ import asyncio
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass
 from itertools import zip_longest
+from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from ai_infra_bench.correctness.common import (
@@ -240,6 +242,16 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Log raw responses"
+    )
+    parser.add_argument(
+        "--metric-path",
+        type=str,
+        help="Optional path to save logprob comparison (.json or .yaml)",
+    )
+    parser.add_argument(
+        "--report-to",
+        default=os.environ.get("AIB_REPORT_URL"),
+        help="Optional AIB platform URL to upload logprob comparison ($AIB_REPORT_URL)",
     )
     return parser.parse_args(args)
 
@@ -512,6 +524,73 @@ def print_comparison(comparison: ComparisonResult, index: int) -> None:
                 )
 
 
+def serialize_comparison(
+    comparison: ComparisonResult, *, rtol: float, atol: float
+) -> dict[str, Any]:
+    positions: list[dict[str, Any]] = []
+    for diff in comparison.token_diffs:
+        ref = diff.reference
+        tgt = diff.target
+        abs_diff = (
+            abs(ref.logprob - tgt.logprob)
+            if ref is not None and tgt is not None
+            else None
+        )
+        candidates = []
+        for rank, (rc, tc) in enumerate(diff.candidates, start=1):
+            candidates.append(
+                {
+                    "rank": rank,
+                    "ref_token": rc.token if rc else None,
+                    "ref_logprob": round(rc.logprob, 8) if rc else None,
+                    "tgt_token": tc.token if tc else None,
+                    "tgt_logprob": round(tc.logprob, 8) if tc else None,
+                    "abs_diff": (
+                        round(abs(rc.logprob - tc.logprob), 8)
+                        if rc is not None and tc is not None
+                        else None
+                    ),
+                    "passed": diff.candidate_passed(rc, tc),
+                }
+            )
+        positions.append(
+            {
+                "position": diff.position,
+                "ref_token": ref.token if ref else None,
+                "ref_logprob": round(ref.logprob, 8) if ref else None,
+                "tgt_token": tgt.token if tgt else None,
+                "tgt_logprob": round(tgt.logprob, 8) if tgt else None,
+                "abs_diff": round(abs_diff, 8) if abs_diff is not None else None,
+                "token_match": diff.token_match,
+                "logprob_close": diff.logprob_close,
+                "passed": diff.passed(comparison.compare_top_logprobs),
+                "top_k": candidates,
+            }
+        )
+    max_sel = _max_selected_diff(comparison)
+    mean_sel = comparison.mean_selected_diff
+    max_top = _max_top_diff(comparison)
+    matched_tokens = sum(d.token_match for d in comparison.token_diffs)
+    total_pos = len(comparison.token_diffs)
+    return {
+        "reference_url": comparison.reference.base_url,
+        "target_url": comparison.target.base_url,
+        "rtol": rtol,
+        "atol": atol,
+        "passed": comparison.passed,
+        "length_match": comparison.length_match,
+        "tokens_match": comparison.tokens_match,
+        "matched_positions": matched_tokens,
+        "total_positions": total_pos,
+        "token_match_rate": matched_tokens / total_pos if total_pos else 1.0,
+        "max_abs_diff": round(max_sel, 8) if max_sel is not None else None,
+        "mean_abs_diff": round(mean_sel, 8) if mean_sel is not None else None,
+        "max_top_k_abs_diff": round(max_top, 8) if max_top is not None else None,
+        "top_k_passed": comparison.top_k_passed,
+        "positions": positions,
+    }
+
+
 async def run(args: argparse.Namespace) -> bool:
     payload = build_payload(args)
     responses = await fetch_chat_completions(args.base_urls, payload, args.api_key)
@@ -548,6 +627,39 @@ async def run(args: argparse.Namespace) -> bool:
         else "Differences detected; see failed checks above."
     )
     print(f"{_status(passed)}  {message}")
+
+    serialized = [
+        serialize_comparison(c, rtol=args.rtol, atol=args.atol) for c in comparisons
+    ]
+    if getattr(args, "metric_path", None) and serialized:
+        out_path = Path(args.metric_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.suffix.lower() in {".yaml", ".yml"}:
+            import yaml
+
+            out_path.write_text(
+                yaml.safe_dump(serialized, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        else:
+            out_path.write_text(
+                json.dumps(serialized, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    if getattr(args, "report_to", None) and serialized:
+        from ai_infra_bench.monitor.telemetry import report_to_platform
+
+        for item in serialized:
+            report_to_platform(
+                args.report_to,
+                {
+                    "kind": "logits",
+                    "base_url": item["target_url"],
+                    "ref_base_url": item["reference_url"],
+                    "model": args.model,
+                    "result": item,
+                },
+            )
     return passed
 
 

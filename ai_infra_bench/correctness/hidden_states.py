@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
+import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from ai_infra_bench.correctness.common import (
@@ -99,6 +102,16 @@ def parse_args(args: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Log raw responses"
+    )
+    parser.add_argument(
+        "--metric-path",
+        type=str,
+        help="Optional path to save hidden-state comparison (.json or .yaml)",
+    )
+    parser.add_argument(
+        "--report-to",
+        default=os.environ.get("AIB_REPORT_URL"),
+        help="Optional AIB platform URL to upload comparison ($AIB_REPORT_URL)",
     )
     return parser.parse_args(args)
 
@@ -269,6 +282,38 @@ def print_comparison(comparison: ComparisonResult, index: int) -> None:
     print(f"  {_status(comparison.passed)}  Overall: all values must be close")
 
 
+def serialize_comparison(
+    comparison: ComparisonResult, *, rtol: float, atol: float
+) -> dict[str, Any]:
+    close_values = comparison.total_values - comparison.differing_values
+    return {
+        "reference_url": comparison.reference.base_url,
+        "target_url": comparison.target.base_url,
+        "rtol": rtol,
+        "atol": atol,
+        "passed": comparison.passed,
+        "shape_match": comparison.shape_match,
+        "reference_shape": list(comparison.reference.shape),
+        "target_shape": list(comparison.target.shape),
+        "total_values": comparison.total_values,
+        "differing_values": comparison.differing_values,
+        "close_ratio": (
+            close_values / comparison.total_values if comparison.total_values else 0.0
+        ),
+        "max_abs_diff": comparison.max_abs_diff,
+        "mean_abs_diff": comparison.mean_abs_diff,
+        "rmse": comparison.rmse,
+        "cosine_similarity": comparison.cosine_similarity,
+        "max_diff_index": (
+            list(comparison.max_diff_index)
+            if comparison.max_diff_index is not None
+            else None
+        ),
+        "reference_at_max": comparison.reference_at_max,
+        "target_at_max": comparison.target_at_max,
+    }
+
+
 async def run(args: argparse.Namespace) -> bool:
     payload = build_payload(args)
     responses = await fetch_chat_completions(args.base_urls, payload, args.api_key)
@@ -302,6 +347,39 @@ async def run(args: argparse.Namespace) -> bool:
         else "Differences detected; see failed checks above."
     )
     print(f"{_status(passed)}  {message}")
+
+    serialized = [
+        serialize_comparison(c, rtol=args.rtol, atol=args.atol) for c in comparisons
+    ]
+    if getattr(args, "metric_path", None) and serialized:
+        out_path = Path(args.metric_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.suffix.lower() in {".yaml", ".yml"}:
+            import yaml
+
+            out_path.write_text(
+                yaml.safe_dump(serialized, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        else:
+            out_path.write_text(
+                json.dumps(serialized, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    if getattr(args, "report_to", None) and serialized:
+        from ai_infra_bench.monitor.telemetry import report_to_platform
+
+        for item in serialized:
+            report_to_platform(
+                args.report_to,
+                {
+                    "kind": "hidden_states",
+                    "base_url": item["target_url"],
+                    "ref_base_url": item["reference_url"],
+                    "model": getattr(args, "model", None),
+                    "result": item,
+                },
+            )
     return passed
 
 

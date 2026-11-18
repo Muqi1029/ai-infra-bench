@@ -62,7 +62,8 @@ _COMMANDS: dict[str, SubcommandSpec] = {
     ),
     "monitor": SubcommandSpec(
         "ai_infra_bench.monitor.cli:main",
-        "Monitor Prometheus targets locally",
+        "Run real-time monitoring, auto-registration, and Benchmark Studio",
+        aliases=["studio", "platform"],
     ),
     "profile-sgl": SubcommandSpec(
         "ai_infra_bench.profile_sgl:main",

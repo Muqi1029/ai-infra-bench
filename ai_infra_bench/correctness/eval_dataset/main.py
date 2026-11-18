@@ -1,5 +1,8 @@
+import json
 import logging
+import os
 from argparse import ArgumentParser
+from pathlib import Path
 
 from ai_infra_bench.utils.req import add_common_args
 
@@ -48,6 +51,16 @@ def parse_args(argv=None):
         "--num-questions",
         type=int,
         help="Maximum questions, or sampled tasks for DeepSWE",
+    )
+    parser.add_argument(
+        "--metric-path",
+        type=str,
+        help="Optional path to save evaluation summary (.json or .yaml)",
+    )
+    parser.add_argument(
+        "--report-to",
+        default=os.environ.get("AIB_REPORT_URL"),
+        help="Optional AIB platform URL to upload evaluation results ($AIB_REPORT_URL)",
     )
 
     deepswe_group = parser.add_argument_group("DeepSWE")
@@ -131,7 +144,37 @@ def main(argv=None):
     from ai_infra_bench.correctness.eval_dataset.base import EvalRuntime
 
     eval_runtime = EvalRuntime(runtime_args)
-    return asyncio.run(eval_runtime.run())
+    rc = asyncio.run(eval_runtime.run())
+    records = getattr(eval_runtime, "recorded_runs", [])
+    if runtime_args.metric_path and records:
+        out_path = Path(runtime_args.metric_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        export_records = [{k: v for k, v in r.items() if k != "cases"} for r in records]
+        if out_path.suffix.lower() in {".yaml", ".yml"}:
+            import yaml
+
+            out_path.write_text(
+                yaml.safe_dump(export_records, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        else:
+            out_path.write_text(
+                json.dumps(export_records, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    if runtime_args.report_to and records:
+        from ai_infra_bench.monitor.telemetry import report_to_platform
+
+        report_to_platform(
+            runtime_args.report_to,
+            {
+                "kind": "correctness",
+                "base_url": runtime_args.base_url,
+                "model": runtime_args.model,
+                "runs": records,
+            },
+        )
+    return rc
 
 
 if __name__ == "__main__":

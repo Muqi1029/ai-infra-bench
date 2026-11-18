@@ -34,4 +34,5 @@ aib = "ai_infra_bench.cli:main"
 "ai_infra_bench" = [
     "correctness/eval_dataset/configs/*.yaml",
     "monitor/assets/*.json",
+    "monitor/assets/*.html",
 ]

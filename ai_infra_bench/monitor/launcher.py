@@ -13,7 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from ai_infra_bench.monitor.config import (
     DEFAULT_METRICS_PATH,
@@ -123,6 +123,70 @@ def _local_metrics_ready(url: str, timeout: float = 1.5) -> bool:
         return False
 
 
+def _redact_command(command: Sequence[str] | None) -> list[str]:
+    if not command:
+        return []
+    redacted: list[str] = []
+    skip_next = False
+    for tok in command:
+        if skip_next:
+            redacted.append("***")
+            skip_next = False
+            continue
+        key, eq, _ = tok.partition("=")
+        if key in {"--api-key", "--token"}:
+            if eq:
+                redacted.append(f"{key}=***")
+            else:
+                redacted.append(tok)
+                skip_next = True
+        else:
+            redacted.append(tok)
+    return redacted
+
+
+def _collect_local_hardware() -> dict[str, Any]:
+    try:
+        from ai_infra_bench.check_device import collect_devices
+
+        report = collect_devices()
+        devices = report.get("devices") or []
+        if not devices:
+            return {}
+        first_name = devices[0].get("name", "GPU")
+        mem_gb = round((devices[0].get("total_memory_bytes") or 0) / 1e9)
+        summary = f"{len(devices)}× {first_name}" + (f" ({mem_gb}GB)" if mem_gb else "")
+        return {
+            "summary": summary,
+            "gpu_count": len(devices),
+            "gpu_model": first_name,
+            "cuda_driver_api_version": report.get("cuda_driver_api_version"),
+            "devices": [
+                {
+                    "index": d.get("index"),
+                    "name": d.get("name"),
+                    "total_memory_bytes": d.get("total_memory_bytes"),
+                    "sm_count": d.get("sm_count"),
+                }
+                for d in devices[:16]
+            ],
+        }
+    except Exception:
+        return {}
+
+
+def _collect_local_metadata(
+    port: int, command: Sequence[str] | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    from ai_infra_bench.monitor.telemetry import probe_service_info
+
+    srv_info = probe_service_info(f"http://127.0.0.1:{port}", timeout=1.5)
+    srv_info["hostname"] = socket.gethostname()
+    if command:
+        srv_info["launch_command"] = " ".join(_redact_command(command))
+    return srv_info, _collect_local_hardware()
+
+
 def auto_register(
     monitor_url: str | None = None,
     *,
@@ -133,6 +197,7 @@ def auto_register(
     scrape_interval_s: float = 5.0,
     ready_timeout_s: float = 900.0,
     should_abort: Callable[[], bool] | None = None,
+    command: Sequence[str] | None = None,
 ) -> Callable[[], None]:
     """Wait for local ``/metrics`` in a background thread, then auto-register.
 
@@ -184,6 +249,8 @@ def auto_register(
         if stop_event.is_set():
             return
 
+        local_srv_info, local_hw_info = _collect_local_metadata(port, command)
+
         reg_endpoint = f"{sanitize_url(resolved_monitor)}/api/register"
         try:
             response = _post_json(
@@ -193,6 +260,8 @@ def auto_register(
                     "metrics_path": normalized_path,
                     "labels": dict(merged_labels),
                     "verify_pull": True,
+                    "server_info": local_srv_info,
+                    "hardware_info": local_hw_info,
                 },
                 timeout=5.0,
             )
@@ -228,6 +297,7 @@ def auto_register(
             resolved_monitor,
             target_id,
         )
+        sent_meta = False
         while not stop_event.is_set():
             if should_abort is not None and should_abort():
                 return
@@ -237,7 +307,11 @@ def auto_register(
                     local_scrape_target,
                     target_id=target_id,
                     timeout=5.0,
+                    base_url_override=advertise_url,
+                    server_info=None if sent_meta else local_srv_info,
+                    hardware_info=None if sent_meta else local_hw_info,
                 )
+                sent_meta = True
                 if target_id not in registered_identifiers:
                     registered_identifiers.append(target_id)
             except Exception as error:
@@ -300,6 +374,7 @@ def run_wrapped_service(
         labels=merged_label_map,
         scrape_interval_s=parse_duration_seconds(scrape_interval),
         should_abort=lambda: process.poll() is not None,
+        command=command,
     )
 
     previous_sigterm = None

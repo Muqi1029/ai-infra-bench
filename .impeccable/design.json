@@ -1,0 +1,715 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T08:36:00Z",
+  "title": "Design System: AI Infra Bench Studio",
+  "extensions": {
+    "colorMeta": {
+      "cobalt-brand": {
+        "role": "primary",
+        "displayName": "Operational Cobalt",
+        "canonical": "oklch(50.0% 0.119 242.7)",
+        "tonalRamp": [
+          "oklch(16% 0.050 242.7)",
+          "oklch(27% 0.084 242.7)",
+          "oklch(38% 0.107 242.7)",
+          "oklch(49% 0.119 242.7)",
+          "oklch(60% 0.113 242.7)",
+          "oklch(72% 0.086 242.7)",
+          "oklch(84% 0.050 242.7)",
+          "oklch(95% 0.019 242.7)"
+        ]
+      },
+      "cyan-telemetry": {
+        "role": "primary",
+        "displayName": "Telemetry Sky",
+        "canonical": "oklch(75.4% 0.139 232.7)",
+        "tonalRamp": [
+          "oklch(16% 0.058 232.7)",
+          "oklch(27% 0.097 232.7)",
+          "oklch(38% 0.125 232.7)",
+          "oklch(49% 0.139 232.7)",
+          "oklch(60% 0.132 232.7)",
+          "oklch(72% 0.100 232.7)",
+          "oklch(84% 0.058 232.7)",
+          "oklch(95% 0.022 232.7)"
+        ]
+      },
+      "deep-marine-ink": {
+        "role": "primary",
+        "displayName": "Deep Marine Ink",
+        "canonical": "oklch(26.5% 0.055 240.8)",
+        "tonalRamp": [
+          "oklch(16% 0.023 240.8)",
+          "oklch(27% 0.038 240.8)",
+          "oklch(38% 0.049 240.8)",
+          "oklch(49% 0.055 240.8)",
+          "oklch(60% 0.052 240.8)",
+          "oklch(72% 0.039 240.8)",
+          "oklch(84% 0.023 240.8)",
+          "oklch(95% 0.009 240.8)"
+        ]
+      },
+      "cobalt-tint": {
+        "role": "primary",
+        "displayName": "Cobalt Wash",
+        "canonical": "oklch(50.0% 0.119 242.7 / 0.10)",
+        "tonalRamp": [
+          "oklch(16% 0.050 242.7)",
+          "oklch(27% 0.084 242.7)",
+          "oklch(38% 0.107 242.7)",
+          "oklch(49% 0.119 242.7)",
+          "oklch(60% 0.113 242.7)",
+          "oklch(72% 0.086 242.7)",
+          "oklch(84% 0.050 242.7)",
+          "oklch(95% 0.019 242.7)"
+        ]
+      },
+      "emerald-signal-light": {
+        "role": "secondary",
+        "displayName": "Alignment Emerald",
+        "canonical": "oklch(50.8% 0.105 165.6)",
+        "tonalRamp": [
+          "oklch(16% 0.044 165.6)",
+          "oklch(27% 0.073 165.6)",
+          "oklch(38% 0.094 165.6)",
+          "oklch(49% 0.105 165.6)",
+          "oklch(60% 0.100 165.6)",
+          "oklch(72% 0.076 165.6)",
+          "oklch(84% 0.044 165.6)",
+          "oklch(95% 0.017 165.6)"
+        ]
+      },
+      "emerald-signal-dark": {
+        "role": "secondary",
+        "displayName": "Live Emerald",
+        "canonical": "oklch(77.3% 0.153 163.2)",
+        "tonalRamp": [
+          "oklch(16% 0.064 163.2)",
+          "oklch(27% 0.107 163.2)",
+          "oklch(38% 0.138 163.2)",
+          "oklch(49% 0.153 163.2)",
+          "oklch(60% 0.146 163.2)",
+          "oklch(72% 0.111 163.2)",
+          "oklch(84% 0.064 163.2)",
+          "oklch(95% 0.025 163.2)"
+        ]
+      },
+      "emerald-tint": {
+        "role": "secondary",
+        "displayName": "Emerald Wash",
+        "canonical": "oklch(50.8% 0.105 165.6 / 0.10)",
+        "tonalRamp": [
+          "oklch(16% 0.044 165.6)",
+          "oklch(27% 0.073 165.6)",
+          "oklch(38% 0.094 165.6)",
+          "oklch(49% 0.105 165.6)",
+          "oklch(60% 0.100 165.6)",
+          "oklch(72% 0.076 165.6)",
+          "oklch(84% 0.044 165.6)",
+          "oklch(95% 0.017 165.6)"
+        ]
+      },
+      "amber-threshold-light": {
+        "role": "tertiary",
+        "displayName": "Threshold Ochre",
+        "canonical": "oklch(55.5% 0.146 49.0)",
+        "tonalRamp": [
+          "oklch(16% 0.061 49.0)",
+          "oklch(27% 0.102 49.0)",
+          "oklch(38% 0.131 49.0)",
+          "oklch(49% 0.146 49.0)",
+          "oklch(60% 0.138 49.0)",
+          "oklch(72% 0.105 49.0)",
+          "oklch(84% 0.061 49.0)",
+          "oklch(95% 0.023 49.0)"
+        ]
+      },
+      "amber-threshold-dark": {
+        "role": "tertiary",
+        "displayName": "Saturation Amber",
+        "canonical": "oklch(83.7% 0.164 84.4)",
+        "tonalRamp": [
+          "oklch(16% 0.069 84.4)",
+          "oklch(27% 0.115 84.4)",
+          "oklch(38% 0.148 84.4)",
+          "oklch(49% 0.164 84.4)",
+          "oklch(60% 0.156 84.4)",
+          "oklch(72% 0.118 84.4)",
+          "oklch(84% 0.069 84.4)",
+          "oklch(95% 0.026 84.4)"
+        ]
+      },
+      "amber-tint": {
+        "role": "tertiary",
+        "displayName": "Amber Wash",
+        "canonical": "oklch(55.5% 0.146 49.0 / 0.12)",
+        "tonalRamp": [
+          "oklch(16% 0.061 49.0)",
+          "oklch(27% 0.102 49.0)",
+          "oklch(38% 0.131 49.0)",
+          "oklch(49% 0.146 49.0)",
+          "oklch(60% 0.138 49.0)",
+          "oklch(72% 0.105 49.0)",
+          "oklch(84% 0.061 49.0)",
+          "oklch(95% 0.023 49.0)"
+        ]
+      },
+      "crimson-fault-light": {
+        "role": "tertiary",
+        "displayName": "Fault Crimson",
+        "canonical": "oklch(57.7% 0.215 27.3)",
+        "tonalRamp": [
+          "oklch(16% 0.090 27.3)",
+          "oklch(27% 0.151 27.3)",
+          "oklch(38% 0.194 27.3)",
+          "oklch(49% 0.215 27.3)",
+          "oklch(60% 0.204 27.3)",
+          "oklch(72% 0.155 27.3)",
+          "oklch(84% 0.090 27.3)",
+          "oklch(95% 0.034 27.3)"
+        ]
+      },
+      "crimson-fault-dark": {
+        "role": "tertiary",
+        "displayName": "Alert Coral",
+        "canonical": "oklch(71.1% 0.166 22.2)",
+        "tonalRamp": [
+          "oklch(16% 0.070 22.2)",
+          "oklch(27% 0.116 22.2)",
+          "oklch(38% 0.150 22.2)",
+          "oklch(49% 0.166 22.2)",
+          "oklch(60% 0.158 22.2)",
+          "oklch(72% 0.120 22.2)",
+          "oklch(84% 0.070 22.2)",
+          "oklch(95% 0.027 22.2)"
+        ]
+      },
+      "crimson-tint": {
+        "role": "tertiary",
+        "displayName": "Crimson Wash",
+        "canonical": "oklch(57.7% 0.215 27.3 / 0.10)",
+        "tonalRamp": [
+          "oklch(16% 0.090 27.3)",
+          "oklch(27% 0.151 27.3)",
+          "oklch(38% 0.194 27.3)",
+          "oklch(49% 0.215 27.3)",
+          "oklch(60% 0.204 27.3)",
+          "oklch(72% 0.155 27.3)",
+          "oklch(84% 0.090 27.3)",
+          "oklch(95% 0.034 27.3)"
+        ]
+      },
+      "rail-graphite": {
+        "role": "neutral",
+        "displayName": "Rail Graphite-Indigo",
+        "canonical": "oklch(20.1% 0.025 266.7)",
+        "tonalRamp": [
+          "oklch(16% 0.011 266.7)",
+          "oklch(27% 0.018 266.7)",
+          "oklch(38% 0.023 266.7)",
+          "oklch(49% 0.025 266.7)",
+          "oklch(60% 0.024 266.7)",
+          "oklch(72% 0.018 266.7)",
+          "oklch(84% 0.011 266.7)",
+          "oklch(95% 0.004 266.7)"
+        ]
+      },
+      "rail-slate": {
+        "role": "neutral",
+        "displayName": "Rail Active Slate",
+        "canonical": "oklch(25.3% 0.036 265.5)",
+        "tonalRamp": [
+          "oklch(16% 0.015 265.5)",
+          "oklch(27% 0.025 265.5)",
+          "oklch(38% 0.033 265.5)",
+          "oklch(49% 0.036 265.5)",
+          "oklch(60% 0.034 265.5)",
+          "oklch(72% 0.026 265.5)",
+          "oklch(84% 0.015 265.5)",
+          "oklch(95% 0.006 265.5)"
+        ]
+      },
+      "rail-hairline": {
+        "role": "neutral",
+        "displayName": "Rail Hairline",
+        "canonical": "oklch(29.8% 0.041 264.5)",
+        "tonalRamp": [
+          "oklch(16% 0.017 264.5)",
+          "oklch(27% 0.029 264.5)",
+          "oklch(38% 0.037 264.5)",
+          "oklch(49% 0.041 264.5)",
+          "oklch(60% 0.039 264.5)",
+          "oklch(72% 0.029 264.5)",
+          "oklch(84% 0.017 264.5)",
+          "oklch(95% 0.007 264.5)"
+        ]
+      },
+      "mineral-ground": {
+        "role": "neutral",
+        "displayName": "Cool Mineral Ground",
+        "canonical": "oklch(96.9% 0.005 258.3)",
+        "tonalRamp": [
+          "oklch(16% 0.002 258.3)",
+          "oklch(27% 0.003 258.3)",
+          "oklch(38% 0.004 258.3)",
+          "oklch(49% 0.005 258.3)",
+          "oklch(60% 0.004 258.3)",
+          "oklch(72% 0.003 258.3)",
+          "oklch(84% 0.002 258.3)",
+          "oklch(95% 0.001 258.3)"
+        ]
+      },
+      "obsidian-ground": {
+        "role": "neutral",
+        "displayName": "Obsidian Ground",
+        "canonical": "oklch(16.8% 0.018 263.9)",
+        "tonalRamp": [
+          "oklch(16% 0.008 263.9)",
+          "oklch(27% 0.013 263.9)",
+          "oklch(38% 0.016 263.9)",
+          "oklch(49% 0.018 263.9)",
+          "oklch(60% 0.017 263.9)",
+          "oklch(72% 0.013 263.9)",
+          "oklch(84% 0.008 263.9)",
+          "oklch(95% 0.003 263.9)"
+        ]
+      },
+      "crisp-plane": {
+        "role": "neutral",
+        "displayName": "Crisp Work Plane",
+        "canonical": "oklch(100.0% 0.000 250.0)",
+        "tonalRamp": [
+          "oklch(16% 0 0)",
+          "oklch(27% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(49% 0 0)",
+          "oklch(60% 0 0)",
+          "oklch(72% 0 0)",
+          "oklch(84% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "midnight-plane": {
+        "role": "neutral",
+        "displayName": "Midnight Work Plane",
+        "canonical": "oklch(21.0% 0.029 266.1)",
+        "tonalRamp": [
+          "oklch(16% 0.012 266.1)",
+          "oklch(27% 0.021 266.1)",
+          "oklch(38% 0.026 266.1)",
+          "oklch(49% 0.029 266.1)",
+          "oklch(60% 0.028 266.1)",
+          "oklch(72% 0.021 266.1)",
+          "oklch(84% 0.012 266.1)",
+          "oklch(95% 0.005 266.1)"
+        ]
+      },
+      "recessed-well-dark": {
+        "role": "neutral",
+        "displayName": "Recessed Control Well",
+        "canonical": "oklch(16.0% 0.020 265.6)",
+        "tonalRamp": [
+          "oklch(16% 0.009 265.6)",
+          "oklch(27% 0.014 265.6)",
+          "oklch(38% 0.018 265.6)",
+          "oklch(49% 0.020 265.6)",
+          "oklch(60% 0.019 265.6)",
+          "oklch(72% 0.015 265.6)",
+          "oklch(84% 0.009 265.6)",
+          "oklch(95% 0.003 265.6)"
+        ]
+      },
+      "subtle-wash-light": {
+        "role": "neutral",
+        "displayName": "Subtle Mineral Wash",
+        "canonical": "oklch(96.0% 0.008 253.9)",
+        "tonalRamp": [
+          "oklch(16% 0.003 253.9)",
+          "oklch(27% 0.006 253.9)",
+          "oklch(38% 0.007 253.9)",
+          "oklch(49% 0.008 253.9)",
+          "oklch(60% 0.008 253.9)",
+          "oklch(72% 0.006 253.9)",
+          "oklch(84% 0.003 253.9)",
+          "oklch(95% 0.001 253.9)"
+        ]
+      },
+      "subtle-wash-dark": {
+        "role": "neutral",
+        "displayName": "Subtle Slate Wash",
+        "canonical": "oklch(24.5% 0.036 265.5)",
+        "tonalRamp": [
+          "oklch(16% 0.015 265.5)",
+          "oklch(27% 0.026 265.5)",
+          "oklch(38% 0.033 265.5)",
+          "oklch(49% 0.036 265.5)",
+          "oklch(60% 0.035 265.5)",
+          "oklch(72% 0.026 265.5)",
+          "oklch(84% 0.015 265.5)",
+          "oklch(95% 0.006 265.5)"
+        ]
+      },
+      "structural-hairline-light": {
+        "role": "neutral",
+        "displayName": "Light Structural Hairline",
+        "canonical": "oklch(91.1% 0.015 260.7)",
+        "tonalRamp": [
+          "oklch(16% 0.006 260.7)",
+          "oklch(27% 0.011 260.7)",
+          "oklch(38% 0.014 260.7)",
+          "oklch(49% 0.015 260.7)",
+          "oklch(60% 0.014 260.7)",
+          "oklch(72% 0.011 260.7)",
+          "oklch(84% 0.006 260.7)",
+          "oklch(95% 0.002 260.7)"
+        ]
+      },
+      "structural-hairline-dark": {
+        "role": "neutral",
+        "displayName": "Dark Structural Hairline",
+        "canonical": "oklch(29.4% 0.043 263.6)",
+        "tonalRamp": [
+          "oklch(16% 0.018 263.6)",
+          "oklch(27% 0.030 263.6)",
+          "oklch(38% 0.039 263.6)",
+          "oklch(49% 0.043 263.6)",
+          "oklch(60% 0.041 263.6)",
+          "oklch(72% 0.031 263.6)",
+          "oklch(84% 0.018 263.6)",
+          "oklch(95% 0.007 263.6)"
+        ]
+      },
+      "tactile-control-stroke": {
+        "role": "neutral",
+        "displayName": "Tactile Control Stroke",
+        "canonical": "oklch(55.4% 0.041 257.4)",
+        "tonalRamp": [
+          "oklch(16% 0.017 257.4)",
+          "oklch(27% 0.029 257.4)",
+          "oklch(38% 0.037 257.4)",
+          "oklch(49% 0.041 257.4)",
+          "oklch(60% 0.039 257.4)",
+          "oklch(72% 0.029 257.4)",
+          "oklch(84% 0.017 257.4)",
+          "oklch(95% 0.007 257.4)"
+        ]
+      },
+      "slate-ink": {
+        "role": "neutral",
+        "displayName": "Deep Slate Ink",
+        "canonical": "oklch(20.8% 0.040 265.8)",
+        "tonalRamp": [
+          "oklch(16% 0.017 265.8)",
+          "oklch(27% 0.028 265.8)",
+          "oklch(38% 0.036 265.8)",
+          "oklch(49% 0.040 265.8)",
+          "oklch(60% 0.038 265.8)",
+          "oklch(72% 0.029 265.8)",
+          "oklch(84% 0.017 265.8)",
+          "oklch(95% 0.006 265.8)"
+        ]
+      },
+      "frost-ink": {
+        "role": "neutral",
+        "displayName": "Frost Ink",
+        "canonical": "oklch(96.8% 0.007 247.9)",
+        "tonalRamp": [
+          "oklch(16% 0.003 247.9)",
+          "oklch(27% 0.005 247.9)",
+          "oklch(38% 0.006 247.9)",
+          "oklch(49% 0.007 247.9)",
+          "oklch(60% 0.007 247.9)",
+          "oklch(72% 0.005 247.9)",
+          "oklch(84% 0.003 247.9)",
+          "oklch(95% 0.001 247.9)"
+        ]
+      },
+      "graphite-secondary": {
+        "role": "neutral",
+        "displayName": "Graphite Secondary Ink",
+        "canonical": "oklch(37.2% 0.039 257.3)",
+        "tonalRamp": [
+          "oklch(16% 0.016 257.3)",
+          "oklch(27% 0.027 257.3)",
+          "oklch(38% 0.035 257.3)",
+          "oklch(49% 0.039 257.3)",
+          "oklch(60% 0.037 257.3)",
+          "oklch(72% 0.028 257.3)",
+          "oklch(84% 0.016 257.3)",
+          "oklch(95% 0.006 257.3)"
+        ]
+      },
+      "mist-secondary": {
+        "role": "neutral",
+        "displayName": "Mist Secondary Ink",
+        "canonical": "oklch(86.9% 0.020 252.9)",
+        "tonalRamp": [
+          "oklch(16% 0.008 252.9)",
+          "oklch(27% 0.014 252.9)",
+          "oklch(38% 0.018 252.9)",
+          "oklch(49% 0.020 252.9)",
+          "oklch(60% 0.019 252.9)",
+          "oklch(72% 0.014 252.9)",
+          "oklch(84% 0.008 252.9)",
+          "oklch(95% 0.003 252.9)"
+        ]
+      },
+      "steel-muted": {
+        "role": "neutral",
+        "displayName": "Steel Muted Ink",
+        "canonical": "oklch(44.6% 0.037 257.3)",
+        "tonalRamp": [
+          "oklch(16% 0.016 257.3)",
+          "oklch(27% 0.026 257.3)",
+          "oklch(38% 0.034 257.3)",
+          "oklch(49% 0.037 257.3)",
+          "oklch(60% 0.036 257.3)",
+          "oklch(72% 0.027 257.3)",
+          "oklch(84% 0.016 257.3)",
+          "oklch(95% 0.006 257.3)"
+        ]
+      },
+      "slate-muted": {
+        "role": "neutral",
+        "displayName": "Muted Slate Ink",
+        "canonical": "oklch(71.1% 0.035 256.8)",
+        "tonalRamp": [
+          "oklch(16% 0.015 256.8)",
+          "oklch(27% 0.025 256.8)",
+          "oklch(38% 0.032 256.8)",
+          "oklch(49% 0.035 256.8)",
+          "oklch(60% 0.033 256.8)",
+          "oklch(72% 0.025 256.8)",
+          "oklch(84% 0.015 256.8)",
+          "oklch(95% 0.006 256.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display (Instrument Readout)",
+        "purpose": "Primary A/B metric readouts (peak tok/s and minimum TPOT ms) inside session comparison strips."
+      },
+      "headline": {
+        "displayName": "Headline (Workspace & Drawer Header)",
+        "purpose": "Top-level workspace view headings, slide-over SheetTitle headers, and ConfirmDialog titles."
+      },
+      "title": {
+        "displayName": "Title (Panel & Ledger Header)",
+        "purpose": "Flat work-plane headers, telemetry ledger titles, chart headers, and the navigation rail masthead."
+      },
+      "body": {
+        "displayName": "Body (Operational Copy)",
+        "purpose": "Base UI prose, control text, and helper descriptions."
+      },
+      "label": {
+        "displayName": "Label (Table Column & Field Label)",
+        "purpose": "Uppercase data-table column headers and sentence-case form field labels."
+      },
+      "mono": {
+        "displayName": "Mono (Tabular Telemetry & Endpoints)",
+        "purpose": "Backend URLs, CLI commands, model/session slugs, live tok/s readouts, and Top-K logprob tables."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay-light",
+        "value": "0 14px 34px -8px rgb(15 23 42 / 0.22), 0 4px 10px -3px rgb(15 23 42 / 0.10)",
+        "purpose": "Light-scheme elevation exclusively for portaled SelectContent menus, Sheet drawers, and ConfirmDialog modals."
+      },
+      {
+        "name": "overlay-dark",
+        "value": "0 18px 42px -10px rgb(0 0 0 / 0.65)",
+        "purpose": "Dark-scheme elevation for floating menus, slide-over drawers, and destructive confirmation modals."
+      },
+      {
+        "name": "sticky-column-divider",
+        "value": "-1px 0 0 var(--border)",
+        "purpose": "Leftward 1px structural hairline cast by sticky right-hand table action cells during horizontal scroll."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Primary exponential ease-out for Sheet slide-ins, overlay fades, dialog pop-ins, and SSE live pulse."
+      },
+      {
+        "name": "ease-in-exit",
+        "value": "cubic-bezier(0.4, 0, 1, 1)",
+        "purpose": "Snappy exit curve for right-hand Sheet drawer dismissal."
+      },
+      {
+        "name": "duration-control",
+        "value": "150ms",
+        "purpose": "Color, border, and thumb-translate transitions on interactive buttons, inputs, selects, and switches."
+      },
+      {
+        "name": "duration-dialog",
+        "value": "180ms",
+        "purpose": "Backdrop fade-in and ConfirmDialog pop-in duration."
+      },
+      {
+        "name": "duration-sheet-in",
+        "value": "220ms",
+        "purpose": "Slide-over Sheet drawer entrance duration from left or right viewport edge."
+      },
+      {
+        "name": "duration-sheet-out",
+        "value": "160ms",
+        "purpose": "Slide-over Sheet drawer exit duration."
+      },
+      {
+        "name": "sse-live-pulse",
+        "value": "2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+        "purpose": "Subtle 4px emerald halo pulse indicating active /api/events SSE stream connectivity."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-contrast cobalt operational trigger for submitting benchmark suites and registering inference targets.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><polygon points=\"6 3 20 12 6 21 6 3\"></polygon></svg><span>提交并启动任务</span></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--brand, #0369a1); background: var(--brand, #0369a1); color: var(--brand-fg, #ffffff); font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: opacity 150ms ease, background-color 150ms ease; } .ds-btn-primary:hover { opacity: 0.92; } .ds-btn-primary:active { opacity: 0.85; } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Tactile #64748b-bordered utility action for opening slide-over inspection sheets, probing endpoints, and pinning baselines.",
+      "html": "<button type=\"button\" class=\"ds-btn-secondary\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><polyline points=\"4 17 10 11 4 5\"></polyline><line x1=\"12\" x2=\"20\" y1=\"19\" y2=\"19\"></line></svg><span>打开实时日志控制台</span></button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--control-border, #64748b); background: var(--control-bg, #ffffff); color: var(--text, #0f172a); font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; } .ds-btn-secondary:hover { border-color: var(--control-border-hover, #334155); background: var(--surface-subtle, #eef2f7); } .ds-btn-secondary:active { background: var(--surface-subtle, #eef2f7); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Outline Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive row trigger for deregistering live targets, cancelling active jobs, or deleting archived sessions.",
+      "html": "<button type=\"button\" class=\"ds-btn-danger\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 6h18\"></path><path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"></path><path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"></path></svg><span>注销监控目标</span></button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--control-border, #64748b); background: var(--control-bg, #ffffff); color: var(--crimson, #dc2626); font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color 150ms ease, border-color 150ms ease; } .ds-btn-danger:hover { border-color: var(--crimson, #dc2626); background: var(--crimson-soft, rgb(220 38 38 / 0.10)); } .ds-btn-danger:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Telemetry Endpoint Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "38px tactile text field pairing a 12.5px sentence-case label with tabular-mono URL and parameter entry.",
+      "html": "<div class=\"ds-field-group\"><label class=\"ds-field-label\" for=\"ds-demo-url\">Target Backend URL</label><input id=\"ds-demo-url\" type=\"url\" class=\"ds-input-field\" value=\"http://10.24.8.12:30000\" spellcheck=\"false\" /></div>",
+      "css": ".ds-field-group { display: flex; flex-direction: column; gap: 6px; max-width: 320px; } .ds-field-label { font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; font-size: 12.5px; font-weight: 600; color: var(--text-sec, #334155); } .ds-input-field { width: 100%; min-height: 38px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--control-border, #64748b); background: var(--control-bg, #ffffff); color: var(--text, #0f172a); font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; font-variant-numeric: tabular-nums slashed-zero; transition: border-color 150ms ease; } .ds-input-field::placeholder { color: var(--text-muted, #475569); } .ds-input-field:hover { border-color: var(--control-border-hover, #334155); } .ds-input-field:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Quantile Tabs",
+      "kind": "nav",
+      "refersTo": "tabs-list",
+      "description": "Compact 8px segmented control switching latency quantiles (Mean, P50, P95, P99) and load axes on comparison charts.",
+      "html": "<div class=\"ds-tabs-list\" role=\"tablist\" aria-label=\"延迟统计分位数\"><button type=\"button\" role=\"tab\" aria-selected=\"true\" class=\"ds-tab-trigger ds-tab-active\">Mean</button><button type=\"button\" role=\"tab\" aria-selected=\"false\" class=\"ds-tab-trigger\">P50</button><button type=\"button\" role=\"tab\" aria-selected=\"false\" class=\"ds-tab-trigger\">P95</button><button type=\"button\" role=\"tab\" aria-selected=\"false\" class=\"ds-tab-trigger\">P99</button></div>",
+      "css": ".ds-tabs-list { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; border: 1px solid var(--border, #dce2ec); background: var(--surface-subtle, #eef2f7); color: var(--text-muted, #475569); } .ds-tab-trigger { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-muted, #475569); font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: color 150ms ease, background-color 150ms ease; } .ds-tab-trigger:hover { color: var(--text, #0f172a); } .ds-tab-trigger.ds-tab-active { background: var(--surface, #ffffff); color: var(--text, #0f172a); border-color: var(--border, #dce2ec); } .ds-tab-trigger:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Telemetry Badges & Dataset Chips",
+      "kind": "chip",
+      "refersTo": "badge-brand",
+      "description": "6px semantic status/diff badges paired with 7px tactile toggle chips for dataset and token-position filtering.",
+      "html": "<div class=\"ds-badge-group\"><span class=\"ds-badge ds-badge-brand\"><span>quant: bf16</span><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path><path d=\"m12 5 7 7-7 7\"></path></svg><span>fp8</span></span><span class=\"ds-badge ds-badge-success\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>PASS</span></span><button type=\"button\" aria-pressed=\"true\" class=\"ds-filter-chip ds-filter-chip-active\">gsm8k</button><button type=\"button\" aria-pressed=\"false\" class=\"ds-filter-chip\">gpqa</button></div>",
+      "css": ".ds-badge-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; } .ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums slashed-zero; white-space: nowrap; } .ds-badge-brand { background: var(--brand-soft, rgb(3 105 161 / 0.10)); color: var(--brand, #0369a1); } .ds-badge-success { background: var(--emerald-soft, rgb(4 120 87 / 0.10)); color: var(--emerald, #047857); } .ds-filter-chip { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--control-border, #64748b); background: var(--control-bg, #ffffff); color: var(--text-sec, #334155); font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums slashed-zero; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; } .ds-filter-chip:hover { border-color: var(--control-border-hover, #334155); color: var(--text, #0f172a); } .ds-filter-chip-active { border-color: var(--brand, #0369a1); background: var(--brand-soft, rgb(3 105 161 / 0.10)); color: var(--brand, #0369a1); } .ds-filter-chip-active:hover { border-color: var(--brand, #0369a1); color: var(--brand, #0369a1); } .ds-filter-chip:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: 2px; }"
+    },
+    {
+      "name": "Graphite-Indigo Rail Navigation",
+      "kind": "nav",
+      "refersTo": "rail-nav-item-active",
+      "description": "Anchored #111622 left navigation rail item with 3px #38bdf8 active bar, 1.75px Lucide icon, and tabular count pill.",
+      "html": "<nav class=\"ds-rail\" aria-label=\"主工作区导航示例\"><button type=\"button\" aria-current=\"page\" class=\"ds-rail-item ds-rail-item-active\"><span class=\"ds-rail-bar\" aria-hidden=\"true\"></span><span class=\"ds-rail-label\"><svg class=\"ds-rail-icon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2\"></path></svg><span>实时监控</span></span><span class=\"ds-rail-count ds-rail-count-active\">4</span></button><button type=\"button\" class=\"ds-rail-item\"><span class=\"ds-rail-label\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"18\" cy=\"18\" r=\"3\"></circle><circle cx=\"6\" cy=\"6\" r=\"3\"></circle><path d=\"M13 6h3a2 2 0 0 1 2 2v7\"></path><path d=\"M11 18H8a2 2 0 0 1-2-2V9\"></path></svg><span>会话对比</span></span><span class=\"ds-rail-count\">12</span></button></nav>",
+      "css": ".ds-rail { display: flex; flex-direction: column; gap: 4px; width: 228px; padding: 10px; border-radius: 10px; background: var(--rail-bg, #111622); border: 1px solid var(--rail-border, #232d42); } .ds-rail-item { position: relative; display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 0; background: transparent; color: var(--rail-muted, #94a3b8); font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; } .ds-rail-item:hover { background: rgb(26 34 52 / 0.60); color: #ffffff; } .ds-rail-item-active { background: var(--rail-surface, #1a2234); color: #ffffff; } .ds-rail-item-active:hover { background: var(--rail-surface, #1a2234); } .ds-rail-item:focus-visible { outline: 2px solid var(--rail-accent, #38bdf8); outline-offset: 2px; } .ds-rail-bar { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--rail-accent, #38bdf8); } .ds-rail-label { display: inline-flex; align-items: center; gap: 10px; } .ds-rail-icon { color: var(--rail-accent, #38bdf8); } .ds-rail-count { padding: 2px 8px; border-radius: 9999px; background: rgb(255 255 255 / 0.08); color: var(--rail-muted, #94a3b8); font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-variant-numeric: tabular-nums slashed-zero; } .ds-rail-count-active { background: rgb(56 189 248 / 0.20); color: var(--rail-accent, #38bdf8); }"
+    },
+    {
+      "name": "Fleet Telemetry Ledger Plane",
+      "kind": "card",
+      "refersTo": "work-plane",
+      "description": "Signature 12px flat hairline-divided telemetry matrix row with inline threshold-colored KV-cache bar and tabular tok/s readout.",
+      "html": "<div class=\"ds-ledger-plane\"><div class=\"ds-ledger-head\"><span class=\"ds-ledger-title\">在线服务遥测矩阵 (2)</span><span class=\"ds-ledger-hint\">点击实例名称切换实时趋势曲线</span></div><table class=\"ds-ledger-table\"><thead><tr><th>实例与归档会话</th><th class=\"ds-num\">实时吞吐</th><th>KV Cache</th><th class=\"ds-num\">Hit %</th></tr></thead><tbody><tr class=\"ds-ledger-row\" tabindex=\"0\"><td><div class=\"ds-target-name\">sglang-tp8-fp8</div><div class=\"ds-target-url\">http://10.24.8.12:30000</div></td><td class=\"ds-num ds-tps\">4,820.5 tok/s</td><td><div class=\"ds-kv-cell\"><span class=\"ds-kv-track\"><span class=\"ds-kv-fill\" style=\"width: 62%;\"></span></span><span class=\"ds-kv-val\">62%</span></div></td><td class=\"ds-num\">78.4%</td></tr></tbody></table></div>",
+      "css": ".ds-ledger-plane { border-radius: 12px; border: 1px solid var(--border, #dce2ec); background: var(--surface, #ffffff); color: var(--text, #0f172a); overflow: hidden; font-family: \"Geist Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", sans-serif; } .ds-ledger-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border, #dce2ec); } .ds-ledger-title { font-size: 14px; font-weight: 700; } .ds-ledger-hint { font-size: 12px; color: var(--text-muted, #475569); } .ds-ledger-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; } .ds-ledger-table thead tr { background: var(--surface-subtle, #eef2f7); color: var(--text-muted, #475569); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border, #dce2ec); } .ds-ledger-table th { padding: 9px 12px; text-align: left; font-weight: 600; } .ds-ledger-table td { padding: 10px 12px; } .ds-ledger-table .ds-num { text-align: right; font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums slashed-zero; } .ds-ledger-row { cursor: pointer; transition: background-color 150ms ease; } .ds-ledger-row:hover { background: var(--surface-subtle, #eef2f7); } .ds-ledger-row:focus-visible { outline: 2px solid var(--brand, #0369a1); outline-offset: -2px; } .ds-target-name { font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 700; } .ds-target-url { margin-top: 2px; font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--text-muted, #475569); } .ds-tps { font-size: 13px; font-weight: 700; } .ds-kv-cell { display: inline-flex; align-items: center; gap: 8px; } .ds-kv-track { display: inline-block; width: 56px; height: 8px; border-radius: 9999px; background: var(--surface-subtle, #eef2f7); overflow: hidden; } .ds-kv-fill { display: block; height: 100%; border-radius: 9999px; background: var(--brand, #0369a1); } .ds-kv-val { font-family: \"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Precision Telemetry Bench",
+    "overview": "AI Infra Bench Studio is an operational metrology and verification workbench built for LLM inference engineers tuning GPU serving backends across air-gapped clusters. Its visual identity trades generic SaaS card grids and decorative chrome for calm, high-density instrumentation: a permanently dark Graphite-Indigo navigation rail (`#111622`) anchors the viewport while the main workspace lays out flat, unnested work planes (`#ffffff` in light mode, `#121826` in dark mode) partitioned by crisp `1px` structural hairlines (`#dce2ec` light, `#212c42` dark). Every font binary, vector icon, and chart primitive ships self-contained inside the single-file offline bundle so corporate SSH-tunneled sessions never degrade without external network access.\n\nBecause engineers pivot rapidly between dark terminal windows and bright office monitors, the system pairs dual-scheme `light-dark()` surfaces with high-visibility `#64748b` tactile control boundaries and tabular slashed-zero monospace strictly reserved for endpoints, launch parameters, and live telemetry numbers. Where the initial direction brief proposed `#0284c7` for light-mode accents and `#1f293d` for dark hairlines, the shipped build deepens the light operational accent to `#0369a1` to guarantee ≥4.5:1 white-label contrast on primary actions and calibrates dark structural hairlines to `#212c42` for cleaner plane separation. Nested cards, eyebrow kickers, Unicode glyph substitutes, and modal interruptions for non-destructive inspection are rejected system-wide; deep logs, advanced sweep knobs, and token-level logprob diffs slide out on demand in right-hand drawers.",
+    "keyCharacteristics": [
+      "**Anchored Graphite-Indigo Rail:** A fixed `228px` dark navigation rail (`#111622`) frames live SSE connectivity, workspace counts, and active job progress identically across light and dark themes.",
+      "**Flat Hairline-Divided Planes:** Unnested `12px`-radius work planes replace box-inside-box layouts with `1px` structural hairlines (`#dce2ec` / `#212c42`) across forms, multi-column A/B strips, and paired telemetry charts.",
+      "**Tactile High-Contrast Controls:** Inputs, selects, switches, and secondary buttons enforce a dedicated `#64748b` stroke (≥3.9:1 boundary contrast) rather than fading into passive divider lines.",
+      "**Disciplined Metrology Typography:** Variable geometric UI sans (`Geist Variable`) handles bilingual labels and prose while `Geist Mono Variable` (`tabular-nums slashed-zero`) locks numeric columns, endpoints, and logprob deltas against horizontal jitter.",
+      "**Offline-Complete Craft:** Self-hosted variable WOFF2 fonts and uniform `1.75px`-stroke Lucide SVG icons deliver full visual fidelity on air-gapped GPU clusters."
+    ],
+    "rules": [
+      {
+        "name": "The Anchored Rail Rule",
+        "body": "The left navigation rail remains locked to Graphite-Indigo (`#111622`) with `#232d42` borders and `#38bdf8` active accents in both light and dark modes, preserving a constant instrument-frame anchor while main work planes adapt to ambient lighting.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tactile Boundary Rule",
+        "body": "Interactive controls (`Input`, `SelectTrigger`, `Switch`, and secondary `Button`) must use Tactile Control Stroke (`#64748b`) rather than passive structural hairlines (`#dce2ec` or `#212c42`), sharpening to `#334155` (light) or `#94a3b8` (dark) on hover so hit targets remain unmistakable.",
+        "section": "colors"
+      },
+      {
+        "name": "The Calibrated Signal Rule",
+        "body": "Emerald, Amber, and Crimson appear strictly to communicate live connection mode, KV-cache saturation (`>68%` Amber, `>85%` Crimson), correctness verdicts, A/B regressions, or destructive actions—never as decorative accents.",
+        "section": "colors"
+      },
+      {
+        "name": "The Strict Monospace Mandate Rule",
+        "body": "`Geist Mono Variable` with `tabular-nums slashed-zero` is reserved exclusively for URLs, CLI commands, parameter keys, job/session IDs, and numerical measurements—never applied to prose, headings, or navigation labels as a \"technical\" costume.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Ledger Rule",
+        "body": "Every data table (`tabular-nums`) and numeric readout (`tabular-mono`) locks character advance widths so 1-second SSE telemetry ticks never shift adjacent columns horizontally.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Work Plane Rule",
+        "body": "Resting work planes, telemetry tables, A/B metric strips, and chart containers carry zero drop shadow (`box-shadow: none`); shadows appear only on portaled overlays (`SelectContent`, `SheetContent`, and `ConfirmDialog`).",
+        "section": "elevation"
+      },
+      {
+        "name": "The Single Elevation Declaration Rule",
+        "body": "Resting containers declare their boundary once via a `1px` structural hairline (`#dce2ec` / `#212c42`) and surface-to-ground contrast—never pairing a card border with an ambient drop shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do partition multi-part sections (registration bars, 4-column A/B strips, paired charts, and multi-zone forms) inside a single `12px`-radius `--surface` plane using `1px` `--border` hairlines (`divide-x` / `divide-y`).",
+      "Do apply `Geist Mono Variable` (`tabular-nums slashed-zero`) to every URL, CLI flag, model/session slug, concurrency list, throughput figure, and logprob diff so live SSE updates never shift layout width.",
+      "Do enforce the `#64748b` tactile border token (`--control-border`) on all text inputs, select triggers, switches, and secondary buttons, paired with a `2px` `--brand` `:focus-visible` outline at `2px` offset.",
+      "Do route secondary workflows—live job terminal logs, advanced `aib bench` sweep parameters, CLI onboarding snippets, and per-case reasoning/logits diffs—into right-hand `Sheet` drawers, reserving centered `ConfirmDialog` modals strictly for destructive actions.",
+      "Do theme native browser surfaces (`color-scheme`, `accent-color`, `caret-color`, `::selection`, and `scrollbar-color`) from the semantic palette and bundle all fonts and `1.75px` Lucide icons locally for 100% offline operation."
+    ],
+    "donts": [
+      "Don't nest bordered or shadowed cards inside another card or work plane; use `1px` structural hairlines or `--surface-subtle` header/footer bands instead.",
+      "Don't place uppercase eyebrow or kicker labels above section or panel headings—let the `14px`–`16px` bold heading and `12px` muted description carry hierarchy directly, keeping uppercase `11px` labels strictly inside table `<thead>` columns.",
+      "Don't apply drop shadows to resting tables, metric strips, or form containers, and never combine a soft ambient shadow with a card border on resting surfaces.",
+      "Don't use Unicode symbols or emoji as icon substitutes, or apply monospace to ordinary prose, button labels, or navigation items.",
+      "Don't use pill (`9999px`) corners on buttons, inputs, or cards; keep interactive controls at `7px`–`8px` radius and reserve pills for switches, progress bars, count badges, and status dots."
+    ]
+  }
+}

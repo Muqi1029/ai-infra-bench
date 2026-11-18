@@ -441,6 +441,7 @@ async def run_benchmark(args: Namespace) -> None:
                             )
 
                     # formal run
+                    t_start_unix = time.time()
                     with tqdm(
                         total=len(formal_requests), desc="Formally Running"
                     ) as pbar:
@@ -459,6 +460,7 @@ async def run_benchmark(args: Namespace) -> None:
                             **extra_kwargs,
                         )
                         duration_s = time.perf_counter() - benchmark_start_time
+                    t_end_unix = time.time()
 
                 handle_query_kwargs: Dict[str, Any] = {}
                 if "peak_concurrency" in run_stats:
@@ -478,6 +480,37 @@ async def run_benchmark(args: Namespace) -> None:
                     goodput_thresholds=goodput_thresholds,
                     **handle_query_kwargs,
                 )
+                if report_to := getattr(args, "report_to", None):
+                    from ai_infra_bench.monitor.telemetry import report_to_platform
+                    from ai_infra_bench.performance.struct import _OutputStats
+
+                    yaml_rec = _OutputStats(
+                        outputs,
+                        duration_s,
+                        max_concurrency,
+                        request_rate,
+                        label=args.label or "",
+                        ts=time.strftime("%Y-%m-%d %H:%M:%S"),
+                        goodput_thresholds=goodput_thresholds,
+                        peak_concurrency=run_stats.get("peak_concurrency"),
+                    ).build_yaml_record()
+                    workload_desc = (
+                        f"{getattr(args, 'dataset', None) or 'custom'}"
+                        f"({getattr(args, 'input_len', '')}/{getattr(args, 'output_len', '')})"
+                    )
+                    report_to_platform(
+                        report_to,
+                        {
+                            "kind": "bench",
+                            "subcommand": "bench",
+                            "base_url": args.base_url,
+                            "model": args.model,
+                            "workload": workload_desc,
+                            "t_start": t_start_unix,
+                            "t_end": t_end_unix,
+                            "record": yaml_rec,
+                        },
+                    )
 
 
 def main(args=None):

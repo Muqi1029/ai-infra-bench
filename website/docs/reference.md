@@ -14,7 +14,7 @@
 | `eval-dataset` | GSM8K / GPQA / AIME25 / HLE / DeepSWE 评测 |
 | `eval-logits` | 多端点首 token Top-K logprobs 对齐校验 |
 | `eval-hidden-states` | 多端点隐藏状态对齐校验 |
-| `monitor` | 跨集群 Prometheus + Grafana 监控中心与 `--server ... -- <cmd>` 零侵入自动注册 |
+| `monitor` | 跨集群实时监控、自动注册中心与持久化压测/正确性对比工作台（别名 `studio`、`platform`） |
 | `check-device` | 零第三方依赖检测 GPU 型号、显存与驱动 |
 | `check-weight` | 统计 safetensors / `.bin` 权重参数量 |
 | `token` | Hugging Face tokenizer 编码/解码（别名 `tokenize`） |
