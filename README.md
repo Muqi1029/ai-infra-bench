@@ -55,7 +55,7 @@ aib eval-logits --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 --mode
 | `plot-metrics` | Export interactive Plotly HTML comparison charts |
 | `eval-dataset` | Accuracy on `gsm8k`, `gpqa`, `aime25`, `hle`, `constrained_decoding`, `deepswe` |
 | `eval-logits` / `eval-hidden-states` | Multi-endpoint Top-K logprobs and hidden-states numerical diff |
-| `monitor` | Local Prometheus + Grafana live serving dashboard |
+| `monitor` | Cross-cluster Prometheus + Grafana server with HTTP auto-registration & NAT push |
 | `check-device` / `check-weight` | Stdlib-only GPU hardware check and safetensors parameter count |
 | `token` / `profile-sgl` / `reply` | Tokenizer encode/decode, SGLang profiling, and token-ID replay export |
 

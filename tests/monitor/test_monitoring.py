@@ -26,6 +26,12 @@ from ai_infra_bench.monitor.process import (
     ensure_port_available,
     prometheus_command,
 )
+from ai_infra_bench.monitor.registry_server import (
+    RegistryServer,
+    _opener_for_url,
+    push_metrics_once,
+    run_push_agent,
+)
 from ai_infra_bench.monitor.shell import (
     MonitorShell,
     ReloadError,
@@ -364,3 +370,233 @@ def test_monitor_shell_cmdloop_processes_input_stream(tmp_path, capsys):
     assert len(reloads) == 2
     assert len(checks) == 4
     assert [target.label for target in registry.targets] == ["server-1"]
+
+
+def test_monitor_supports_empty_initial_targets_and_custom_dashboard(tmp_path):
+    custom_dash = tmp_path / "my-cluster.json"
+    custom_dash.write_text(
+        json.dumps({"uid": "custom-1", "title": "My Cluster", "panels": []}),
+        encoding="utf-8",
+    )
+    runtime_dir = tmp_path / "runtime"
+
+    result = main(
+        [
+            "--runtime-dir",
+            str(runtime_dir),
+            "--dashboard",
+            str(custom_dash),
+            "--dry-run",
+        ]
+    )
+    assert result == 0
+
+    sd_targets = json.loads((runtime_dir / "targets.json").read_text(encoding="utf-8"))
+    assert sd_targets == []
+
+    prom_cfg = json.loads((runtime_dir / "prometheus.yml").read_text(encoding="utf-8"))
+    scrape = prom_cfg["scrape_configs"][0]
+    assert scrape["job_name"] == "sglang"
+    assert scrape["file_sd_configs"][0]["files"] == [str(runtime_dir / "targets.json")]
+
+    grafana_ini = (runtime_dir / "grafana" / "grafana.ini").read_text(encoding="utf-8")
+    assert "org_role = Admin" in grafana_ini
+    assert (
+        f"default_home_dashboard_path = {runtime_dir / 'grafana' / 'dashboards' / 'my-cluster.json'}"
+        in grafana_ini
+    )
+
+    provider = json.loads(
+        (
+            runtime_dir / "grafana" / "provisioning" / "dashboards" / "dashboard.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert provider["providers"][0]["allowUiUpdates"] is True
+    assert provider["providers"][0]["disableDeletion"] is False
+
+    default_dash_path = runtime_dir / "grafana" / "dashboards" / "sglang-dashboard.json"
+    builtin_dash = json.loads(default_dash_path.read_text(encoding="utf-8"))
+    var_names = [v["name"] for v in builtin_dash["templating"]["list"]]
+    assert {"aib_target", "cluster", "model", "instance"} <= set(var_names)
+
+    # User edits on disk must survive restarts without being overwritten.
+    default_dash_path.write_text('{"uid":"edited"}', encoding="utf-8")
+    assert main(["--runtime-dir", str(runtime_dir), "--dry-run"]) == 0
+    assert json.loads(default_dash_path.read_text(encoding="utf-8")) == {
+        "uid": "edited"
+    }
+
+
+def test_registry_server_pull_registration_and_deregistration(tmp_path):
+    layout = create_runtime_layout(tmp_path / "runtime")
+    write_runtime_config(layout, [], "127.0.0.1", 19090, 13000, "5s")
+    registry = TargetRegistry(
+        [],
+        layout.prometheus_config,
+        "5s",
+        "/metrics",
+        "http://127.0.0.1:19090",
+        sd_file_path=layout.targets_sd_path,
+    )
+    server = RegistryServer(registry, "127.0.0.1", 0)
+    server.start()
+    registry_url = f"http://127.0.0.1:{server.port}"
+    opener = _opener_for_url(registry_url)
+
+    try:
+        assert (
+            main(
+                [
+                    "--register",
+                    registry_url,
+                    "--base-urls",
+                    "http://10.12.8.5:30000",
+                    "--labels",
+                    "cluster=bj-h800",
+                    "model=qwen3",
+                ]
+            )
+            == 0
+        )
+
+        sd_entries = json.loads(layout.targets_sd_path.read_text(encoding="utf-8"))
+        assert len(sd_entries) == 1
+        assert sd_entries[0]["targets"] == ["10.12.8.5:30000"]
+        assert sd_entries[0]["labels"]["cluster"] == "bj-h800"
+        assert sd_entries[0]["labels"]["model"] == "qwen3"
+        assert sd_entries[0]["labels"]["aib_target"] == "server-0"
+        assert sd_entries[0]["labels"]["__meta_aib_scheme"] == "http"
+        assert sd_entries[0]["labels"]["__meta_aib_metrics_path"] == "/metrics"
+
+        with opener.open(f"{registry_url}/api/targets", timeout=3) as resp:
+            listed = json.loads(resp.read().decode("utf-8"))
+        assert listed["targets"][0]["mode"] == "pull"
+        assert listed["targets"][0]["labels"] == {
+            "cluster": "bj-h800",
+            "model": "qwen3",
+        }
+
+        import urllib.request
+
+        dereg_req = urllib.request.Request(
+            f"{registry_url}/api/deregister",
+            data=b'{"target":"server-0"}',
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with opener.open(dereg_req, timeout=3) as resp:
+            dereg = json.loads(resp.read().decode("utf-8"))
+        assert dereg["removed"] == ["server-0"]
+        assert json.loads(layout.targets_sd_path.read_text(encoding="utf-8")) == []
+    finally:
+        server.stop()
+
+
+def test_registry_server_nat_push_relay_and_ttl_expiry(tmp_path):
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    metrics_body = (
+        "# TYPE vllm:num_requests_running gauge\n" "vllm:num_requests_running 7\n"
+    )
+
+    class PodMetricsHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            encoded = metrics_body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, *_args):
+            return None
+
+    pod_server = ThreadingHTTPServer(("127.0.0.1", 0), PodMetricsHandler)
+    pod_thread = threading.Thread(target=pod_server.serve_forever, daemon=True)
+    pod_thread.start()
+
+    layout = create_runtime_layout(tmp_path / "runtime")
+    write_runtime_config(layout, [], "127.0.0.1", 19090, 13000, "5s")
+    registry = TargetRegistry(
+        [],
+        layout.prometheus_config,
+        "5s",
+        "/metrics",
+        "http://127.0.0.1:19090",
+        sd_file_path=layout.targets_sd_path,
+        push_ttl_s=1.0,
+    )
+    server = RegistryServer(registry, "127.0.0.1", 0)
+    server.start()
+    registry_url = f"http://127.0.0.1:{server.port}"
+    opener = _opener_for_url(registry_url)
+
+    try:
+        # 1) Test raw curl-style text push from a NAT-isolated pod
+        raw_push = urllib.request.Request(
+            f"{registry_url}/api/push?target=nat-pod-1&cluster=sh-nat&model=deepseek",
+            data=metrics_body.encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "text/plain"},
+        )
+        with opener.open(raw_push, timeout=3) as resp:
+            assert resp.status == 200
+
+        sd_entries = json.loads(layout.targets_sd_path.read_text(encoding="utf-8"))
+        assert len(sd_entries) == 1
+        assert sd_entries[0]["targets"] == [f"127.0.0.1:{server.port}"]
+        assert (
+            sd_entries[0]["labels"]["__meta_aib_metrics_path"]
+            == "/pushed/nat-pod-1/metrics"
+        )
+        assert sd_entries[0]["labels"]["cluster"] == "sh-nat"
+        assert sd_entries[0]["labels"]["model"] == "deepseek"
+
+        with opener.open(f"{registry_url}/pushed/nat-pod-1/metrics", timeout=3) as resp:
+            assert resp.read().decode("utf-8") == metrics_body
+
+        # Wait for TTL expiry -> auto-prunes stale NAT pod
+        time.sleep(1.15)
+        with pytest.raises(urllib.error.HTTPError) as http_err:
+            opener.open(f"{registry_url}/pushed/nat-pod-1/metrics", timeout=3)
+        assert http_err.value.code == 404
+        assert json.loads(layout.targets_sd_path.read_text(encoding="utf-8")) == []
+
+        # 2) Test run_push_agent lifecycle (scrape local pod -> push -> auto deregister on stop)
+        local_targets = parse_targets(
+            [f"http://127.0.0.1:{pod_server.server_port}"],
+            labels=(("cluster", "gz-nat"),),
+        )
+        pushed_id = push_metrics_once(
+            registry_url, local_targets[0], target_id="agent-pod"
+        )
+        assert pushed_id == "agent-pod"
+        with opener.open(f"{registry_url}/pushed/agent-pod/metrics", timeout=3) as resp:
+            assert "vllm:num_requests_running 7" in resp.read().decode("utf-8")
+
+        stop_event = threading.Event()
+        agent_thread = threading.Thread(
+            target=run_push_agent,
+            args=(registry_url, local_targets, 0.2),
+            kwargs={"stop_event": stop_event},
+            daemon=True,
+        )
+        agent_thread.start()
+        time.sleep(0.25)
+        stop_event.set()
+        agent_thread.join(timeout=3)
+
+        # Agent deregistered its pushed target on clean stop; only earlier manual agent-pod remains or expires
+        active_labels = {t.label for t in registry.snapshot()}
+        assert not any(
+            lbl.startswith(f"{local_targets[0].address}") for lbl in active_labels
+        )
+    finally:
+        server.stop()
+        pod_server.shutdown()
+        pod_server.server_close()
+        pod_thread.join(timeout=5)

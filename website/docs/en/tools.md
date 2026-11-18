@@ -37,21 +37,41 @@ aib req \
 - Streams by default; pass `--disable-stream` for single JSON, `--raw` for raw SSE frames, or `--no-print` for metrics only. Payloads with `prompt` and no `messages` route to `/v1/completions`.
 - Process exit code reflects request health: `0` on a complete valid response, `1` on connection/HTTP/stream/abort failure (suitable for health probes), and `2` on invalid CLI arguments or input files.
 
-## Local Monitoring (`aib monitor`)
+## Cross-Cluster Monitoring (`aib monitor`)
 
-Start Prometheus (`:9090`) and Grafana (`:3000` with SGLang dashboard) locally and edit scrape targets interactively:
+Launches Prometheus (`:9090`), Grafana (`:3000`, unlocked with Admin UI editing & persistence), and an HTTP Registry/Relay (`:9091`) for automatic Pod registration and NAT-isolated metric pushes:
 
-```bash
-# Requires --enable-metrics on your serving instances
-aib monitor --base-urls http://127.0.0.1:30000 --open
+::: code-group
+
+```bash [1. Start Monitor Server]
+# Zero initial --base-urls required; auto-enters headless mode under non-TTY daemons
+aib monitor --listen-address 0.0.0.0 --allow-remote
 ```
+
+```bash [2. Auto-Register Pod (Pull)]
+# Pod startup hook via aib or zero-dependency curl (hot-reloaded via Prometheus file_sd)
+aib monitor --register http://<monitor-ip>:9091 \
+  --base-urls http://10.12.8.5:30000 --labels cluster=bj model=qwen3
+
+curl -X POST http://<monitor-ip>:9091/api/register \
+  -d '{"url":"http://10.12.8.5:30000","labels":{"cluster":"bj","model":"qwen3"}}'
+```
+
+```bash [3. NAT Cluster Push]
+# When central Prometheus cannot dial Pod IPs, push local /metrics periodically
+aib monitor --push-to http://<monitor-ip>:9091 \
+  --base-urls http://127.0.0.1:30000 --labels cluster=sh-nat model=qwen3
+```
+
+:::
 
 | Option | Description |
 | --- | --- |
-| `--runtime auto\|system\|download` | Use system binaries or download checksum-verified Prometheus / Grafana |
-| `--no-grafana` | Run Prometheus only |
-| `--scrape-interval 5s` | Scrape period (default `5s`) |
-| `--dry-run` | Write configs without launching daemons |
+| `--registry-port 9091` | HTTP port serving `/api/register`, `/api/deregister`, and `/api/push` |
+| `--labels KEY=VALUE ...` | Attach labels (`cluster`, `model`, etc.) mapped to built-in Grafana filters |
+| `--dashboard PATH` | Provision a custom Grafana `.json` file or folder; UI edits persist across restarts |
+| `--runtime auto\|system\|download` | Use system binaries or download SHA256-verified Prometheus / Grafana |
+| `--headless` / `--no-grafana` | Daemon mode without REPL (auto-enabled on non-TTY) / Prometheus + Registry only |
 
 ## Hardware, Weights & Utilities
 

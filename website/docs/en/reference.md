@@ -14,7 +14,7 @@ Run `aib <subcommand> --help` for full live flags; all `--help` handlers load wi
 | `eval-dataset` | Accuracy evaluation (`gsm8k`, `gpqa`, `aime25`, `hle`, `constrained_decoding`, `deepswe`) |
 | `eval-logits` | Multi-endpoint Top-K logprobs numerical diff |
 | `eval-hidden-states` | Multi-endpoint hidden states comparison |
-| `monitor` | Local Prometheus + Grafana stack |
+| `monitor` | Cross-cluster Prometheus + Grafana server with auto-registration & NAT push |
 | `check-device` | Stdlib-only NVIDIA GPU & VRAM inspection |
 | `check-weight` | Lightweight safetensors / `.bin` parameter audit |
 | `token` | Hugging Face tokenizer encode/decode (alias `tokenize`) |
