@@ -56,9 +56,9 @@ aib bench \
   --input-len 1024 --output-len 256 \
   --num-requests 100 --max-concurrency 1 8 32 \
   --goodput ttft:500 tpot:50 \
-  --metric-path metrics.jsonl
+  --metric-path metrics.yaml
 
-aib plot-metrics metrics.jsonl -o metrics.html
+aib plot-metrics metrics.yaml -o metrics.html
 ```
 
 ```bash [Evaluate]

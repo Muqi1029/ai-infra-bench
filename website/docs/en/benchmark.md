@@ -8,7 +8,7 @@ Pick synthetic tokens, built-in datasets, or custom JSON/JSONL replays:
 
 ::: code-group
 
-```bash [Random Tokens]
+```bash [Closed-Loop Concurrency]
 aib bench \
   --base-url http://127.0.0.1:30000 \
   --model your-model \
@@ -18,7 +18,21 @@ aib bench \
   --max-concurrency 1 8 32 \
   --repeat 2 \
   --goodput ttft:500 tpot:50 \
-  --metric-path metrics.jsonl
+  --metric-path metrics.yaml
+```
+
+```bash [Open-Loop QPS]
+# Fixed target request rate (unlimited concurrency by default; --burstiness 0 for constant 1/qps pacing)
+aib bench \
+  --base-url http://127.0.0.1:30000 \
+  --model your-model \
+  --dataset random \
+  --input-len 1024 --output-len 256 \
+  --num-requests 200 \
+  --qps 2 4 8 16 \
+  --burstiness 1.0 \
+  --goodput ttft:500 tpot:50 \
+  --metric-path metrics.yaml
 ```
 
 ```bash [ShareGPT / GPQA]
@@ -43,7 +57,9 @@ cat request.json | aib bench --payload-path - --num-requests 50 --disable-flush-
 
 | Key Flag | Purpose |
 | --- | --- |
-| `--max-concurrency 1 8 32` | Sweep multiple concurrency levels sequentially in one run |
+| `--max-concurrency 1 8 32` | Closed-loop sweep across multiple concurrency caps (defaults to `32` unless `--qps` is set) |
+| `--qps 2 4 8 16` | Open-loop target arrival rates in req/s (unlimited concurrency by default; tracks `peak_concurrency`) |
+| `--burstiness 1.0` | Arrival distribution: `1.0` Poisson exponential, `0` constant `1/qps` interval, `>0` Gamma |
 | `--goodput ttft:500 tpot:50` | Report request rate & percentage meeting all millisecond thresholds (`ttft`, `tpot`, `itl`, `e2el`) |
 | `--cache-ratio 0.5` | Share 50% prefix tokens across requests and warm up the prefix automatically |
 | `--random-range-ratio 0.5` | Sample lengths uniformly within `[0.5 * target, target]` (default `1.0`) |
@@ -66,12 +82,12 @@ aib session-bench 'sessions/**/*.jsonl' \
   --max-concurrency 16 \
   --num-warmup-sessions 0 \
   --disable-flush-cache \
-  --metric-path session-metrics.jsonl
+  --metric-path session-metrics.yaml
 ```
 
 ## SLO Binary Search (`aib slo`) {#slo}
 
-Binary-search the highest `max_concurrency` or `request_rate` satisfying all declarative constraints:
+Binary-search the highest `max_concurrency` or `qps` (`request_rate`) satisfying all declarative constraints:
 
 ::: code-group
 
@@ -89,7 +105,7 @@ benchmark:
   max_concurrency: 32
   request_rate: inf
 search:
-  parameter: max_concurrency   # or request_rate
+  parameter: max_concurrency   # or qps / request_rate (defaults to unlimited concurrency if omitted)
   min: 1
   max: 64
 conditions:
@@ -111,10 +127,12 @@ aib slo slo.yaml -o slo-result.yaml
 
 ## Interactive Plots (`aib plot-metrics`)
 
-Append labeled runs into one JSONL file to compare latency and throughput curves:
+Benchmarks dump human-readable multi-document YAML by default (`aib-metric.yaml`, while keeping `.json`/`.jsonl` compatibility). Merge one or more YAML files, filter runs via `--labels` (`-l`), and export a standalone HTML report featuring **Pareto Frontier curves**, **Concurrency / QPS X-axis toggle**, **Mean / P50 / P95 / P99 tabs**, and **interactive label chips**:
 
 ```bash
-aib bench --dataset random --num-requests 100 --metric-path metrics.jsonl --label baseline
-aib bench --dataset random --num-requests 100 --metric-path metrics.jsonl --label fp8
-aib plot-metrics metrics.jsonl -o metrics.html
+aib bench --dataset random --qps 2 4 8 16 --metric-path metrics.yaml --label baseline
+aib bench --dataset random --qps 2 4 8 16 --metric-path metrics.yaml --label fp8
+
+# Pass one or more YAML files and optionally select labels via -l / --labels
+aib plot-metrics metrics.yaml --labels baseline fp8 -o metrics.html
 ```

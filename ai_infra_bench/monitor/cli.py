@@ -104,11 +104,19 @@ def _sigterm_interrupt() -> Iterator[None]:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    wrapped_command: List[str] = []
+    if "--" in raw_argv:
+        sep = raw_argv.index("--")
+        wrapped_command = raw_argv[sep + 1 :]
+        raw_argv = raw_argv[:sep]
+
     parser = argparse.ArgumentParser(
         prog="aib monitor",
+        usage="aib monitor [options] [-- <service_command> ...]",
         description=(
-            "Run Prometheus + Grafana with cross-cluster HTTP target registration "
-            "and NAT metrics push support"
+            "Run Prometheus + Grafana with cross-cluster HTTP target registration, "
+            "NAT metrics push, or wrap an inference command to auto-register on startup"
         ),
     )
     parser.add_argument(
@@ -123,7 +131,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         nargs="+",
         default=[],
         metavar="KEY=VALUE",
-        help="Labels attached to --base-urls targets (e.g. cluster=bj model=qwen3)",
+        help="Labels attached to targets (e.g. cluster=bj model=qwen3; also reads $AIB_MONITOR_LABELS)",
+    )
+    parser.add_argument(
+        "--server",
+        default=os.environ.get("AIB_MONITOR_URL"),
+        metavar="MONITOR_URL",
+        help="Central aib monitor registry URL when wrapping '-- <command>' (default: $AIB_MONITOR_URL)",
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -193,7 +207,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Generate configuration without resolving or starting binaries",
     )
-    return parser.parse_args(argv)
+    parsed = parser.parse_args(raw_argv)
+    parsed.command = wrapped_command
+    return parsed
 
 
 def _probe_target(
@@ -318,7 +334,34 @@ def _run_push_mode(
 
 
 def run(args: argparse.Namespace) -> int:
-    labels = parse_labels(args.labels)
+    env_label_raw = os.environ.get("AIB_MONITOR_LABELS", "").strip()
+    env_labels = dict(parse_labels([env_label_raw] if env_label_raw else None))
+    cli_labels = dict(parse_labels(args.labels))
+    labels = parse_labels({**env_labels, **cli_labels})
+
+    if getattr(args, "command", None):
+        monitor_url = (
+            args.server
+            or args.register
+            or args.push_to
+            or os.environ.get("AIB_MONITOR_URL", "").strip()
+        )
+        if not monitor_url:
+            raise ConfigurationError(
+                "wrapping a service command with '--' requires --server MONITOR_URL "
+                "or $AIB_MONITOR_URL"
+            )
+        from ai_infra_bench.monitor.launcher import run_wrapped_service
+
+        return run_wrapped_service(
+            args.command,
+            monitor_url,
+            base_urls=args.base_urls,
+            labels=labels,
+            metrics_path=args.metric_path,
+            scrape_interval=args.scrape_interval,
+        )
+
     if args.register:
         return _run_register_mode(args, labels)
     if args.push_to:

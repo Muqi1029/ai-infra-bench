@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import random
 from argparse import ArgumentParser, Namespace
 from dataclasses import asdict
@@ -103,7 +104,10 @@ def add_output_args(
         "--metric-path",
         type=str,
         default=default_metric_path,
-        help="Optional path to dump the printed metric tables. JSON for write, JSONL for append",
+        help=(
+            "Optional path to save benchmark metrics "
+            "(.yaml/.yml appends structured YAML; .json overwrites; .jsonl appends)"
+        ),
     )
     parser.add_argument(
         "--label", help="Label used to describe this benchmark, stored in metric files"
@@ -118,9 +122,10 @@ def add_output_args(
 
 def validate_output_args(args: Namespace) -> None:
     if (metric_path := getattr(args, "metric_path", None)) and not any(
-        metric_path.lower().endswith(suffix) for suffix in (".json", ".jsonl")
+        metric_path.lower().endswith(suffix)
+        for suffix in (".yaml", ".yml", ".json", ".jsonl")
     ):
-        raise ValueError("--metric-path must end with .json or .jsonl")
+        raise ValueError("--metric-path must end with .yaml, .yml, .json or .jsonl")
 
     if getattr(args, "dump_finish_reason_length", False) and not args.dump_path:
         args.dump_path = "aib-dump.jsonl"
@@ -142,7 +147,7 @@ def validate_output_args(args: Namespace) -> None:
 def parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser(prog="aib bench", description="Benchmark")
     add_common_args(parser)
-    add_output_args(parser, default_metric_path="aib-metric.jsonl")
+    add_output_args(parser, default_metric_path="aib-metric.yaml")
 
     parser.add_argument(
         "--num-requests",
@@ -165,13 +170,26 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
 
     parser.add_argument(
         "--max-concurrency",
-        default=[32],
+        default=None,
         type=int,
         nargs="+",
-        help="The max concurrency",
+        help="Max concurrent requests (default: 32 in closed-loop; unlimited in --qps mode)",
     )
     parser.add_argument(
-        "--request-rate", default=float("inf"), type=float, help="Request rate"
+        "--qps",
+        default=None,
+        type=float,
+        nargs="+",
+        help="Open-loop target queries per second (one or more QPS rates; unlimited concurrency unless --max-concurrency is set)",
+    )
+    parser.add_argument(
+        "--request-rate", default=float("inf"), type=float, help="Request rate (req/s)"
+    )
+    parser.add_argument(
+        "--burstiness",
+        default=1.0,
+        type=float,
+        help="Arrival burstiness for --qps / --request-rate: 1.0=Poisson (default), 0=constant interval (1/qps), >0=Gamma",
     )
     parser.add_argument(
         "--request-timeout",
@@ -265,6 +283,8 @@ def parse_args(args: Sequence[str] | None = None) -> Namespace:
     )
 
     parsed = parser.parse_args(args)
+    if parsed.max_concurrency is None:
+        parsed.max_concurrency = [None] if parsed.qps is not None else [32]
     parsed.payload_regex_path = parsed.payload_path
     return parsed
 
@@ -284,13 +304,31 @@ def validate_args(args: Namespace) -> None:
         args.payload_path = payload_path
         args.payload_regex_path = payload_path
 
+    qps = getattr(args, "qps", None)
+    if qps is not None:
+        qps_list = list(qps) if isinstance(qps, (list, tuple)) else [qps]
+        if not qps_list or any(
+            rate <= 0 or math.isinf(rate) or math.isnan(rate) for rate in qps_list
+        ):
+            raise ValueError("--qps values must be finite numbers > 0")
+        if getattr(args, "request_rate", float("inf")) != float("inf"):
+            raise ValueError("cannot specify both --qps and --request-rate")
+        args.qps = [float(rate) for rate in qps_list]
+
+    burstiness = getattr(args, "burstiness", 1.0)
+    if burstiness < 0 or math.isinf(burstiness) or math.isnan(burstiness):
+        raise ValueError("--burstiness must be a finite number >= 0")
+
+    raw_mc = getattr(args, "max_concurrency", None)
+    if raw_mc is None and not isinstance(raw_mc, (list, tuple)):
+        args.max_concurrency = [None] if qps is not None else [32]
     max_concurrencies = (
         args.max_concurrency
         if isinstance(args.max_concurrency, (list, tuple))
         else [args.max_concurrency]
     )
     for max_concurrency in max_concurrencies:
-        if max_concurrency < 1:
+        if max_concurrency is not None and max_concurrency < 1:
             raise ValueError("--max-concurrency must be >= 1")
     if args.request_rate <= 0:
         raise ValueError("--request-rate must be > 0")
@@ -383,13 +421,58 @@ def maybe_dump_outputs(
                 f.write(json.dumps(messages, ensure_ascii=False) + "\n")
 
 
+def _dump_yaml_record(record: Mapping[str, Any], metric_path: str) -> None:
+    import yaml
+
+    class _CompactDumper(yaml.SafeDumper):
+        pass
+
+    def _represent_dict(dumper: yaml.SafeDumper, data: dict) -> Any:
+        keys = set(data.keys())
+        is_compact_leaf = (
+            bool(keys)
+            and (keys <= {"mean", "p50", "p95", "p99"} or keys == {"requests", "pct"})
+            and all(isinstance(v, (int, float)) for v in data.values())
+        )
+        return dumper.represent_mapping(
+            "tag:yaml.org,2002:map", data.items(), flow_style=is_compact_leaf
+        )
+
+    def _represent_list(dumper: yaml.SafeDumper, data: list) -> Any:
+        is_numeric_row = len(data) <= 16 and all(
+            isinstance(x, (int, float)) for x in data
+        )
+        return dumper.represent_sequence(
+            "tag:yaml.org,2002:seq", data, flow_style=is_numeric_row
+        )
+
+    _CompactDumper.add_representer(dict, _represent_dict)
+    _CompactDumper.add_representer(list, _represent_list)
+
+    rendered = yaml.dump(
+        dict(record),
+        Dumper=_CompactDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        width=120,
+    )
+    logger.info(f"Appending YAML metrics to {metric_path}")
+    with open(metric_path, "a", encoding="utf-8") as f:
+        f.write(f"---\n{rendered}")
+
+
 def maybe_dump_metric_tables(
-    metric_tables: Dict[str, List[Dict[str, Any]]], metric_path: str | None
+    metric_tables: Dict[str, Any],
+    metric_path: str | None,
+    *,
+    yaml_record: Mapping[str, Any] | None = None,
 ) -> None:
     if not metric_path:
         return
     normalized_path = metric_path.lower()
-    if normalized_path.endswith(".json"):
+    if normalized_path.endswith((".yaml", ".yml")):
+        _dump_yaml_record(yaml_record or metric_tables, metric_path)
+    elif normalized_path.endswith(".json"):
         logger.info(f"Writing metrics to {metric_path}")
         with open(metric_path, "w", encoding="utf-8") as f:
             json.dump(metric_tables, f, ensure_ascii=False, indent=2)
@@ -398,7 +481,7 @@ def maybe_dump_metric_tables(
         with open(metric_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(metric_tables, ensure_ascii=False) + "\n")
     else:
-        raise ValueError("--metric-path must end with .json or .jsonl")
+        raise ValueError("--metric-path must end with .yaml, .yml, .json or .jsonl")
 
 
 def _build_request_tables(stats: _OutputStats) -> List[MetricTable]:
@@ -478,7 +561,7 @@ def _build_benchmark_tables(stats: _OutputStats) -> List[MetricTable]:
 def handle_outputs(
     outputs: List[OutputMetric],
     duration_s: float,
-    max_concurrency: int,
+    max_concurrency: int | None,
     request_rate: float,
     dump_path: str | None = None,
     dump_content: str = "all",
@@ -487,6 +570,7 @@ def handle_outputs(
     label: str | None = None,
     benchmark_mode: bool = True,
     goodput_thresholds: Mapping[str, float] | None = None,
+    peak_concurrency: int | None = None,
 ) -> Dict:
     maybe_dump_outputs(outputs, dump_path, dump_content, dump_finish_reason_length)
 
@@ -497,6 +581,10 @@ def handle_outputs(
         "timestamp": now,
         "max_concurrency": max_concurrency,
     }
+    if request_rate != float("inf"):
+        metric_tables["request_rate"] = request_rate
+    if peak_concurrency is not None:
+        metric_tables["peak_concurrency"] = peak_concurrency
 
     def emit_metric_table(title: str, rows: List[List[Any]]) -> None:
         print_table(title, rows)
@@ -514,6 +602,7 @@ def handle_outputs(
         label=label,
         ts=now,
         goodput_thresholds=goodput_thresholds,
+        peak_concurrency=peak_concurrency,
     )
     if stats.num_failed_requests:
         logger.warning(f"Failed requests: {stats.num_failed_requests}")
@@ -522,20 +611,29 @@ def handle_outputs(
     for title, rows in table_builder(stats):
         emit_metric_table(title, rows)
 
-    maybe_dump_metric_tables(metric_tables, metric_path)
+    yaml_record = stats.build_yaml_record() if benchmark_mode else None
+    maybe_dump_metric_tables(metric_tables, metric_path, yaml_record=yaml_record)
 
     return metric_tables
 
 
-async def wait_for_request_interval(request_rate: float) -> None:
+async def wait_for_request_interval(
+    request_rate: float, burstiness: float = 1.0
+) -> None:
     if request_rate == float("inf"):
         return
 
-    interval = random.expovariate(request_rate)
+    if burstiness == 0.0:
+        interval = 1.0 / request_rate
+    elif burstiness == 1.0:
+        interval = random.expovariate(request_rate)
+    else:
+        theta = 1.0 / (request_rate * burstiness)
+        interval = random.gammavariate(burstiness, theta)
     await asyncio.sleep(interval)
 
 
-async def get_request(requests, request_rate):
+async def get_request(requests, request_rate, burstiness: float = 1.0):
     iterator = iter(requests)
     try:
         yield next(iterator)
@@ -543,7 +641,10 @@ async def get_request(requests, request_rate):
         return
 
     for req in iterator:
-        await wait_for_request_interval(request_rate)
+        if burstiness == 1.0:
+            await wait_for_request_interval(request_rate)
+        else:
+            await wait_for_request_interval(request_rate, burstiness)
         yield req
 
 

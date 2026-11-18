@@ -600,3 +600,185 @@ def test_registry_server_nat_push_relay_and_ttl_expiry(tmp_path):
         pod_server.shutdown()
         pod_server.server_close()
         pod_thread.join(timeout=5)
+
+
+def test_infer_command_metadata_extracts_port_and_model():
+    from ai_infra_bench.monitor.launcher import infer_command_metadata
+
+    port, path, labels = infer_command_metadata(
+        [
+            "python3",
+            "-m",
+            "sglang.launch_server",
+            "--model-path",
+            "/models/Qwen3-32B-FP8/",
+            "--port",
+            "30008",
+        ]
+    )
+    assert port == 30008
+    assert path == "/metrics"
+    assert labels == {"model": "Qwen3-32B-FP8"}
+
+    vllm_port, _, vllm_labels = infer_command_metadata(
+        ["vllm", "serve", "deepseek-ai/DeepSeek-R1", "--port=8010"]
+    )
+    assert vllm_port == 8010
+    assert vllm_labels == {"model": "DeepSeek-R1"}
+
+
+def test_wrapped_command_auto_registers_and_deregisters_on_exit(tmp_path):
+    from ai_infra_bench.cli import main as cli_entry
+
+    layout = create_runtime_layout(tmp_path / "runtime")
+    write_runtime_config(layout, [], "127.0.0.1", 19090, 13000, "5s")
+    registry = TargetRegistry(
+        [],
+        layout.prometheus_config,
+        "5s",
+        "/metrics",
+        "http://127.0.0.1:19090",
+        sd_file_path=layout.targets_sd_path,
+    )
+    reg_server = RegistryServer(registry, "127.0.0.1", 0)
+    reg_server.start()
+    registry_url = f"http://127.0.0.1:{reg_server.port}"
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        service_port = sock.getsockname()[1]
+
+    # Tiny mock inference server that serves /metrics, waits until registered in
+    # targets.json, and exits cleanly so we can verify automatic deregistration.
+    mock_service_code = f"""
+import json, pathlib, time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+sd_file = pathlib.Path({str(layout.targets_sd_path)!r})
+
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b"# TYPE sglang:num_running_reqs gauge\\nsglang:num_running_reqs 2\\n"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a):
+        pass
+
+srv = HTTPServer(("127.0.0.1", {service_port}), H)
+srv.timeout = 0.1
+deadline = time.monotonic() + 5.0
+saw_registered = False
+while time.monotonic() < deadline:
+    srv.handle_request()
+    entries = json.loads(sd_file.read_text(encoding="utf-8"))
+    if entries:
+        saw_registered = True
+        assert entries[0]["labels"]["cluster"] == "bj-auto"
+        assert entries[0]["labels"]["model"] == "Qwen3-8B"
+        break
+srv.server_close()
+raise SystemExit(0 if saw_registered else 3)
+"""
+
+    try:
+        rc = cli_entry(
+            [
+                "monitor",
+                "--server",
+                registry_url,
+                "--labels",
+                "cluster=bj-auto",
+                "--",
+                sys.executable,
+                "-c",
+                mock_service_code,
+                "--model-path",
+                "/weights/Qwen3-8B",
+                "--port",
+                str(service_port),
+            ]
+        )
+        assert rc == 0
+        # Upon process exit, wrapper automatically deregistered the target!
+        assert json.loads(layout.targets_sd_path.read_text(encoding="utf-8")) == []
+    finally:
+        reg_server.stop()
+
+
+def test_auto_register_falls_back_to_nat_push_when_pull_unreachable(tmp_path):
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from ai_infra_bench.monitor import auto_register
+
+    class LocalPodMetrics(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"vllm:gpu_cache_usage_perc 0.42\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    pod = ThreadingHTTPServer(("127.0.0.1", 0), LocalPodMetrics)
+    pod_thread = threading.Thread(target=pod.serve_forever, daemon=True)
+    pod_thread.start()
+
+    layout = create_runtime_layout(tmp_path / "runtime")
+    write_runtime_config(layout, [], "127.0.0.1", 19090, 13000, "5s")
+    registry = TargetRegistry(
+        [],
+        layout.prometheus_config,
+        "5s",
+        "/metrics",
+        "http://127.0.0.1:19090",
+        sd_file_path=layout.targets_sd_path,
+    )
+    reg_server = RegistryServer(registry, "127.0.0.1", 0)
+    reg_server.start()
+    registry_url = f"http://127.0.0.1:{reg_server.port}"
+    opener = _opener_for_url(registry_url)
+
+    try:
+        # Advertise an unreachable RFC 5737 TEST-NET IP (203.0.113.1:1) or closed
+        # loopback IP/port: use 127.0.0.254 where nothing listens on a separate port?
+        # Wait: LocalPodMetrics listens on 127.0.0.1:pod.server_port, while
+        # advertise_host="127.0.0.2" has nothing listening on 127.0.0.2:pod.server_port!
+        close = auto_register(
+            registry_url,
+            port=pod.server_port,
+            advertise_host="127.0.0.2",
+            labels={"cluster": "nat-zone", "model": "r1"},
+            scrape_interval_s=0.2,
+        )
+        try:
+            deadline = time.monotonic() + 5.0
+            pushed_target = None
+            while time.monotonic() < deadline:
+                snap = registry.snapshot()
+                if snap and snap[0].mode == "push":
+                    pushed_target = snap[0]
+                    break
+                time.sleep(0.1)
+            assert pushed_target is not None
+            assert pushed_target.label_dict == {"cluster": "nat-zone", "model": "r1"}
+            with opener.open(
+                f"{registry_url}{pushed_target.metrics_path}", timeout=3
+            ) as resp:
+                assert "0.42" in resp.read().decode("utf-8")
+        finally:
+            close()
+
+        assert registry.snapshot() == []
+    finally:
+        reg_server.stop()
+        pod.shutdown()
+        pod.server_close()
+        pod_thread.join(timeout=5)

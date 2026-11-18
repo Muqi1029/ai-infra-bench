@@ -91,7 +91,7 @@ class RequestConfig:
 class BenchmarkConfig:
     num_requests: int = 100
     warmup_requests: int = 0
-    max_concurrency: int = 32
+    max_concurrency: int | None = 32
     request_rate: float = float("inf")
     seed: int = 42
 
@@ -182,8 +182,12 @@ def parse_slo_config(data: Mapping[str, Any]) -> SLOConfig:
 
     search_data = _section(data, "search")
     parameter = search_data.get("parameter", "max_concurrency")
+    if parameter == "qps":
+        parameter = "request_rate"
     if parameter not in {"max_concurrency", "request_rate"}:
-        raise ValueError("search.parameter must be max_concurrency or request_rate")
+        raise ValueError(
+            "search.parameter must be max_concurrency, request_rate, or qps"
+        )
     minimum = _positive_int(search_data.get("min"), "search.min")
     maximum = _positive_int(search_data.get("max"), "search.max")
     if minimum > maximum:
@@ -193,6 +197,15 @@ def parse_slo_config(data: Mapping[str, Any]) -> SLOConfig:
     benchmark_data = data.get("benchmark") or {}
     if not isinstance(benchmark_data, Mapping):
         raise ValueError("benchmark must be a YAML mapping")
+    raw_max_conc = benchmark_data.get(
+        "max_concurrency",
+        maximum if parameter == "max_concurrency" else None,
+    )
+    resolved_max_conc = (
+        None
+        if raw_max_conc is None
+        else _positive_int(raw_max_conc, "benchmark.max_concurrency")
+    )
     benchmark = BenchmarkConfig(
         num_requests=_positive_int(
             benchmark_data.get("num_requests", 100), "benchmark.num_requests"
@@ -202,10 +215,7 @@ def parse_slo_config(data: Mapping[str, Any]) -> SLOConfig:
             "benchmark.warmup_requests",
             allow_zero=True,
         ),
-        max_concurrency=_positive_int(
-            benchmark_data.get("max_concurrency", maximum),
-            "benchmark.max_concurrency",
-        ),
+        max_concurrency=resolved_max_conc,
         request_rate=_request_rate(benchmark_data.get("request_rate", "inf")),
         seed=_integer(benchmark_data.get("seed", 42), "benchmark.seed"),
     )
@@ -272,10 +282,12 @@ async def _send_requests(
     session,
     config: SLOConfig,
     payloads: List[Dict],
-    max_concurrency: int,
+    max_concurrency: int | None,
     request_rate: float,
 ) -> List[OutputMetric]:
-    semaphore = asyncio.Semaphore(max_concurrency)
+    semaphore = (
+        asyncio.Semaphore(max_concurrency) if max_concurrency is not None else None
+    )
     tasks = []
     async for payload in get_request(payloads, request_rate):
         prepared = prepare_payload(payload, config.endpoint.model)
@@ -295,14 +307,14 @@ async def _send_requests(
 def summarize_outputs(
     outputs: List[OutputMetric],
     duration_s: float,
-    max_concurrency: int,
+    max_concurrency: int | None,
     request_rate: float,
-) -> Dict[str, int | float]:
+) -> Dict[str, int | float | None]:
     successful = [output for output in outputs if output.success]
     duration_s = max(duration_s, 1e-9)
     total_prompt = sum(output.prompt_tokens for output in successful)
     total_completion = sum(output.completion_tokens for output in successful)
-    metrics: Dict[str, int | float] = {
+    metrics: Dict[str, int | float | None] = {
         "total_requests": len(outputs),
         "successful_requests": len(successful),
         "failed_requests": len(outputs) - len(successful),

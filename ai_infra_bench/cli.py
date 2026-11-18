@@ -2,6 +2,7 @@
 
 import argparse
 import importlib
+import sys
 from typing import Any, Callable, NamedTuple, Sequence
 
 from ai_infra_bench.version import __version__
@@ -100,9 +101,16 @@ def main(argv: Sequence[str] | None = None):
         )
         sub.set_defaults(_target=spec.target)
 
-    args, extra_argv = parser.parse_known_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    passthrough: list[str] = []
+    if "--" in raw_argv:
+        sep = raw_argv.index("--")
+        passthrough = raw_argv[sep:]
+        raw_argv = raw_argv[:sep]
 
-    return _load_command(args._target)(extra_argv)
+    args, extra_argv = parser.parse_known_args(raw_argv)
+
+    return _load_command(args._target)([*extra_argv, *passthrough])
 
 
 if __name__ == "__main__":

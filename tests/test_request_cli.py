@@ -183,6 +183,8 @@ def test_bench_payload_path_selects_completion_endpoint(tmp_path, endpoint):
                 "--num-warmup-requests",
                 "0",
                 "--disable-flush-cache",
+                "--metric-path",
+                str(tmp_path / "metrics.yaml"),
             ]
         )
         is None

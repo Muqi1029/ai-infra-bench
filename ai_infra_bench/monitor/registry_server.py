@@ -46,6 +46,22 @@ def _opener_for_url(url: str) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener()
 
 
+def _can_pull_metrics(metrics_url: str, timeout: float = 2.0) -> bool:
+    request = urllib.request.Request(
+        metrics_url, headers={"User-Agent": "ai-infra-bench-monitoring"}
+    )
+    try:
+        with _opener_for_url(metrics_url).open(request, timeout=timeout) as response:
+            if not 200 <= response.status < 300:
+                return False
+            sample = response.read(4096).lstrip()
+            return bool(sample) and not sample[:15].lower().startswith(
+                (b"<!doctype", b"<html")
+            )
+    except (OSError, urllib.error.URLError):
+        return False
+
+
 def _serialize_target(target: ScrapeTarget) -> dict[str, Any]:
     return {
         "label": target.label,
@@ -254,6 +270,28 @@ class RegistryServer:
                 target_id = body.get("target")
                 if target_id is not None and not isinstance(target_id, str):
                     raise ValueError("'target' must be a string")
+                verify_pull = bool(body.get("verify_pull", False))
+
+                if verify_pull:
+                    from ai_infra_bench.monitor.config import parse_targets
+
+                    candidates = parse_targets(
+                        urls, metrics_path or outer.registry.metrics_path
+                    )
+                    if not all(
+                        _can_pull_metrics(c.metrics_url, timeout=2.0)
+                        for c in candidates
+                    ):
+                        self._send_json(
+                            200,
+                            {
+                                "status": "ok",
+                                "mode": "push_required",
+                                "added": [],
+                                "existing": [],
+                            },
+                        )
+                        return
 
                 result = outer.registry.add(
                     urls,
@@ -265,6 +303,7 @@ class RegistryServer:
                     200,
                     {
                         "status": "ok",
+                        "mode": "pull",
                         "added": [_serialize_target(t) for t in result.added],
                         "existing": [_serialize_target(t) for t in result.existing],
                     },

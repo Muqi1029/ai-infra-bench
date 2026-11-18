@@ -7,14 +7,14 @@
 | 命令 | 用途 |
 | --- | --- |
 | `req` | 发送单条请求（支持 `-` 标准输入与 SSE 调试） |
-| `bench` | 并发性能压测与 Goodput 统计 |
+| `bench` | 闭环并发 / 开环 `--qps` 性能压测与 Goodput 统计 |
 | `session-bench` | 会话级并发多轮回放（别名 `session-reply-bench`） |
-| `slo` | YAML 驱动的 SLO 二分容量搜索 |
-| `plot-metrics` | 导出交互式 Plotly HTML 对比报告 |
+| `slo` | YAML 驱动的 SLO 二分容量搜索（`max_concurrency` / `qps`） |
+| `plot-metrics` | 从 YAML/JSONL 导出含 Pareto 前沿与标签筛选的交互式 HTML 报告 |
 | `eval-dataset` | GSM8K / GPQA / AIME25 / HLE / DeepSWE 评测 |
 | `eval-logits` | 多端点首 token Top-K logprobs 对齐校验 |
 | `eval-hidden-states` | 多端点隐藏状态对齐校验 |
-| `monitor` | 跨集群 Prometheus + Grafana 监控中心（支持 HTTP 自动注册与 NAT 上报） |
+| `monitor` | 跨集群 Prometheus + Grafana 监控中心与 `--server ... -- <cmd>` 零侵入自动注册 |
 | `check-device` | 零第三方依赖检测 GPU 型号、显存与驱动 |
 | `check-weight` | 统计 safetensors / `.bin` 权重参数量 |
 | `token` | Hugging Face tokenizer 编码/解码（别名 `tokenize`） |
@@ -33,11 +33,13 @@
 | `--payload-path` | 未设置 | JSON / JSONL / Glob 或 `-`（stdin） |
 | `--input-len` / `--output-len` | `8192` / `1024` | 目标输入/输出 token 长度 |
 | `--num-requests` | `100` | 正式压测总请求数 |
-| `--max-concurrency` | `32` | 并发数（支持传入多个值顺序测试） |
+| `--max-concurrency` | `32`（`--qps` 下无限） | 并发上限（支持传入多个值顺序扫测） |
+| `--qps` | `inf` | 开环每秒请求到达速率（默认无并发上限，支持传入多个值顺序扫测） |
+| `--burstiness` | `1.0` | 开环到达突发系数（`1.0` 泊松分布，`0` 匀速固定间隔，`>0` Gamma 分布） |
 | `--num-warmup-requests` | `10` | 预热请求数（设为 `0` 关闭） |
 | `--goodput` | 未设置 | Goodput SLO 阈值，如 `ttft:500 tpot:50` |
 | `--disable-flush-cache` | 关闭 | 跳过 `/flush_cache` 调用 |
-| `--metric-path` | `aib-metric.jsonl` | 聚合指标输出路径（`.json` 覆盖，`.jsonl` 追加） |
+| `--metric-path` | `aib-metric.yaml` | 聚合指标输出路径（`.yaml` 多文档追加，兼容 `.json` 覆盖 / `.jsonl` 追加） |
 
 ## 压测核心指标 {#metrics}
 

@@ -29,13 +29,13 @@ pip install 'ai-infra-bench[data,weight]'  # optional datasets, tokenizers & saf
 aib req --base-url http://127.0.0.1:30000 --model your-model --prompt "Who are you?"
 cat request.json | aib req --payload-path - --model your-model
 
-# 2. Throughput, latency percentiles & Goodput benchmark + HTML report
+# 2. Closed-loop concurrency or open-loop --qps benchmark + interactive HTML report
 aib bench \
   --base-url http://127.0.0.1:30000 \
   --dataset random --input-len 1024 --output-len 256 \
-  --num-requests 100 --max-concurrency 1 8 32 \
-  --goodput ttft:500 tpot:50 --metric-path metrics.jsonl
-aib plot-metrics metrics.jsonl -o metrics.html
+  --num-requests 100 --qps 2 4 8 16 \
+  --goodput ttft:500 tpot:50 --metric-path metrics.yaml --label baseline
+aib plot-metrics metrics.yaml --labels baseline -o metrics.html
 
 # 3. SLO binary search, multi-turn session replay & evaluation
 aib slo examples/slo.yaml -o slo-result.yaml
@@ -49,13 +49,13 @@ aib eval-logits --base-urls http://127.0.0.1:30000 http://127.0.0.1:30001 --mode
 | Command | Purpose |
 | --- | --- |
 | `req` | Send a single request (streaming, raw SSE, `--payload-path -` / `--prompt -`) |
-| `bench` | Concurrent benchmark (`TTFT`, `ITL`, `TPOT`, throughput, `Goodput`, `--cache-ratio`) |
+| `bench` | Closed-loop (`--max-concurrency`) & open-loop (`--qps`, `--burstiness`) benchmark + YAML dump |
 | `session-bench` | Concurrent multi-turn JSONL session replay |
-| `slo` | YAML-driven binary search for max concurrency or request rate |
-| `plot-metrics` | Export interactive Plotly HTML comparison charts |
+| `slo` | YAML-driven binary search for max concurrency or QPS (`request_rate`) |
+| `plot-metrics` | Export Pareto-frontier & `--labels`-filtered interactive HTML charts from YAML/JSONL |
 | `eval-dataset` | Accuracy on `gsm8k`, `gpqa`, `aime25`, `hle`, `constrained_decoding`, `deepswe` |
 | `eval-logits` / `eval-hidden-states` | Multi-endpoint Top-K logprobs and hidden-states numerical diff |
-| `monitor` | Cross-cluster Prometheus + Grafana server with HTTP auto-registration & NAT push |
+| `monitor` | Cross-cluster Prometheus + Grafana server & `--server ... -- <cmd>` zero-intrusion auto-registration |
 | `check-device` / `check-weight` | Stdlib-only GPU hardware check and safetensors parameter count |
 | `token` / `profile-sgl` / `reply` | Tokenizer encode/decode, SGLang profiling, and token-ID replay export |
 

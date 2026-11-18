@@ -39,7 +39,7 @@ aib req \
 
 ## 跨集群实时监控 (`aib monitor`)
 
-启动 Prometheus（`:9090`）、Grafana（`:3000`，默认开放 Admin 可视化编辑与持久化）及 HTTP 注册/上报中心（`:9091`），支持跨集群 Pod 启动自动注册与 NAT 隔离环境主动上报：
+启动 Prometheus（`:9090`）、Grafana（`:3000`，默认开放 Admin 可视化编辑与持久化）及 HTTP 注册/上报中心（`:9091`），支持零侵入包裹推理服务自动上线注册、自动协商直连 Pull 或跨 NAT Push：
 
 ::: code-group
 
@@ -48,27 +48,33 @@ aib req \
 aib monitor --listen-address 0.0.0.0 --allow-remote
 ```
 
-```bash [2. 直连集群自动注册 (Pull)]
-# Pod 启动钩子：使用 aib 或零依赖 curl 注册，Prometheus 通过 file_sd 自动热加载
-aib monitor --register http://<monitor-ip>:9091 \
-  --base-urls http://10.12.8.5:30000 --labels cluster=bj model=qwen3
+```bash [2. 零侵入包裹启动 (推荐)]
+# 直接包裹推理启动命令：自动提取端口与模型名、等待 /metrics 就绪后上线注册、
+# 自动协商直连 Pull 或跨 NAT 周期 Push、收到 SIGTERM 停机时自动注销
+aib monitor --server http://<monitor-ip>:9091 --labels cluster=bj -- \
+  python3 -m sglang.launch_server --model-path /models/Qwen3-8B --port 30000
 
-curl -X POST http://<monitor-ip>:9091/api/register \
-  -d '{"url":"http://10.12.8.5:30000","labels":{"cluster":"bj","model":"qwen3"}}'
+# 也可在 K8s Deployment / Dockerfile 中预设环境变量，无需传参
+export AIB_MONITOR_URL=http://<monitor-ip>:9091
+aib monitor -- vllm serve /models/Qwen3-8B --port 8000
 ```
 
-```bash [3. NAT 隔离集群上报 (Push)]
-# 中心无法反连 Pod IP 时，在 Pod 侧周期抓取本地 /metrics 并推送至中心（停机自动注销）
-aib monitor --push-to http://<monitor-ip>:9091 \
-  --base-urls http://127.0.0.1:30000 --labels cluster=sh-nat model=qwen3
+```bash [3. Python 内嵌 / 独立注册]
+# 自研 Python 服务内一行接入（后台非阻塞探活 + Pull/Push 自动降级 + atexit 注销）
+python3 -c 'from ai_infra_bench.monitor import auto_register; auto_register("http://<monitor-ip>:9091", port=30000)'
+
+# 或对已运行实例手动调用 curl / sidecar 上报
+curl -X POST http://<monitor-ip>:9091/api/register -d '{"url":"http://10.12.8.5:30000","labels":{"cluster":"bj"}}'
+aib monitor --push-to http://<monitor-ip>:9091 --base-urls http://127.0.0.1:30000 --labels cluster=sh-nat
 ```
 
 :::
 
 | 选项 | 说明 |
 | --- | --- |
+| `--server URL -- <cmd>` | 包裹推理进程启动并自动完成就绪探测、Pull/Push 协商注册与停机注销（支持 `$AIB_MONITOR_URL`） |
 | `--registry-port 9091` | 跨集群 `/api/register`、`/api/deregister` 与 `/api/push` 监听端口 |
-| `--labels KEY=VALUE ...` | 为目标附加维度标签（如 `cluster`、`model`，大盘内置对应下拉筛选） |
+| `--labels KEY=VALUE ...` | 为目标附加维度标签（如 `cluster`、`model`，支持 `$AIB_MONITOR_LABELS` 与大盘下拉筛选） |
 | `--dashboard PATH` | 导入自定义 Grafana JSON 文件或目录；浏览器内修改保存后重启不丢失 |
 | `--runtime auto\|system\|download` | 自动复用系统二进制或下载经 SHA256 校验的 Prometheus / Grafana |
 | `--headless` / `--no-grafana` | 无交互常驻运行（非 TTY 自动开启）/ 仅运行 Prometheus + Registry |

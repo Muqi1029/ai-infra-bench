@@ -7,16 +7,17 @@ BENCH_AIOHTTP_READ_BUFSIZE_BYTES = 10 * 1024**2  # 10 MB
 
 
 def _create_bench_client_session(
-    max_concurrency: int = 32,
+    max_concurrency: int | None = 32,
     api_key: str | None = "EMPTY",
     request_timeout: float = BENCH_AIOHTTP_TIMEOUT_SECONDS,
 ) -> aiohttp.ClientSession:
-    # When the pressure is big, the read buffer could be full before aio thread read
-    # the content. We increase the read_bufsize from 64K to 10M.
+    # In open-loop QPS mode (max_concurrency=None), pass 0 to disable aiohttp's
+    # default 100-connection ceiling so arrivals are never client-throttled.
+    conn_limit = 0 if max_concurrency is None else max_concurrency
     aiohttp_timeout = aiohttp.ClientTimeout(total=request_timeout)
     connector_kwargs = {
-        "limit": max_concurrency,
-        "limit_per_host": max_concurrency,
+        "limit": conn_limit,
+        "limit_per_host": conn_limit,
         # Expire pooled connections before SGLang's default 5s idle timeout.
         # Large payload preparation can block the loop from observing a peer's
         # close; aiohttp also checks this age synchronously before reuse.

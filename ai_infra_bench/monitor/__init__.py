@@ -1,5 +1,10 @@
-"""Local Prometheus and Grafana orchestration for SGLang metrics."""
+from typing import Any
 
-from ai_infra_bench.monitor.config import ScrapeTarget, parse_targets
 
-__all__ = ["ScrapeTarget", "parse_targets"]
+def auto_register(*args: Any, **kwargs: Any):
+    from ai_infra_bench.monitor.launcher import auto_register as _auto_register
+
+    return _auto_register(*args, **kwargs)
+
+
+__all__ = ["auto_register"]

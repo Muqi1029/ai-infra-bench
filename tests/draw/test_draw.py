@@ -88,8 +88,8 @@ def test_export_metric_tables_html_from_jsonl(tmp_path):
         metric["name"]: metric for metric in categories["Benchmark Summary"]["metrics"]
     }
     assert summary_metrics["Output throughput"]["series"]["run-a"] == [
-        {"x": 1.0, "y": 100.0},
-        {"x": 2.0, "y": 180.0},
+        {"x": 1.0, "y": 100.0, "concurrency": 1.0},
+        {"x": 2.0, "y": 180.0, "concurrency": 2.0},
     ]
     assert "Total cached tokens device / Ratio" in summary_metrics
     latency_names = {
@@ -118,7 +118,7 @@ def test_export_metric_tables_html_accepts_mapping_and_validates_sample_size(tmp
         export_metric_tables_html([], output, sample_size=0)
 
 
-def test_dashboard_defaults_to_first_label_and_groups_metrics(tmp_path):
+def test_dashboard_defaults_to_all_labels_and_groups_metrics(tmp_path):
     records = [_metrics("run-a", 100), _metrics("run-b", 120)]
     for record in records:
         record["Latency & Token Metrics"].extend(
@@ -133,16 +133,17 @@ def test_dashboard_defaults_to_first_label_and_groups_metrics(tmp_path):
 
     document = output.read_text(encoding="utf-8")
     assert 'id="sample-size"' not in document
-    assert "color-scheme: light" in document
-    assert "background: #f6f7f9" in document
-    assert "box-shadow" not in document
+    assert 'id="label-chips"' in document
+    assert 'id="xaxis-tabs"' in document
+    assert 'id="stat-tabs"' in document
+    assert "Trade-off & Pareto Frontier" in document
     assert 'className = "metric-title"' in document
     assert "groupMetrics" in document
     data_start = document.index('<script id="metrics-data" type="application/json">')
     data_start = document.index(">", data_start) + 1
     data_end = document.index("</script>", data_start)
     page_data = json.loads(document[data_start:data_end])
-    assert page_data["selected_labels"] == ["run-a"]
+    assert page_data["selected_labels"] == ["run-a", "run-b"]
 
     metrics = {
         metric["name"]: metric
@@ -191,7 +192,7 @@ def test_export_metric_tables_html_rejects_non_object_records(tmp_path):
     source = tmp_path / "metrics.json"
     source.write_text('[{"label": "ok"}, 3]', encoding="utf-8")
 
-    with pytest.raises(ValueError, match=r"record 2 must be a JSON object"):
+    with pytest.raises(ValueError, match=r"record 2 must be a JSON/YAML object"):
         export_metric_tables_html(source, tmp_path / "comparison.html")
 
 
@@ -216,6 +217,72 @@ def test_legacy_timestamp_labels_are_grouped_and_repeats_are_averaged(tmp_path):
         metric for metric in summary["metrics"] if metric["name"] == "Output throughput"
     )
     assert throughput["series"]["server"] == [
-        {"x": 2.0, "y": 110.0},
-        {"x": 4.0, "y": 180.0},
+        {"x": 2.0, "y": 110.0, "concurrency": 2.0},
+        {"x": 4.0, "y": 180.0, "concurrency": 4.0},
     ]
+
+
+def test_plot_metrics_reads_yaml_and_filters_by_labels(tmp_path):
+    from ai_infra_bench.performance.bench_utils import handle_outputs
+    from ai_infra_bench.performance.struct import OutputMetric
+
+    yaml_a = tmp_path / "sglang.yaml"
+    yaml_b = tmp_path / "vllm.yaml"
+    for path, label, qps, tokens in (
+        (yaml_a, "sglang-fp8", 4.0, 200),
+        (yaml_a, "sglang-fp8", 8.0, 380),
+        (yaml_a, "sglang-bf16", 4.0, 150),
+        (yaml_b, "vllm-fp8", 4.0, 190),
+    ):
+        handle_outputs(
+            [
+                OutputMetric(
+                    success=True,
+                    ttft_ms=35.0,
+                    latency_ms=400.0,
+                    prompt_tokens=64,
+                    completion_tokens=tokens,
+                    finish_reason="stop",
+                )
+            ],
+            duration_s=1.0,
+            max_concurrency=None,
+            request_rate=qps,
+            metric_path=str(path),
+            label=label,
+            peak_concurrency=12,
+        )
+
+    out_html = tmp_path / "filtered.html"
+    rc = draw.main(
+        [
+            str(yaml_a),
+            str(yaml_b),
+            "--labels",
+            "sglang-fp8",
+            "vllm-fp8",
+            "-o",
+            str(out_html),
+        ]
+    )
+    assert rc == 0
+    doc = out_html.read_text(encoding="utf-8")
+    data_start = doc.index('<script id="metrics-data" type="application/json">')
+    data_start = doc.index(">", data_start) + 1
+    data_end = doc.index("</script>", data_start)
+    page_data = json.loads(doc[data_start:data_end])
+
+    assert page_data["labels"] == ["sglang-fp8", "vllm-fp8"]
+    assert "sglang-bf16" not in page_data["labels"]
+    assert page_data["default_x_mode"] == "qps"
+
+    summary_metrics = {m["name"]: m for m in page_data["categories"][0]["metrics"]}
+    assert summary_metrics["Output throughput"]["series"]["sglang-fp8"] == [
+        {"x": 4.0, "y": 200.0, "concurrency": 12.0, "qps": 4.0},
+        {"x": 8.0, "y": 380.0, "concurrency": 12.0, "qps": 8.0},
+    ]
+
+    with pytest.raises(ValueError, match="no records matched --labels"):
+        export_metric_tables_html(
+            yaml_a, tmp_path / "none.html", labels_filter=["nonexistent"]
+        )

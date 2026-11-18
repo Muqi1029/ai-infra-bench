@@ -1333,3 +1333,114 @@ def test_handle_outputs_computes_goodput_itl_and_total_throughput(monkeypatch):
     assert finish["stop"] == "1"
     assert finish["custom_stop"] == "1"
     assert returned["max_concurrency"] == 2
+
+
+def test_qps_mode_defaults_to_unlimited_concurrency_and_tracks_peak(monkeypatch):
+    args = bench_utils.parse_args(["--qps", "10", "20"])
+    validate_args(args)
+    assert args.qps == [10.0, 20.0]
+    assert args.max_concurrency == [None]
+    assert args.metric_path == "aib-metric.yaml"
+
+    with pytest.raises(
+        ValueError, match="cannot specify both --qps and --request-rate"
+    ):
+        bad = bench_utils.parse_args(["--qps", "10", "--request-rate", "5"])
+        validate_args(bad)
+
+    # Verify unlimited open-loop run_requests dispatches >32 in-flight concurrently
+    gate = asyncio.Event()
+    all_dispatched = asyncio.Event()
+    dispatched = 0
+
+    async def slow_request(_session, _url, payload):
+        nonlocal dispatched
+        dispatched += 1
+        if dispatched == 40:
+            all_dispatched.set()
+        await gate.wait()
+        return OutputMetric(success=True, payload=payload, completion_tokens=4)
+
+    async def instant_arrivals(payloads, _rate):
+        for item in payloads:
+            yield item
+
+    monkeypatch.setattr(bench, "request_func", slow_request)
+    monkeypatch.setattr(bench, "get_request", instant_arrivals)
+
+    async def run():
+        stats = {}
+        task = asyncio.create_task(
+            run_requests(
+                None,
+                "http://localhost/v1/completions",
+                [{"id": i} for i in range(40)],
+                None,
+                None,
+                request_rate=100.0,
+                max_concurrency=None,
+                run_stats=stats,
+            )
+        )
+        await asyncio.wait_for(all_dispatched.wait(), 2.0)
+        gate.set()
+        outputs = await asyncio.wait_for(task, 2.0)
+        return outputs, stats
+
+    outputs, stats = asyncio.run(run())
+    assert len(outputs) == 40
+    assert stats["peak_concurrency"] == 40
+
+
+def test_burstiness_constant_and_gamma_intervals(monkeypatch):
+    slept = []
+
+    async def fake_sleep(delay):
+        slept.append(delay)
+
+    monkeypatch.setattr(bench_utils.asyncio, "sleep", fake_sleep)
+    asyncio.run(bench_utils.wait_for_request_interval(4.0, burstiness=0.0))
+    assert slept == [0.25]
+
+    slept.clear()
+    bench_utils.set_seed(42)
+    asyncio.run(bench_utils.wait_for_request_interval(4.0, burstiness=2.0))
+    assert len(slept) == 1 and slept[0] > 0
+
+
+def test_handle_outputs_dumps_human_readable_yaml(tmp_path):
+    import yaml
+
+    yaml_path = tmp_path / "metrics.yaml"
+    for qps, tps in ((8.0, 240.0), (16.0, 460.0)):
+        handle_outputs(
+            [
+                OutputMetric(
+                    success=True,
+                    ttft_ms=40.0,
+                    latency_ms=300.0,
+                    itl_ms=[12.0, 14.0],
+                    prompt_tokens=128,
+                    completion_tokens=int(tps / 2),
+                    finish_reason="stop",
+                )
+            ],
+            duration_s=0.5,
+            max_concurrency=None,
+            request_rate=qps,
+            metric_path=str(yaml_path),
+            label="sglang-fp8",
+            peak_concurrency=19,
+        )
+
+    raw_text = yaml_path.read_text(encoding="utf-8")
+    assert "ttft_ms: {mean:" in raw_text
+    docs = list(yaml.safe_load_all(raw_text))
+    assert len(docs) == 2
+    assert docs[0]["label"] == "sglang-fp8"
+    assert docs[0]["mode"] == "qps"
+    assert docs[0]["max_concurrency"] == "unlimited"
+    assert docs[0]["peak_concurrency"] == 19
+    assert docs[0]["request_rate"] == 8.0
+    assert docs[0]["summary"]["output_throughput_tps"] == 240.0
+    assert docs[0]["metrics"]["ttft_ms"]["mean"] == 40.0

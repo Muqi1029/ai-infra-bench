@@ -7,14 +7,14 @@ Run `aib <subcommand> --help` for full live flags; all `--help` handlers load wi
 | Command | Purpose |
 | --- | --- |
 | `req` | Send a single request (supports `-` stdin and raw SSE output) |
-| `bench` | Concurrent performance benchmark and Goodput evaluation |
+| `bench` | Closed-loop concurrency & open-loop `--qps` benchmark with Goodput |
 | `session-bench` | Multi-turn session replay (alias `session-reply-bench`) |
-| `slo` | YAML-driven SLO binary capacity search |
-| `plot-metrics` | Export interactive Plotly comparison report |
+| `slo` | YAML-driven SLO binary capacity search (`max_concurrency` / `qps`) |
+| `plot-metrics` | Export Pareto-frontier & label-filtered interactive HTML reports from YAML/JSONL |
 | `eval-dataset` | Accuracy evaluation (`gsm8k`, `gpqa`, `aime25`, `hle`, `constrained_decoding`, `deepswe`) |
 | `eval-logits` | Multi-endpoint Top-K logprobs numerical diff |
 | `eval-hidden-states` | Multi-endpoint hidden states comparison |
-| `monitor` | Cross-cluster Prometheus + Grafana server with auto-registration & NAT push |
+| `monitor` | Cross-cluster Prometheus + Grafana server & `--server ... -- <cmd>` auto-registration |
 | `check-device` | Stdlib-only NVIDIA GPU & VRAM inspection |
 | `check-weight` | Lightweight safetensors / `.bin` parameter audit |
 | `token` | Hugging Face tokenizer encode/decode (alias `tokenize`) |
@@ -33,11 +33,13 @@ Run `aib <subcommand> --help` for full live flags; all `--help` handlers load wi
 | `--payload-path` | Unset | JSON / JSONL / glob or `-` (stdin) |
 | `--input-len` / `--output-len` | `8192` / `1024` | Target prompt and generation token counts |
 | `--num-requests` | `100` | Measured request count |
-| `--max-concurrency` | `32` | One or more concurrency levels to sweep |
+| `--max-concurrency` | `32` (unlimited under `--qps`) | One or more concurrency caps to sweep |
+| `--qps` | `inf` | Open-loop target arrival rates in req/s (unlimited concurrency by default) |
+| `--burstiness` | `1.0` | Open-loop arrival burstiness (`1.0` Poisson, `0` constant interval, `>0` Gamma) |
 | `--num-warmup-requests` | `10` | Warmup request count (`0` to disable) |
 | `--goodput` | Unset | SLO thresholds in ms, e.g. `ttft:500 tpot:50` |
 | `--disable-flush-cache` | Off | Skip `/flush_cache` calls |
-| `--metric-path` | `aib-metric.jsonl` | Summary output (`.json` overwrites, `.jsonl` appends) |
+| `--metric-path` | `aib-metric.yaml` | Summary output (`.yaml` multi-doc append, `.json` overwrite, `.jsonl` append) |
 
 ## Benchmark Metrics {#metrics}
 

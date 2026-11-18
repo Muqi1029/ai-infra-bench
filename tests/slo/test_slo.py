@@ -157,3 +157,16 @@ def test_cli_dispatches_slo(monkeypatch):
 
     assert cli_main(["slo", "slo.yaml", "--output", "result.yaml"]) == 0
     assert calls == [["slo.yaml", "--output", "result.yaml"]]
+
+
+def test_parse_slo_qps_defaults_to_unlimited_concurrency():
+    config = parse_slo_config(
+        {
+            "endpoint": {"base_url": "localhost:30000"},
+            "request": {"input_len": 16, "output_len": 16},
+            "search": {"parameter": "qps", "min": 1, "max": 10},
+            "conditions": [{"metric": "success_rate", "operator": ">=", "value": 0.99}],
+        }
+    )
+    assert config.search.parameter == "request_rate"
+    assert config.benchmark.max_concurrency is None

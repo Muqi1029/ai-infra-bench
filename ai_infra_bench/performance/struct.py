@@ -207,11 +207,12 @@ MetricTable = tuple[str, MetricRows]
 class _OutputStats:
     all_outputs: List[OutputMetric]
     duration_s: float
-    max_concurrency: int
+    max_concurrency: int | None
     request_rate: float
     label: str
     ts: str
     goodput_thresholds: Mapping[str, float] | None = None
+    peak_concurrency: int | None = None
     outputs: List[OutputMetric] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -446,13 +447,21 @@ class _OutputStats:
             if self.request_rate == float("inf")
             else f"{self.request_rate:g} req/s"
         )
+        if self.max_concurrency is None:
+            concurrency_display = (
+                f"unlimited (peak: {self.peak_concurrency})"
+                if self.peak_concurrency is not None
+                else "unlimited"
+            )
+        else:
+            concurrency_display = str(self.max_concurrency)
         summary_context = " ".join(value for value in (self.label, self.ts) if value)
         rows = [
             ["Metric", "Value"],
             ["Total requests", str(self.num_total_requests)],
             ["Successful requests", str(self.num_success_requests)],
             ["Failed requests", str(self.num_failed_requests)],
-            ["Max concurrency", str(self.max_concurrency)],
+            ["Max concurrency", concurrency_display],
             ["Request rate", request_rate_display],
             [
                 "Request Throughput",
@@ -534,3 +543,150 @@ class _OutputStats:
             format_percentile(values, 95),
             format_percentile(values, 99),
         ]
+
+    @staticmethod
+    def _stat_dict(values: List[float | int], scale: float = 1.0) -> Dict[str, float]:
+        avg = mean_value(values)
+        p50 = percentile_value(values, 50)
+        p95 = percentile_value(values, 95)
+        p99 = percentile_value(values, 99)
+        if avg is None or p50 is None or p95 is None or p99 is None:
+            return {}
+        return {
+            "mean": round(avg * scale, 2),
+            "p50": round(p50 * scale, 2),
+            "p95": round(p95 * scale, 2),
+            "p99": round(p99 * scale, 2),
+        }
+
+    def build_yaml_record(self) -> Dict[str, Any]:
+        is_qps_mode = self.request_rate != float("inf") and self.max_concurrency is None
+        record: Dict[str, Any] = {
+            "label": self.label or "default",
+            "timestamp": self.ts,
+            "mode": "qps" if is_qps_mode else "concurrency",
+            "max_concurrency": (
+                "unlimited" if self.max_concurrency is None else self.max_concurrency
+            ),
+        }
+        if self.peak_concurrency is not None:
+            record["peak_concurrency"] = self.peak_concurrency
+        record["request_rate"] = (
+            "unlimited"
+            if self.request_rate == float("inf")
+            else round(float(self.request_rate), 4)
+        )
+
+        if not self.outputs:
+            record["summary"] = {
+                "total_requests": self.num_total_requests,
+                "successful_requests": 0,
+                "failed_requests": self.num_failed_requests,
+                "status": "No successful requests",
+            }
+            return record
+
+        total_prompt = sum(o.prompt_tokens for o in self.outputs)
+        total_completion = sum(o.completion_tokens for o in self.outputs)
+        total_reasoning = sum(o.reasoning_tokens for o in self.outputs)
+        total_cached = sum(o.cached_tokens for o in self.outputs)
+        total_cached_dev = sum(o.cached_tokens_device for o in self.outputs)
+        total_cached_host = sum(o.cached_tokens_host for o in self.outputs)
+        cacheable_prompt = total_prompt - self.num_success_requests
+        global_cache_pct = (
+            round(100.0 * total_cached / cacheable_prompt, 2)
+            if cacheable_prompt > 0
+            else 0.0
+        )
+
+        summary: Dict[str, Any] = {
+            "total_requests": self.num_total_requests,
+            "successful_requests": self.num_success_requests,
+            "failed_requests": self.num_failed_requests,
+            "duration_s": round(self.duration_s, 4),
+            "request_throughput_rps": round(
+                self.num_success_requests / self.duration_s, 4
+            ),
+        }
+        if self.goodput_thresholds:
+            good_count = sum(1 for o in self.outputs if self._meets_goodput(o))
+            summary["request_goodput_rps"] = round(good_count / self.duration_s, 4)
+            summary["request_goodput_pct"] = round(
+                100.0 * good_count / max(self.num_total_requests, 1), 2
+            )
+        summary.update(
+            {
+                "input_throughput_tps": round(total_prompt / self.duration_s, 2),
+                "output_throughput_tps": round(total_completion / self.duration_s, 2),
+                "total_token_throughput_tps": round(
+                    (total_prompt + total_completion) / self.duration_s, 2
+                ),
+                "total_prompt_tokens": total_prompt,
+                "total_completion_tokens": total_completion,
+                "total_reasoning_tokens": total_reasoning,
+                "total_cached_tokens": total_cached,
+                "global_cache_ratio_pct": global_cache_pct,
+            }
+        )
+        if total_cached_dev or total_cached_host:
+            summary["cached_tokens_device"] = total_cached_dev
+            summary["cached_tokens_host"] = total_cached_host
+        record["summary"] = summary
+
+        key_map = {
+            "TTFT": "ttft_ms",
+            "TPOT(ecl the ttft)": "tpot_ms",
+            "ITL": "itl_ms",
+            "Latency": "latency_ms",
+            "Prompt tokens": "prompt_tokens",
+            "Reasoning tokens": "reasoning_tokens",
+            "Cached tokens": "cached_tokens",
+            "Completion tokens": "completion_tokens",
+        }
+        metrics_section: Dict[str, Dict[str, float]] = {}
+        for title, values, _ in self.metric_series():
+            yaml_key = key_map.get(title, title.lower().replace(" ", "_"))
+            if yaml_key in {"reasoning_tokens", "cached_tokens"} and not any(values):
+                continue
+            stat = self._stat_dict(values)
+            if stat:
+                metrics_section[yaml_key] = stat
+        if any(self.cached_token_ratios):
+            ratio_stat = self._stat_dict(self.cached_token_ratios, scale=100.0)
+            if ratio_stat:
+                metrics_section["cached_token_ratio_pct"] = ratio_stat
+        record["metrics"] = metrics_section
+
+        total_proposed = sum(o.spec_num_proposed_drafts for o in self.outputs)
+        if total_proposed > 0:
+            total_correct = sum(o.spec_num_correct_drafts for o in self.outputs)
+            spec_outputs = [o for o in self.outputs if o.spec_verify_ct]
+            total_verify = sum(o.spec_verify_ct for o in spec_outputs)
+            spec_comp = sum(o.completion_tokens for o in spec_outputs)
+            hist = self.agg_histogram(
+                [o.spec_correct_drafts_histogram for o in self.outputs]
+            )
+            record["spec_tokens"] = {
+                "total_proposed_drafts": total_proposed,
+                "total_correct_drafts": total_correct,
+                "total_verify_count": total_verify,
+                "accept_rate_pct": round(100.0 * total_correct / total_proposed, 2),
+                "accept_length": (
+                    round(spec_comp / total_verify, 2) if total_verify else None
+                ),
+                "correct_drafts_histogram": hist,
+            }
+
+        finish_counts: Dict[str, int] = {}
+        for o in self.outputs:
+            reason = str(o.finish_reason) if o.finish_reason else "none"
+            finish_counts[reason] = finish_counts.get(reason, 0) + 1
+        record["finish_reasons"] = {
+            reason: {
+                "requests": count,
+                "pct": round(100.0 * count / self.num_success_requests, 2),
+            }
+            for reason, count in finish_counts.items()
+            if count > 0
+        }
+        return record

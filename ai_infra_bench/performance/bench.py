@@ -270,28 +270,33 @@ async def run_requests(
     pbar: "tqdm | None" = None,
     request_rate: float = float("inf"),
     benchmark_start_time: float | None = None,
-    max_concurrency: int = 32,
+    max_concurrency: int | None = 32,
+    *,
+    burstiness: float = 1.0,
+    run_stats: Dict[str, Any] | None = None,
 ) -> List[OutputMetric]:
-    if max_concurrency <= 0:
+    if max_concurrency is not None and max_concurrency <= 0:
         raise ValueError("max_concurrency must be positive")
-    # Rate-limited arrivals may queue behind busy workers. Keep their original
-    # payloads untouched until a worker is ready. Saturation mode also bounds
-    # the queue so a large input iterable is consumed incrementally.
-    queue = asyncio.Queue(
-        maxsize=max_concurrency if request_rate == float("inf") else 0
-    )
-    outputs = []
+
+    outputs: List[Any] = []
     completion_tokens_sum = 0
+    in_flight = 0
+    peak_concurrency = 0
     rid_suffix = uuid.uuid4().hex
 
     async def run_request(payload: Dict[str, Any]) -> OutputMetric:
-        nonlocal completion_tokens_sum
+        nonlocal completion_tokens_sum, in_flight, peak_concurrency
 
         async with semaphore or nullcontext():
             payload = prepare_payload(payload, model, override_payload)
             if payload.get("rid") is not None:
                 payload["rid"] = f"{payload['rid']}-{rid_suffix}"
-            output = await request_func(session, request_url, payload)
+            in_flight += 1
+            peak_concurrency = max(peak_concurrency, in_flight)
+            try:
+                output = await request_func(session, request_url, payload)
+            finally:
+                in_flight -= 1
         if pbar is not None:
             pbar.update(1)
             if benchmark_start_time is not None and output.success:
@@ -300,6 +305,42 @@ async def run_requests(
                 average_tps = completion_tokens_sum / elapsed_s
                 pbar.set_postfix({"Avg TPS": f"{average_tps:.2f} tokens/s"})
         return output
+
+    def _arrival_stream():
+        if burstiness == 1.0:
+            return get_request(requests, request_rate)
+        return get_request(requests, request_rate, burstiness)
+
+    if max_concurrency is None:
+        # Pure open-loop mode: dispatch every arrival immediately without a
+        # client-side worker cap so server queuing is measured faithfully.
+        spawned: List[asyncio.Task] = []
+
+        async def run_indexed(idx: int, raw_payload: Mapping[str, Any]) -> None:
+            outputs[idx] = await run_request(dict(raw_payload))
+
+        try:
+            async for payload in _arrival_stream():
+                index = len(outputs)
+                outputs.append(None)
+                spawned.append(asyncio.create_task(run_indexed(index, payload)))
+            if spawned:
+                await asyncio.gather(*spawned)
+        finally:
+            for task in spawned:
+                task.cancel()
+            if spawned:
+                await asyncio.gather(*spawned, return_exceptions=True)
+            if run_stats is not None:
+                run_stats["peak_concurrency"] = peak_concurrency
+        return outputs
+
+    # Rate-limited arrivals may queue behind busy workers. Keep their original
+    # payloads untouched until a worker is ready. Saturation mode also bounds
+    # the queue so a large input iterable is consumed incrementally.
+    queue: asyncio.Queue = asyncio.Queue(
+        maxsize=max_concurrency if request_rate == float("inf") else 0
+    )
 
     async def worker():
         while True:
@@ -313,7 +354,7 @@ async def run_requests(
                 queue.task_done()
 
     async def produce():
-        async for payload in get_request(requests, request_rate):
+        async for payload in _arrival_stream():
             index = len(outputs)
             outputs.append(None)
             await queue.put((index, payload))
@@ -328,6 +369,8 @@ async def run_requests(
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        if run_stats is not None:
+            run_stats["peak_concurrency"] = peak_concurrency
     return outputs
 
 
@@ -366,48 +409,75 @@ async def run_benchmark(args: Namespace) -> None:
             await _run_warmup(session, request_url, warmup_requests, args)
 
     goodput_thresholds = parse_goodput(getattr(args, "goodput", None))
+    qps_values = args.qps if getattr(args, "qps", None) else [args.request_rate]
+    burstiness = getattr(args, "burstiness", 1.0)
 
-    for max_concurrency in args.max_concurrency:
-        for _ in range(args.repeat):
-            semaphore = asyncio.Semaphore(max_concurrency)
-            async with _create_bench_client_session(
-                max_concurrency, args.api_key, args.request_timeout
-            ) as session:
-                if not args.disable_flush_cache:
-                    await flush_cache(session, flush_cache_endpoint)
-                    if prefix_len > 0 and warmup_requests:
-                        logger.info(f"Warming up shared prefix of {prefix_len} tokens")
-                        await _run_warmup(session, request_url, warmup_requests, args)
+    for request_rate in qps_values:
+        for max_concurrency in args.max_concurrency:
+            for _ in range(args.repeat):
+                semaphore = (
+                    asyncio.Semaphore(max_concurrency)
+                    if max_concurrency is not None
+                    else None
+                )
+                run_stats: Dict[str, Any] = {}
+                extra_kwargs: Dict[str, Any] = {}
+                if burstiness != 1.0:
+                    extra_kwargs["burstiness"] = burstiness
+                if max_concurrency is None:
+                    extra_kwargs["run_stats"] = run_stats
 
-                # formal run
-                with tqdm(total=len(formal_requests), desc="Formally Running") as pbar:
-                    benchmark_start_time = time.perf_counter()
-                    outputs: List[OutputMetric] = await run_requests(
-                        session,
-                        request_url,
-                        formal_requests,
-                        args.model,
-                        args.override_payload,
-                        semaphore,
-                        pbar,
-                        args.request_rate,
-                        benchmark_start_time,
-                        max_concurrency=max_concurrency,
-                    )
-                    duration_s = time.perf_counter() - benchmark_start_time
+                async with _create_bench_client_session(
+                    max_concurrency, args.api_key, args.request_timeout
+                ) as session:
+                    if not args.disable_flush_cache:
+                        await flush_cache(session, flush_cache_endpoint)
+                        if prefix_len > 0 and warmup_requests:
+                            logger.info(
+                                f"Warming up shared prefix of {prefix_len} tokens"
+                            )
+                            await _run_warmup(
+                                session, request_url, warmup_requests, args
+                            )
 
-            handle_outputs(
-                outputs=outputs,
-                duration_s=duration_s,
-                max_concurrency=max_concurrency,
-                request_rate=args.request_rate,
-                dump_path=args.dump_path,
-                dump_content=args.dump_content,
-                dump_finish_reason_length=args.dump_finish_reason_length,
-                metric_path=args.metric_path,
-                label=args.label,
-                goodput_thresholds=goodput_thresholds,
-            )
+                    # formal run
+                    with tqdm(
+                        total=len(formal_requests), desc="Formally Running"
+                    ) as pbar:
+                        benchmark_start_time = time.perf_counter()
+                        outputs: List[OutputMetric] = await run_requests(
+                            session,
+                            request_url,
+                            formal_requests,
+                            args.model,
+                            args.override_payload,
+                            semaphore,
+                            pbar,
+                            request_rate,
+                            benchmark_start_time,
+                            max_concurrency=max_concurrency,
+                            **extra_kwargs,
+                        )
+                        duration_s = time.perf_counter() - benchmark_start_time
+
+                handle_query_kwargs: Dict[str, Any] = {}
+                if "peak_concurrency" in run_stats:
+                    handle_query_kwargs["peak_concurrency"] = run_stats[
+                        "peak_concurrency"
+                    ]
+                handle_outputs(
+                    outputs=outputs,
+                    duration_s=duration_s,
+                    max_concurrency=max_concurrency,
+                    request_rate=request_rate,
+                    dump_path=args.dump_path,
+                    dump_content=args.dump_content,
+                    dump_finish_reason_length=args.dump_finish_reason_length,
+                    metric_path=args.metric_path,
+                    label=args.label,
+                    goodput_thresholds=goodput_thresholds,
+                    **handle_query_kwargs,
+                )
 
 
 def main(args=None):

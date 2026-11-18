@@ -128,7 +128,14 @@ def _normalize_metrics_path(metrics_path: str) -> str:
 
 
 def _format_host_port(host: str, port: int | None) -> str:
-    rendered_host = f"[{host}]" if ":" in host else host
+    if ":" in host and not (host.startswith("[") and host.endswith("]")):
+        try:
+            ipaddress.ip_address(host)
+        except ValueError as error:
+            raise ConfigurationError(f"invalid host {host!r}: {error}") from error
+        rendered_host = f"[{host}]"
+    else:
+        rendered_host = host
     return f"{rendered_host}:{port}" if port is not None else rendered_host
 
 
