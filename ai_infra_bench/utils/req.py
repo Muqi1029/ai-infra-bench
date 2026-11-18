@@ -180,6 +180,41 @@ def update_metrics(metrics: Dict[str, Any], new_metrics: Mapping[str, Any]) -> N
     )
 
 
+def extract_error_message(data: Any) -> str | None:
+    """Extract an error detail string from an OpenAI or gateway error payload."""
+    if not isinstance(data, Mapping):
+        return None
+    if err := data.get("error"):
+        return (
+            str(err.get("message") or json.dumps(err, ensure_ascii=False))
+            if isinstance(err, Mapping)
+            else str(err)
+        )
+    if data.get("object") == "error":
+        return str(data.get("message") or json.dumps(data, ensure_ascii=False))
+    if "choices" not in data and "usage" not in data:
+        if detail := data.get("detail"):
+            return (
+                detail
+                if isinstance(detail, str)
+                else json.dumps(detail, ensure_ascii=False)
+            )
+        if data.get("code") not in (None, 0, 200, "0", "200") and (
+            msg := data.get("message") or data.get("msg")
+        ):
+            return str(msg)
+    return None
+
+
+def is_failed_finish_reason(finish_reason: Any) -> bool:
+    """Return True when the model stopped due to an engine abort or error."""
+    if isinstance(finish_reason, str):
+        return finish_reason.strip().lower() in {"abort", "error"}
+    if isinstance(finish_reason, Mapping):
+        return str(finish_reason.get("type", "")).strip().lower() in {"abort", "error"}
+    return False
+
+
 def _override_payload_arg(value: str) -> str:
     try:
         parse_override_payload(value)

@@ -10,9 +10,16 @@ from ai_infra_bench.utils.io import _read_json, read_packaged_requests
 from ai_infra_bench.utils.req import (
     add_common_args,
     api_url,
+    extract_error_message,
+    is_failed_finish_reason,
     parse_override_payload,
     prepare_payload,
 )
+
+
+class _RequestInputError(Exception):
+    """Raised when CLI-supplied request files or stdin payloads cannot be read."""
+
 
 RANDOM_TOKEN_UPPER_BOUND = 10_000
 response_format_json_schema = {
@@ -188,6 +195,11 @@ def _handle_request_output(output_metric, duration_s: float) -> None:
     )
 
 
+def _fail_non_stream_output(output_metric, message: str) -> None:
+    color_print(f"Request Error: {message}", Color.RED)
+    output_metric.error_message = message
+
+
 async def _handle_non_stream_request(url, headers, payload):
     from ai_infra_bench.performance.struct import OutputMetric
     from ai_infra_bench.utils.client import _create_bench_client_session
@@ -208,27 +220,39 @@ async def _handle_non_stream_request(url, headers, payload):
                     )
                 else:
                     response_json = json.loads(raw_body)
-                    if isinstance(response_json, Mapping) and response_json.get(
-                        "error"
+                    if not isinstance(response_json, Mapping):
+                        _fail_non_stream_output(
+                            output_metric,
+                            f"Invalid response payload: expected JSON object, got {type(response_json).__name__}",
+                        )
+                    elif err_msg := extract_error_message(response_json):
+                        _fail_non_stream_output(output_metric, err_msg)
+                    elif (
+                        not isinstance(response_json.get("choices"), list)
+                        or not response_json["choices"]
                     ):
-                        err = response_json["error"]
-                        detail = (
-                            err.get("message") or json.dumps(err, ensure_ascii=False)
-                            if isinstance(err, Mapping)
-                            else str(err)
+                        _fail_non_stream_output(
+                            output_metric,
+                            "Invalid response payload: missing non-empty choices",
                         )
-                        color_print(f"Request Error: {detail}", Color.RED)
-                        output_metric.error_message = detail
                     else:
-                        color_print(
-                            json.dumps(response_json, indent=2, ensure_ascii=False),
-                            Color.LIGHT_GREEN,
-                        )
                         output_metric.update_non_stream_response(response_json)
-                        output_metric.success = True
+                        if is_failed_finish_reason(output_metric.finish_reason):
+                            _fail_non_stream_output(
+                                output_metric,
+                                f"Generation aborted (finish_reason={output_metric.finish_reason})",
+                            )
+                        else:
+                            color_print(
+                                json.dumps(response_json, indent=2, ensure_ascii=False),
+                                Color.LIGHT_GREEN,
+                            )
+                            output_metric.success = True
     except Exception as error:
-        color_print(f"Request Error: {error}", Color.RED)
-        output_metric.error_message = str(error)
+        detail = (
+            f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
+        )
+        _fail_non_stream_output(output_metric, detail)
 
     duration_s = time.perf_counter() - start_time
     output_metric.latency_ms = duration_s * 1000
@@ -238,18 +262,32 @@ async def _handle_non_stream_request(url, headers, payload):
 
 async def _handle_stream_request(url, headers, payload, raw: bool, no_print: bool):
     from ai_infra_bench.performance.core import request_func
+    from ai_infra_bench.performance.struct import OutputMetric
     from ai_infra_bench.utils.client import _create_bench_client_session
 
     start_time = time.perf_counter()
-
-    async with _create_bench_client_session() as session:
-        output_metric = await request_func(
-            session,
-            request_url=url,
+    try:
+        async with _create_bench_client_session(
+            max_concurrency=1, api_key=None
+        ) as session:
+            output_metric = await request_func(
+                session,
+                request_url=url,
+                payload=payload,
+                headers=headers,
+                raw=raw,
+                render_content=not no_print,
+            )
+    except Exception as error:
+        detail = (
+            f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
+        )
+        color_print(f"Request Error: {detail}", Color.RED)
+        output_metric = OutputMetric(
             payload=payload,
-            headers=headers,
-            raw=raw,
-            render_content=not no_print,
+            success=False,
+            error_message=detail,
+            latency_ms=(time.perf_counter() - start_time) * 1000,
         )
     duration_s = time.perf_counter() - start_time
     _handle_request_output(output_metric, duration_s)
@@ -259,7 +297,11 @@ async def _handle_stream_request(url, headers, payload, raw: bool, no_print: boo
 def http_request(args) -> int:
     import asyncio
 
-    url, payload = build_request(args)
+    try:
+        url, payload = build_request(args)
+    except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
+        raise _RequestInputError(str(error)) from error
+
     headers = {"Authorization": f"Bearer {args.api_key}"}
 
     if args.verbose:
@@ -379,7 +421,7 @@ def main(argv=None) -> int:
 
     try:
         return http_request(args)
-    except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
+    except _RequestInputError as error:
         parser.error(str(error))
 
 

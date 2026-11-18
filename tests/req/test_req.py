@@ -201,16 +201,60 @@ def test_non_stream_json_error_payload(non_stream_handler):
     assert "bad model" in output.error_message
 
 
+@pytest.mark.parametrize(
+    ("body", "expected_error"),
+    [
+        ("{}", "missing non-empty choices"),
+        ("[]", "expected JSON object"),
+        ('{"object": "error", "message": "invalid api key"}', "invalid api key"),
+        ('{"detail": "Not Found"}', "Not Found"),
+        ('{"code": 500, "msg": "backend overloaded"}', "backend overloaded"),
+        (
+            '{"choices": [{"finish_reason": "abort", "message": {"content": "partial"}}]}',
+            "abort",
+        ),
+    ],
+)
+def test_non_stream_rejects_invalid_or_aborted_payloads(
+    body, expected_error, non_stream_handler
+):
+    response, _, report = non_stream_handler
+    response.status = 200
+    response.text.return_value = body
+
+    assert main(["--disable-stream"]) == 1
+
+    output = report.call_args.kwargs["outputs"][0]
+    assert output.success is False
+    assert expected_error in output.error_message
+
+
 def test_connection_error_exits_nonzero():
     session_cm = AsyncMock()
     session_cm.__aenter__ = AsyncMock(side_effect=OSError("connection refused"))
     session_cm.__aexit__ = AsyncMock(return_value=False)
 
-    with patch(
-        "ai_infra_bench.utils.client._create_bench_client_session",
-        return_value=session_cm,
+    with (
+        patch(
+            "ai_infra_bench.utils.client._create_bench_client_session",
+            return_value=session_cm,
+        ),
+        patch("ai_infra_bench.req.handle_outputs") as report,
     ):
         assert main(["--disable-stream", "--base-url", "localhost:8000"]) == 1
+        assert main(["--base-url", "localhost:8000"]) == 1
+
+    assert report.call_count == 2
+    assert all(
+        call.kwargs["outputs"][0].success is False for call in report.call_args_list
+    )
+
+
+def test_missing_payload_file_exits_with_usage_error(tmp_path):
+    with pytest.raises(SystemExit) as error:
+        main(["--payload-path", str(tmp_path / "missing.json")])
+
+    assert error.value.code == 2
 
 
 def test_stream_failure_exits_nonzero(stream_handler):

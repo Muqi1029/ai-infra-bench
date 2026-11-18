@@ -35,6 +35,7 @@ aib req \
 :::
 
 - Streams by default; pass `--disable-stream` for single JSON, `--raw` for raw SSE frames, or `--no-print` for metrics only. Payloads with `prompt` and no `messages` route to `/v1/completions`.
+- Process exit code reflects request health: `0` on a complete valid response, `1` on connection/HTTP/stream/abort failure (suitable for health probes), and `2` on invalid CLI arguments or input files.
 
 ## Local Monitoring (`aib monitor`)
 

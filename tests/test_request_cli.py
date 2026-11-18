@@ -1,6 +1,9 @@
 """Exercise shared CLI options through real HTTP requests, without a model server."""
 
 import json
+import socket
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -202,3 +205,159 @@ def test_conflicting_prompt_inputs_are_rejected(argv):
     with pytest.raises(SystemExit) as error:
         main(argv)
     assert error.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("scenario", "extra_args", "expected_code"),
+    [
+        ("ok", [], 0),
+        ("ok", ["--disable-stream"], 0),
+        ("http_500", [], 1),
+        ("http_500", ["--disable-stream"], 1),
+        ("http_200_html", [], 1),
+        ("stream_abort", [], 1),
+        ("non_stream_empty_choices", ["--disable-stream"], 1),
+    ],
+)
+def test_req_subprocess_exit_code_matches_request_outcome(
+    scenario, extra_args, expected_code
+):
+    class ScenarioHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if scenario == "http_500":
+                status, content_type, body = (
+                    500,
+                    "application/json",
+                    b'{"error":{"message":"server down"}}',
+                )
+            elif scenario == "http_200_html":
+                status, content_type, body = (
+                    200,
+                    "text/html",
+                    b"<html>bad gateway</html>",
+                )
+            elif scenario == "stream_abort":
+                frame = json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": "partial"},
+                                "finish_reason": "abort",
+                            }
+                        ]
+                    }
+                )
+                status, content_type, body = (
+                    200,
+                    "text/event-stream",
+                    f"data: {frame}\n\ndata: [DONE]\n\n".encode(),
+                )
+            elif scenario == "non_stream_empty_choices":
+                status, content_type, body = 200, "application/json", b'{"choices": []}'
+            elif payload.get("stream"):
+                frame = json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": "ok"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+                    }
+                )
+                status, content_type, body = (
+                    200,
+                    "text/event-stream",
+                    f"data: {frame}\n\ndata: [DONE]\n\n".encode(),
+                )
+            else:
+                body_dict = {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+                }
+                status, content_type, body = (
+                    200,
+                    "application/json",
+                    json.dumps(body_dict).encode(),
+                )
+
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ScenarioHandler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "ai_infra_bench",
+                "req",
+                "--base-url",
+                f"http://127.0.0.1:{server.server_port}",
+                "--prompt",
+                "hi",
+                *extra_args,
+            ],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+    assert result.returncode == expected_code, result.stdout + result.stderr
+
+
+def test_req_subprocess_connection_refused_and_bad_input_exit_codes(tmp_path):
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        unused_port = sock.getsockname()[1]
+
+    conn_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ai_infra_bench",
+            "req",
+            "--base-url",
+            f"http://127.0.0.1:{unused_port}",
+            "--prompt",
+            "hi",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert conn_result.returncode == 1
+
+    bad_input_result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ai_infra_bench",
+            "req",
+            "--payload-path",
+            str(tmp_path / "missing.json"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert bad_input_result.returncode == 2
